@@ -3,4 +3,11 @@
     <string name="title_home">Home</string>
     <string name="title_dashboard">Dashboard</string>
     <string name="title_notifications">Notifications</string>
+
+    <!-- PlaceholderManiengineRenderer (stub) -->
+    <string name="placeholder_pet_name">🐾 %1$s</string>
+    <string name="placeholder_pet_fainted">😵 %1$s (fainted)</string>
+    <string name="placeholder_slot_line">%1$s: %2$s</string>
+    <string name="placeholder_slot_empty">—</string>
+    <string name="placeholder_renderer_pending">(Maniengine renderer pending)</string>
 </resources>

@@ -321,8 +321,10 @@ General rules for every agent:
 
 - **Nullability:** annotate every public API parameter and return value with
   `androidx.annotation.NonNull`/`Nullable`. Use `@MainThread`/`@WorkerThread`/`@AnyThread` where relevant.
-- **Strings:** every user-visible string goes in `res/values/strings.xml` (format args like `%1$d`).
-  Log messages and mock-bot dialogue may be inline.
+- **Strings:** every user-visible string produced by the UI layer (`ui`, layouts, renderers) goes in
+  `res/values/strings.xml` (format args like `%1$d`). Log messages, mock-bot dialogue, and text
+  produced in non-UI layers without a `Context` (`McpToolResult` messages, `ChatRepository`
+  notices) may be inline English for now. Localising those is a known TODO.
 - **Logging:** `android.util.Log` with `private static final String TAG = "<ClassName>"`. Never log
   user message content at INFO or above.
 - **ViewBinding:** inflate with `XxxBinding.inflate(...)`, null the binding out in `onDestroyView()`,
