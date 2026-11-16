@@ -1,0 +1,20 @@
+# Normalize line endings in the repository (LF), regardless of the editor/OS
+# that saved the file (Android Studio on Windows tends to write CRLF).
+* text=auto
+
+# Windows scripts must keep CRLF on checkout; Unix scripts must keep LF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+gradlew text eol=lf
+*.sh text eol=lf
+
+# Binary assets: never touch.
+*.jar binary
+*.webp binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.keystore binary
+*.jks binary
