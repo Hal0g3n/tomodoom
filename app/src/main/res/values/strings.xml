@@ -1,8 +1,29 @@
 <resources>
     <string name="app_name">tomodoom</string>
-    <string name="title_home">Home</string>
-    <string name="title_dashboard">Dashboard</string>
-    <string name="title_notifications">Notifications</string>
+
+    <!-- Navigation -->
+    <string name="title_pets">Pets</string>
+    <string name="title_chat">Chat</string>
+
+    <!-- Pets page -->
+    <string name="hp_format">HP %1$d / %2$d</string>
+    <string name="pet_status_thriving">Thriving</string>
+    <string name="pet_status_okay">Okay</string>
+    <string name="pet_status_struggling">Struggling</string>
+    <string name="pet_status_fainted">Fainted</string>
+    <string name="pet_viewport_description">Your pet</string>
+    <string name="customise_title">Customise</string>
+    <string name="slot_hat">Hat</string>
+    <string name="slot_outfit">Outfit</string>
+    <string name="slot_accessory">Accessory</string>
+    <string name="item_none">None</string>
+    <string name="debug_simulate_doom_scroll">Simulate doom-scroll (−%1$d HP)</string>
+    <string name="debug_reset_pet">Reset pet</string>
+
+    <!-- Chat page -->
+    <string name="chat_input_hint">Message TruFar…</string>
+    <string name="chat_input_hint_quiz">Type your answer…</string>
+    <string name="chat_send">Send</string>
 
     <!-- PlaceholderManiengineRenderer (stub) -->
     <string name="placeholder_pet_name">🐾 %1$s</string>

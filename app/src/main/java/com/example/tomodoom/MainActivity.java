@@ -3,31 +3,38 @@ package com.example.tomodoom;
 import android.os.Bundle;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.fragment.app.Fragment;
 import androidx.navigation.NavController;
-import androidx.navigation.Navigation;
+import androidx.navigation.fragment.NavHostFragment;
 import androidx.navigation.ui.AppBarConfiguration;
 import androidx.navigation.ui.NavigationUI;
 
 import com.example.tomodoom.databinding.ActivityMainBinding;
-import com.google.android.material.bottomnavigation.BottomNavigationView;
 
+/**
+ * Single activity hosting the two top-level destinations (Pets and Chat) behind a
+ * {@link com.google.android.material.bottomnavigation.BottomNavigationView}.
+ */
 public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        com.example.tomodoom.databinding.ActivityMainBinding binding = ActivityMainBinding.inflate(getLayoutInflater());
+        ActivityMainBinding binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
-        BottomNavigationView navView = binding.navView;
+        Fragment host = getSupportFragmentManager().findFragmentById(R.id.nav_host_fragment_activity_main);
+        if (!(host instanceof NavHostFragment)) {
+            throw new IllegalStateException("activity_main must host a NavHostFragment");
+        }
+        NavController navController = ((NavHostFragment) host).getNavController();
 
-        NavController navController = Navigation.findNavController(this, R.id.nav_host_fragment_activity_main);
-        // Each menu ID is a top level destination.
+        // Each bottom-nav item is a top-level destination (no Up arrow).
         AppBarConfiguration appBarConfiguration = new AppBarConfiguration.Builder(
-                R.id.navigation_home, R.id.navigation_dashboard, R.id.navigation_notifications
+                R.id.navigation_pets, R.id.navigation_chat
         ).build();
         NavigationUI.setupActionBarWithNavController(this, navController, appBarConfiguration);
-        NavigationUI.setupWithNavController(navView, navController);
+        NavigationUI.setupWithNavController(binding.navView, navController);
     }
 }

@@ -7,4 +7,12 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <!-- Chat -->
+    <color name="bubble_bot_background">#FFECEAF2</color>
+    <color name="system_notice_background">#FFE0F2F1</color>
+
+    <!-- Pets -->
+    <color name="viewport_background">#FFF5F2FA</color>
+    <color name="viewport_stroke">#1F000000</color>
 </resources>

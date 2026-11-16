@@ -1,0 +1,207 @@
+package com.example.tomodoom.ui.pets;
+
+import android.os.Bundle;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.annotation.StringRes;
+import androidx.fragment.app.Fragment;
+import androidx.lifecycle.ViewModelProvider;
+
+import com.example.tomodoom.BuildConfig;
+import com.example.tomodoom.R;
+import com.example.tomodoom.contracts.ManiengineAssetRenderer;
+import com.example.tomodoom.databinding.FragmentPetsBinding;
+import com.example.tomodoom.di.AppContainer;
+import com.example.tomodoom.di.ViewModelFactory;
+import com.example.tomodoom.model.AccessoryItem;
+import com.example.tomodoom.model.AccessorySlot;
+import com.example.tomodoom.model.DoomScrollEvent;
+import com.example.tomodoom.model.PetState;
+import com.example.tomodoom.viewmodel.PetsViewModel;
+import com.google.android.material.chip.Chip;
+import com.google.android.material.tabs.TabLayout;
+
+/**
+ * Pets page: HP header, the pet viewport (drawn entirely by {@link ManiengineAssetRenderer}),
+ * customisation controls and, in debug builds, a debug row.
+ */
+public class PetsFragment extends Fragment {
+
+    private FragmentPetsBinding binding;
+    private PetsViewModel viewModel;
+    @Nullable
+    private ManiengineAssetRenderer renderer;
+    /** Slot whose chips are currently shown. */
+    @Nullable
+    private String chipSlot;
+
+    @Override
+    public View onCreateView(@NonNull LayoutInflater inflater,
+                             @Nullable ViewGroup container,
+                             @Nullable Bundle savedInstanceState) {
+        binding = FragmentPetsBinding.inflate(inflater, container, false);
+        return binding.getRoot();
+    }
+
+    @Override
+    public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+        super.onViewCreated(view, savedInstanceState);
+        viewModel = new ViewModelProvider(this, ViewModelFactory.from(requireContext()))
+                .get(PetsViewModel.class);
+        renderer = AppContainer.from(requireContext()).createAssetRenderer();
+
+        setUpSlotTabs();
+        setUpDebugPanel();
+
+        viewModel.getSelectedSlot().observe(getViewLifecycleOwner(), this::showSlot);
+        viewModel.getPetState().observe(getViewLifecycleOwner(), this::renderState);
+    }
+
+    @Override
+    public void onDestroyView() {
+        if (renderer != null) {
+            renderer.release(binding.petViewport);
+            renderer = null;
+        }
+        chipSlot = null;
+        super.onDestroyView();
+        binding = null;
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // State → views
+    // ---------------------------------------------------------------------------------------
+
+    private void renderState(@NonNull PetState state) {
+        binding.petName.setText(state.getPetName());
+        binding.petStatus.setText(statusLabel(state));
+        binding.hpProgress.setMax(state.getMaxHp());
+        binding.hpProgress.setProgress(state.getCurrentHp());
+        binding.hpText.setText(getString(R.string.hp_format, state.getCurrentHp(), state.getMaxHp()));
+
+        if (renderer != null) {
+            renderer.render(binding.petViewport, state);
+        }
+        syncChipSelection(state);
+    }
+
+    @StringRes
+    private static int statusLabel(@NonNull PetState state) {
+        float fraction = state.getHpFraction();
+        if (state.isFainted()) return R.string.pet_status_fainted;
+        if (fraction >= 0.75f) return R.string.pet_status_thriving;
+        if (fraction >= 0.40f) return R.string.pet_status_okay;
+        return R.string.pet_status_struggling;
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Customisation controls
+    // ---------------------------------------------------------------------------------------
+
+    private void setUpSlotTabs() {
+        TabLayout tabs = binding.slotTabs;
+        for (String slot : AccessorySlot.ALL) {
+            tabs.addTab(tabs.newTab().setText(slotLabel(slot)).setTag(slot), false);
+        }
+        tabs.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
+            @Override
+            public void onTabSelected(TabLayout.Tab tab) {
+                Object slot = tab.getTag();
+                if (slot instanceof String) {
+                    viewModel.selectSlot((String) slot);
+                }
+            }
+
+            @Override
+            public void onTabUnselected(TabLayout.Tab tab) {
+            }
+
+            @Override
+            public void onTabReselected(TabLayout.Tab tab) {
+            }
+        });
+    }
+
+    private void showSlot(@NonNull String slot) {
+        TabLayout tabs = binding.slotTabs;
+        for (int i = 0; i < tabs.getTabCount(); i++) {
+            TabLayout.Tab tab = tabs.getTabAt(i);
+            if (tab != null && slot.equals(tab.getTag()) && !tab.isSelected()) {
+                tab.select();
+            }
+        }
+        if (!slot.equals(chipSlot)) {
+            rebuildChips(slot);
+        }
+    }
+
+    private void rebuildChips(@NonNull String slot) {
+        chipSlot = slot;
+        binding.itemChips.removeAllViews();
+        addItemChip(slot, null, getString(R.string.item_none));
+        for (AccessoryItem item : viewModel.getItemsForSlot(slot)) {
+            addItemChip(slot, item.getId(), item.getDisplayName());
+        }
+        PetState state = viewModel.getPetState().getValue();
+        if (state != null) {
+            syncChipSelection(state);
+        }
+    }
+
+    private void addItemChip(@NonNull String slot, @Nullable String itemId, @NonNull String label) {
+        Chip chip = (Chip) getLayoutInflater()
+                .inflate(R.layout.item_accessory_chip, binding.itemChips, false);
+        chip.setId(View.generateViewId());
+        chip.setText(label);
+        chip.setTag(itemId);
+        chip.setOnClickListener(v -> viewModel.equipItem(slot, itemId));
+        binding.itemChips.addView(chip);
+    }
+
+    /** Checks the chip matching the equipped item for the visible slot ("None" when empty). */
+    private void syncChipSelection(@NonNull PetState state) {
+        if (chipSlot == null) {
+            return;
+        }
+        String equipped = state.getEquippedItem(chipSlot);
+        for (int i = 0; i < binding.itemChips.getChildCount(); i++) {
+            View child = binding.itemChips.getChildAt(i);
+            Object tag = child.getTag();
+            boolean matches = equipped == null ? tag == null : equipped.equals(tag);
+            if (matches) {
+                binding.itemChips.check(child.getId());
+                return;
+            }
+        }
+    }
+
+    @StringRes
+    private static int slotLabel(@NonNull String slot) {
+        switch (slot) {
+            case AccessorySlot.HAT:
+                return R.string.slot_hat;
+            case AccessorySlot.OUTFIT:
+                return R.string.slot_outfit;
+            case AccessorySlot.ACCESSORY:
+                return R.string.slot_accessory;
+            default:
+                throw new IllegalArgumentException("No label for slot " + slot);
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Debug
+    // ---------------------------------------------------------------------------------------
+
+    private void setUpDebugPanel() {
+        binding.debugPanel.setVisibility(BuildConfig.DEBUG ? View.VISIBLE : View.GONE);
+        binding.debugDoomScroll.setText(
+                getString(R.string.debug_simulate_doom_scroll, DoomScrollEvent.DEFAULT_HP_PENALTY));
+        binding.debugDoomScroll.setOnClickListener(v -> viewModel.debugSimulateDoomScroll());
+        binding.debugReset.setOnClickListener(v -> viewModel.debugResetPet());
+    }
+}
