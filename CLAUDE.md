@@ -367,7 +367,11 @@ JAVA_HOME='C:\Program Files\Android\Android Studio\jbr' WSLENV=JAVA_HOME \
 ```
 (If you pipe the output, e.g. to `tail`, add `set -o pipefail` so a failing build isn't reported as exit code 0.)
 
-A change counts as verified when `assembleDebug` and `testDebugUnitTest` succeed with no errors.
+A change counts as verified when `assembleDebug` and `testDebugUnitTest` succeed with no errors and
+`lintDebug` reports **0 errors**. The current lint baseline is two accepted warning types:
+`OldTargetApi` (`targetSdk = 34` is fixed by the stack) and `GradleDependency` (newer AndroidX
+versions require compileSdk 35+ or a newer AGP). Don't introduce new lint warnings. javac currently
+builds with zero warnings, so keep it that way.
 
 ---
 
