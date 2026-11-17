@@ -2,6 +2,12 @@ plugins {
     id("com.android.application")
 }
 
+fun buildConfigString(value: String): String =
+    "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
+val trufarApiUrl = providers.gradleProperty("TRUFAR_API_URL").orElse("").get()
+val trufarApiToken = providers.gradleProperty("TRUFAR_API_TOKEN").orElse("").get()
+
 android {
     namespace = "com.example.tomodoom"
     compileSdk = 34
@@ -14,6 +20,8 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "TRUFAR_API_URL", buildConfigString(trufarApiUrl))
+        buildConfigField("String", "TRUFAR_API_TOKEN", buildConfigString(trufarApiToken))
     }
 
     buildTypes {

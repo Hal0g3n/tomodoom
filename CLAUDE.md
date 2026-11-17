@@ -373,6 +373,42 @@ General rules for every agent:
 - **Acceptance:** the manual E2E script in §8 passes against the real backend. No main-thread
   network. Errors show up as SYSTEM messages via `onError`.
 
+#### Current HTTP integration contract
+
+The Android client is `trufar.HttpTruFarChatService`. Configure `TRUFAR_API_URL` and optionally
+`TRUFAR_API_TOKEN` as Gradle project properties (for example in an untracked `~/.gradle/gradle.properties`).
+The URL must be an HTTPS origin/base URL. With `TRUFAR_API_URL` unset or empty, `AppContainer`
+keeps `MockTruFarChatService` wired so the offline demo remains usable. A configured bearer token
+is compiled into the APK and is suitable only for local development/testing; do not put a
+long-lived production secret in a mobile app.
+
+The API is JSON over HTTPS. Every successful response uses an `events` array:
+
+| Request | JSON body | Response |
+|---|---|---|
+| `POST /v1/chat/sessions` | `{ "client": "tomodoom", "tools": [...] }` | `{ "session_id": "...", "events": [...] }` |
+| `POST /v1/chat/sessions/{id}/messages` | `{ "text": "..." }` | `{ "events": [...] }` |
+| `POST /v1/chat/sessions/{id}/quiz-answers` | `{ "quiz_id": "...", "answer": "..." }` | `{ "events": [...] }` |
+| `POST /v1/chat/sessions/{id}/tool-results` | `{ "call_id": "...", "result": { "success": true, "message": "...", "data": {} } }` | `{ "events": [...] }` |
+| `DELETE /v1/chat/sessions/{id}` | no body | any 2xx response |
+
+Supported event shapes are:
+
+```json
+{ "type": "message", "text": "..." }
+{ "type": "quiz_prompt", "quiz_id": "...", "question": "...", "options": [], "hp_reward": 10 }
+{ "type": "quiz_evaluated", "quiz_id": "...", "passed": true, "hp_reward": 10, "feedback": "..." }
+{ "type": "tool_call", "call_id": "...", "name": "get_pet_state", "arguments": {} }
+{ "type": "error", "message": "..." }
+```
+
+The client advertises the three `McpPetActionHandler` tools when creating a session, executes
+`tool_call` events synchronously on its serial background worker through the registered listener,
+and posts each result before processing returned events. Tool-call round trips are limited to eight
+per response to prevent a backend loop. An HTTP or protocol error is surfaced through `onError`.
+This is the client/server contract to implement in TruFar; it is not evidence that a live backend
+currently exists.
+
 ### 5.3 Doom Scroll Agent — doomscroll detection
 - **Implement:** `contracts.DoomScrollMonitor` (e.g. with `UsageStatsManager` polling or an
   `AccessibilityService`).
@@ -387,6 +423,16 @@ General rules for every agent:
   drain all the HP, never touch `PetStateRepository` directly, and stay in the default process.
 - **Acceptance:** after the permission is granted, a long scroll session in a target app lowers HP
   on the Pets tab. Battery impact is documented in your commit message.
+
+#### Current implementation
+
+`doomscroll.UsageStatsDoomScrollMonitor` uses the special Android Usage Access setting; the Pets
+tab provides a button to open that setting and starts the monitor when the user returns with access
+granted. It watches Instagram, TikTok, Reddit, YouTube, X/Twitter, Facebook and Snapchat foreground
+usage, emits one 5-HP event after 15 uninterrupted minutes, and applies a 30-minute per-app
+cooldown. Polling is every 15 seconds on a single daemon worker (four checks per minute while the
+app process is alive); it does not use a foreground service and stops if Android kills the app
+process. This limits battery work but means detection is not guaranteed while the process is dead.
 
 ---
 
