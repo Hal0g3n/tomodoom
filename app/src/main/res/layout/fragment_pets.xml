@@ -13,7 +13,10 @@
         android:id="@+id/hp_card"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        app:cardCornerRadius="16dp">
+        app:cardCornerRadius="16dp"
+        app:cardElevation="0dp"
+        app:strokeColor="@color/eggshell"
+        app:strokeWidth="1dp">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -40,6 +43,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textAppearance="?attr/textAppearanceSubtitle2"
+                    android:textColor="@color/slate_grey"
                     tools:text="@string/pet_status_okay" />
             </LinearLayout>
 
@@ -115,6 +119,7 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/debug_doom_scroll"
             style="?attr/materialButtonOutlinedStyle"
+            app:strokeColor="@color/eggshell"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
@@ -123,6 +128,7 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/debug_reset"
             style="?attr/materialButtonOutlinedStyle"
+            app:strokeColor="@color/eggshell"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="8dp"

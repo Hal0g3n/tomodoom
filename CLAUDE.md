@@ -87,17 +87,17 @@ The app has two bottom-navigation tabs: **Pets** (HP, pet viewport, customisatio
 
 ### Tech stack (fixed — don't change it without updating this file)
 
-| Item | Value |
-|---|---|
-| Language | **Java only** (no Kotlin sources) |
+| Item | Value                                                                                                                                                                    |
+|---|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Language | **Java only** (no Kotlin sources)                                                                                                                                        |
 | Java source level | **1.8**. Lambdas and method refs are fine. **No** `var`, switch expressions, records, text blocks, `List.of`/`Map.of`/`Set.of`, `String.isBlank()` or any other Java 9+ API |
-| Android | `compileSdk = 34`, `targetSdk = 34`, **`minSdk = 24`** (check API levels before calling newer APIs) |
-| Build | AGP 8.1.1, Gradle 8.0 wrapper, Kotlin DSL build scripts (`*.gradle.kts`) |
-| UI | XML layouts + **ViewBinding**, `Activity`/`Fragment`, Jetpack Navigation + `BottomNavigationView`, Material Components (`Theme.MaterialComponents.DayNight`) |
-| Architecture | **MVVM**: `ViewModel` + `LiveData` (lifecycle 2.7.0), repositories as single sources of truth |
-| Persistence | **`SharedPreferences`** (no Room, no DataStore) |
-| DI | Hand-written service locator (`di.AppContainer`). No Hilt or Dagger |
-| Tests | JUnit 4 (`app/src/test`) for pure-Java logic |
+| Android | `compileSdk = 34`, `targetSdk = 34`, **`minSdk = 24`** (check API levels before calling newer APIs)                                                                      |
+| Build | AGP 8.1.1, Gradle 8.0 wrapper, Kotlin DSL build scripts (`*.gradle.kts`)                                                                                                 |
+| UI | XML layouts + **ViewBinding**, `Activity`/`Fragment`, Jetpack Navigation + `BottomNavigationView`, Material Components (`Theme.MaterialComponents.Light.DarkActionBar`, light only)  |
+| Architecture | **MVVM**: `ViewModel` + `LiveData` (lifecycle 2.7.0), repositories as single sources of truth                                                                            |
+| Persistence | **`SharedPreferences`** (no Room, no DataStore)                                                                                                                          |
+| DI | Hand-written service locator (`di.AppContainer`). No Hilt or Dagger                                                                                                      |
+| Tests | JUnit 4 (`app/src/test`) for pure-Java logic                                                                                                                             |
 
 ---
 
@@ -429,9 +429,14 @@ General rules for every agent:
   `?attr/…` and `@style/Widget.MaterialComponents.…` work as normal.
 - **`BuildConfig` is enabled** (`buildFeatures.buildConfig = true`). Gate debug-only UI with
   `BuildConfig.DEBUG`.
-- **Theme:** `Theme.MaterialComponents.DayNight.DarkActionBar`, not Material3. Use
+- **Theme:** `Theme.MaterialComponents.Light.DarkActionBar`, not Material3. Use
   MaterialComponents attributes (`?attr/textAppearanceHeadline6`, `?attr/materialButtonOutlinedStyle`).
-  Night-mode colours live in `res/values-night/colors.xml`, so add both variants for any new colour.
+  The app is **light only** (it ignores system dark mode), so there is no `values-night/`. All colours
+  come from the palette in `res/values/colors.xml`: `floral_white` #FBF7EF (background/surfaces),
+  `eggshell` #F7F0DE (borders, dividers, subtle fills), `charcoal` #585B5E (primary), `jet` #383A3D
+  (primary text, primary variant), `slate_grey` #8C8F92 (secondary text, hints). Prefer theme
+  attributes (`?attr/colorPrimary`, `?android:attr/textColorSecondary`) or a semantic colour that
+  aliases a palette token over new hex values.
 - **Navigation:** the host is a `FragmentContainerView` NavHostFragment. Get the `NavController`
   from `NavHostFragment#getNavController()`, not `Navigation.findNavController(activity, id)`.
   A new top-level tab means a menu item **and** a nav-graph destination with the same id, plus that
