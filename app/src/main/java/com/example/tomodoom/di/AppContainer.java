@@ -5,19 +5,21 @@ import android.content.Context;
 import androidx.annotation.MainThread;
 import androidx.annotation.NonNull;
 
+import com.example.tomodoom.BuildConfig;
 import com.example.tomodoom.TomodoomApplication;
 import com.example.tomodoom.contracts.DoomScrollListener;
 import com.example.tomodoom.contracts.DoomScrollMonitor;
 import com.example.tomodoom.contracts.ManiengineAssetRenderer;
 import com.example.tomodoom.contracts.McpPetActionHandler;
 import com.example.tomodoom.contracts.TruFarChatService;
+import com.example.tomodoom.doomscroll.UsageStatsDoomScrollMonitor;
 import com.example.tomodoom.repository.ChatRepository;
 import com.example.tomodoom.repository.DoomScrollHpBridge;
 import com.example.tomodoom.repository.PetStateRepository;
 import com.example.tomodoom.stubs.DefaultMcpPetActionHandler;
 import com.example.tomodoom.stubs.MockTruFarChatService;
 import com.example.tomodoom.stubs.PlaceholderManiengineRenderer;
-import com.example.tomodoom.stubs.StubDoomScrollMonitor;
+import com.example.tomodoom.trufar.HttpTruFarChatService;
 
 /**
  * Hand-written service locator: the <b>only</b> place where concrete implementations are chosen.
@@ -53,13 +55,16 @@ public final class AppContainer {
         // SWAP POINT (TruFar/MCP Agent): MCP pet tool bridge (the default is production-capable).
         mcpPetActionHandler = new DefaultMcpPetActionHandler(petStateRepository);
 
-        // SWAP POINT (TruFar/MCP Agent): TruFar chatbot backend client.
-        truFarChatService = new MockTruFarChatService();
+        // SWAP POINT (TruFar/MCP Agent): use the real API when configured; preserve the local demo otherwise.
+        truFarChatService = BuildConfig.TRUFAR_API_URL.trim().isEmpty()
+                ? new MockTruFarChatService()
+                : new HttpTruFarChatService(BuildConfig.TRUFAR_API_URL,
+                BuildConfig.TRUFAR_API_TOKEN, mcpPetActionHandler.getSupportedToolNames());
 
         chatRepository = new ChatRepository(truFarChatService, mcpPetActionHandler);
 
-        // SWAP POINT (Doom Scroll Agent): doom-scroll detector, e.g. new UsageStatsDoomScrollMonitor(appContext).
-        doomScrollMonitor = new StubDoomScrollMonitor();
+        // SWAP POINT (Doom Scroll Agent): Usage Access-based foreground-app session detector.
+        doomScrollMonitor = new UsageStatsDoomScrollMonitor(appContext);
 
         // Doom-scroll detections → HP loss. Keep this wiring when swapping the monitor.
         doomScrollHpBridge = new DoomScrollHpBridge(petStateRepository);

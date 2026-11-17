@@ -1,0 +1,138 @@
+2026.11.17 09:23:05 INFO  Started: Metals version 1.6.9 in folders '/Users/nayak/github/tomodoom' for client Visual Studio Code 1.146.0.
+2026.11.17 09:23:05 INFO  Memory monitor started
+2026.11.17 09:23:08 WARN  Using H2 2.5.250 which is newer than the version Flyway has been verified with. The latest verified version of H2 is 2.3.232.
+2026.11.17 09:26:13 WARN  no build target for: /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/trufar/HttpTruFarChatService.java
+2026.11.17 09:26:13 WARN  no build target for: /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/di/AppContainer.java
+2026.11.17 09:26:15 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/trufar/HttpTruFarChatService.java. Using fallback presentation compiler.
+2026.11.17 09:26:15 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/di/AppContainer.java. Using fallback presentation compiler.
+2026.11.17 09:26:34 WARN  no build target for: /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/ui/pets/PetsFragment.java
+2026.11.17 09:26:36 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/ui/pets/PetsFragment.java. Using fallback presentation compiler.
+2026.11.17 09:27:19 WARN  no build target for: /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java
+Nov 17, 2026 9:27:37 AM org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+INFO: Unsupported notification method: $/setTrace
+2026.11.17 09:27:50 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+2026.11.17 09:28:02 WARN  no build target for: /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/trufar/HttpTruFarChatService.java
+2026.11.17 09:28:02 WARN  no build target for: /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/di/AppContainer.java
+2026.11.17 09:28:04 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/trufar/HttpTruFarChatService.java. Using fallback presentation compiler.
+2026.11.17 09:28:04 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/di/AppContainer.java. Using fallback presentation compiler.
+2026.11.17 09:29:13 WARN  no build target for: /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/trufar/HttpTruFarChatService.java
+2026.11.17 09:29:17 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/trufar/HttpTruFarChatService.java. Using fallback presentation compiler.
+2026.11.17 09:29:40 WARN  no build target for: /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java
+2026.11.17 09:29:41 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+2026.11.17 09:30:15 WARN  no build target for: /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java
+2026.11.17 09:30:16 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+2026.11.17 09:30:17 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+Nov 17, 2026 9:30:17 AM org.eclipse.lsp4j.jsonrpc.RemoteEndpoint handleCancellation
+WARNING: Unmatched cancel notification for request id 2
+2026.11.17 09:30:17 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+2026.11.17 09:30:17 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+2026.11.17 09:30:17 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+Nov 17, 2026 9:30:18 AM org.eclipse.lsp4j.jsonrpc.RemoteEndpoint handleCancellation
+WARNING: Unmatched cancel notification for request id 7
+2026.11.17 09:30:17 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+2026.11.17 09:30:20 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+2026.11.17 09:30:25 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+2026.11.17 09:31:10 WARN  no build target for: /Users/nayak/github/tomodoom/app/src/test/java/com/example/tomodoom/doomscroll/DoomScrollSessionTrackerTest.java
+2026.11.17 09:31:10 WARN  no build target for: /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/DoomScrollSessionTracker.java
+2026.11.17 09:31:10 WARN  no build target for: /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java
+2026.11.17 09:31:12 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/test/java/com/example/tomodoom/doomscroll/DoomScrollSessionTrackerTest.java. Using fallback presentation compiler.
+2026.11.17 09:31:12 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/DoomScrollSessionTracker.java. Using fallback presentation compiler.
+2026.11.17 09:31:12 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+2026.11.17 09:31:33 WARN  no build target for: /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java
+2026.11.17 09:31:36 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+2026.11.17 09:31:40 WARN  no build target for: /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java
+2026.11.17 09:31:42 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+2026.11.17 09:32:36 WARN  no build target for: /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java
+2026.11.17 09:32:37 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+2026.11.17 09:33:02 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/trufar/HttpTruFarChatService.java. Using fallback presentation compiler.
+2026.11.17 09:33:02 WARN  no build target for: /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/trufar/HttpTruFarChatService.java
+2026.11.17 09:33:03 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/trufar/HttpTruFarChatService.java. Using fallback presentation compiler.
+Nov 17, 2026 9:33:03 AM org.eclipse.lsp4j.jsonrpc.RemoteEndpoint handleCancellation
+WARNING: Unmatched cancel notification for request id 18
+2026.11.17 09:33:03 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/trufar/HttpTruFarChatService.java. Using fallback presentation compiler.
+2026.11.17 09:33:03 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/trufar/HttpTruFarChatService.java. Using fallback presentation compiler.
+Nov 17, 2026 9:33:04 AM org.eclipse.lsp4j.jsonrpc.RemoteEndpoint handleCancellation
+WARNING: Unmatched cancel notification for request id 23
+2026.11.17 09:33:03 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/trufar/HttpTruFarChatService.java. Using fallback presentation compiler.
+2026.11.17 09:33:05 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/trufar/HttpTruFarChatService.java. Using fallback presentation compiler.
+2026.11.17 09:33:10 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/trufar/HttpTruFarChatService.java. Using fallback presentation compiler.
+2026.11.17 09:33:36 WARN  no build target for: /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/trufar/HttpTruFarChatService.java
+2026.11.17 09:33:38 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/trufar/HttpTruFarChatService.java. Using fallback presentation compiler.
+2026.11.17 09:33:48 WARN  no build target for: /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/trufar/HttpTruFarChatService.java
+2026.11.17 09:33:54 WARN  no build target for: /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java
+2026.11.17 09:33:57 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+2026.11.17 09:33:57 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/trufar/HttpTruFarChatService.java. Using fallback presentation compiler.
+2026.11.17 11:08:43 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/DoomScrollSessionTracker.java. Using fallback presentation compiler.
+2026.11.17 11:08:43 WARN  no build target for: /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/DoomScrollSessionTracker.java
+2026.11.17 11:08:43 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/DoomScrollSessionTracker.java. Using fallback presentation compiler.
+2026.11.17 11:08:44 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/DoomScrollSessionTracker.java. Using fallback presentation compiler.
+Nov 17, 2026 11:08:44 AM org.eclipse.lsp4j.jsonrpc.RemoteEndpoint handleCancellation
+WARNING: Unmatched cancel notification for request id 33
+2026.11.17 11:08:43 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/DoomScrollSessionTracker.java. Using fallback presentation compiler.
+2026.11.17 11:08:44 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/DoomScrollSessionTracker.java. Using fallback presentation compiler.
+Nov 17, 2026 11:08:44 AM org.eclipse.lsp4j.jsonrpc.RemoteEndpoint handleCancellation
+WARNING: Unmatched cancel notification for request id 38
+2026.11.17 11:08:45 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/DoomScrollSessionTracker.java. Using fallback presentation compiler.
+2026.11.17 11:08:46 WARN  no build target for: /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java
+2026.11.17 11:08:46 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+2026.11.17 11:08:47 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+Nov 17, 2026 11:08:47 AM org.eclipse.lsp4j.jsonrpc.RemoteEndpoint handleCancellation
+WARNING: Unmatched cancel notification for request id 46
+2026.11.17 11:08:46 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+Nov 17, 2026 11:08:47 AM org.eclipse.lsp4j.jsonrpc.RemoteEndpoint handleCancellation
+WARNING: Unmatched cancel notification for request id 47
+2026.11.17 11:08:46 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+Nov 17, 2026 11:08:47 AM org.eclipse.lsp4j.jsonrpc.RemoteEndpoint handleCancellation
+WARNING: Unmatched cancel notification for request id 49
+2026.11.17 11:08:46 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+2026.11.17 11:08:47 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+2026.11.17 11:09:10 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+2026.11.17 11:09:11 WARN  no build target for: /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java
+2026.11.17 11:09:10 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+Nov 17, 2026 11:09:12 AM org.eclipse.lsp4j.jsonrpc.RemoteEndpoint handleCancellation
+WARNING: Unmatched cancel notification for request id 60
+2026.11.17 11:09:12 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+2026.11.17 11:09:12 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+2026.11.17 11:09:12 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+Nov 17, 2026 11:09:12 AM org.eclipse.lsp4j.jsonrpc.RemoteEndpoint handleCancellation
+WARNING: Unmatched cancel notification for request id 63
+2026.11.17 11:09:12 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+2026.11.17 11:09:27 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/test/java/com/example/tomodoom/doomscroll/DoomScrollSessionTrackerTest.java. Using fallback presentation compiler.
+2026.11.17 11:09:27 WARN  no build target for: /Users/nayak/github/tomodoom/app/src/test/java/com/example/tomodoom/doomscroll/DoomScrollSessionTrackerTest.java
+2026.11.17 11:09:28 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/test/java/com/example/tomodoom/doomscroll/DoomScrollSessionTrackerTest.java. Using fallback presentation compiler.
+Nov 17, 2026 11:09:28 AM org.eclipse.lsp4j.jsonrpc.RemoteEndpoint handleCancellation
+WARNING: Unmatched cancel notification for request id 71
+2026.11.17 11:09:27 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/test/java/com/example/tomodoom/doomscroll/DoomScrollSessionTrackerTest.java. Using fallback presentation compiler.
+Nov 17, 2026 11:09:28 AM org.eclipse.lsp4j.jsonrpc.RemoteEndpoint handleCancellation
+WARNING: Unmatched cancel notification for request id 72
+2026.11.17 11:09:27 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/test/java/com/example/tomodoom/doomscroll/DoomScrollSessionTrackerTest.java. Using fallback presentation compiler.
+Nov 17, 2026 11:09:28 AM org.eclipse.lsp4j.jsonrpc.RemoteEndpoint handleCancellation
+WARNING: Unmatched cancel notification for request id 75
+2026.11.17 11:09:27 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/test/java/com/example/tomodoom/doomscroll/DoomScrollSessionTrackerTest.java. Using fallback presentation compiler.
+2026.11.17 11:09:28 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/test/java/com/example/tomodoom/doomscroll/DoomScrollSessionTrackerTest.java. Using fallback presentation compiler.
+2026.11.17 11:09:33 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/test/java/com/example/tomodoom/doomscroll/DoomScrollSessionTrackerTest.java. Using fallback presentation compiler.
+2026.11.17 11:09:33 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+2026.11.17 11:09:33 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+2026.11.17 11:09:33 WARN  no build target for: /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java
+Nov 17, 2026 11:09:34 AM org.eclipse.lsp4j.jsonrpc.RemoteEndpoint handleCancellation
+WARNING: Unmatched cancel notification for request id 85
+2026.11.17 11:09:34 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+Nov 17, 2026 11:09:34 AM org.eclipse.lsp4j.jsonrpc.RemoteEndpoint handleCancellation
+WARNING: Unmatched cancel notification for request id 88
+2026.11.17 11:09:34 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+2026.11.17 11:09:34 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+2026.11.17 11:15:19 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+2026.11.17 11:15:24 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+2026.11.17 11:16:13 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+2026.11.17 11:16:23 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+2026.11.17 11:16:23 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+2026.11.17 11:16:24 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+Nov 17, 2026 11:16:24 AM org.eclipse.lsp4j.jsonrpc.RemoteEndpoint handleCancellation
+WARNING: Unmatched cancel notification for request id 100
+2026.11.17 11:16:25 INFO  Created report: Optional[file:///Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java]
+2026.11.17 11:16:25 INFO  empty definition using pc, found symbol in pc: androidx/annotation/NonNull# (full report at: "/Users/nayak/github/tomodoom/.metals/.reports/metals-full/2026-11-17/r_empty-definition_11-16-25-712.md")
+2026.11.17 11:17:03 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+2026.11.17 11:17:03 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+2026.11.17 11:17:38 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+2026.11.17 11:17:40 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.
+2026.11.17 11:17:48 INFO  no build target found for /Users/nayak/github/tomodoom/app/src/main/java/com/example/tomodoom/doomscroll/UsageStatsDoomScrollMonitor.java. Using fallback presentation compiler.

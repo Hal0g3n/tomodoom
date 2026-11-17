@@ -19,6 +19,8 @@
     <string name="item_none">None</string>
     <string name="debug_simulate_doom_scroll">Simulate doom-scroll (−%1$d HP)</string>
     <string name="debug_reset_pet">Reset pet</string>
+    <string name="usage_access_explanation">Allow Usage Access to detect long sessions in social and video apps. Monitoring checks about every 15 seconds while Tomodoom is active.</string>
+    <string name="usage_access_open_settings">Enable</string>
 
     <!-- Chat page -->
     <string name="chat_input_hint">Message TruFar…</string>
