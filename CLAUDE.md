@@ -4,6 +4,71 @@ This is the source of truth for the architecture, package layout, threading rule
 contracts. Every agent working in this repo (human or AI) follows it. If the code and this file
 disagree, fix one of them in the same commit.
 
+**This file is the full briefing.** A task message only says *what* to do. Everything about *how*
+to do it in this repo (role, workflow, rules, verification, commits, reporting) is here. Read §0
+completely before you start, then the sections it points you to.
+
+---
+
+## 0. Start here: standard operating procedure
+
+### 0.1 Work out your role from the task
+
+Match the task to a row. If it fits several, take the first row that fits. Each role's ownership
+and acceptance criteria are in the section listed.
+
+| The task mentions… | Your role | Read | You mainly touch |
+|---|---|---|---|
+| pet rendering, sprites, animation, clothes/accessory art, assets, the pet viewport, `AccessoryCatalog`, "Maniengine" | **Maniengine Agent** | §4 `ManiengineAssetRenderer`, §5.1 | new package `com.example.tomodoom.maniengine`, `model/AccessoryCatalog`, assets |
+| chatbot, TruFar, LLM, backend, quizzes, MCP tools, chat networking | **TruFar/MCP Agent** | §4 `TruFarChatService` + `McpPetActionHandler`, §5.2 | new package `com.example.tomodoom.trufar` (and/or `.mcp`), manifest INTERNET permission |
+| doomscroll detection, usage stats, accessibility service, screen-time tracking, monitoring permissions | **Doom Scroll Agent** | §4 `DoomScrollMonitor`, §5.3 | new package `com.example.tomodoom.doomscroll`, manifest, permission UI on Pets |
+| anything else: UI polish, new screens, bug fixes, refactors, tests, build config, docs | **Core Agent** | §2, §3, §6 | the existing packages, following the dependency rules in §2 |
+
+A role is a scope, not a permission to edit everything. Stay inside your role's files. If the task
+truly needs a change outside them (a contract change, a new `PetState` field, a shared layout),
+make the smallest change that works, keep it backward compatible, and call it out in the commit
+message and your final report.
+
+### 0.2 Workflow (every task)
+
+1. **Orient.** Run `git status` and `git log --oneline -10`. Read this file, then the Javadoc of
+   every interface or class you'll touch. Javadoc in `contracts/` is normative.
+2. **Check the baseline.** Build it with the §7 command before changing anything. If the baseline
+   is already broken, say so in your report, and fix it first only if the fix is trivial and in scope.
+3. **Plan small milestones.** Split the work into steps that each compile on their own (for example:
+   interface/model changes, then implementation, then wiring, then UI).
+4. **Implement** under the rules in §2, §3 and §6. Prefer extending existing code to duplicating it.
+   Don't delete the stubs in `stubs/`.
+5. **Verify** with the §7 checks after each milestone. Add or extend unit tests for any pure-Java
+   logic (§7.2).
+6. **Commit** each milestone following §6.1.
+7. **Update this file** in the same commit whenever you change a contract, the package map,
+   persistence keys, threading behaviour, build commands, or §9 status.
+8. **Report** as described in §0.4.
+
+### 0.3 Decisions and ambiguity
+
+- If the task is underspecified, choose the option that best fits this architecture, keep it easy
+  to change, and record the choice in the commit message and your report. Don't stop to ask unless
+  the choice would be destructive, irreversible, or contradicts this file.
+- Things you **must not** do without being told explicitly: push to a remote, rewrite or amend
+  published history, change the tech stack (§1), raise `compileSdk`/`targetSdk`/AGP/Gradle, add
+  Kotlin, Room, Hilt/Dagger or RxJava, edit `git config`, commit `local.properties`/`build/`/IDE
+  caches, delete the stubs, or weaken the HP safeguards (replay guard, award cap).
+- If something in this file looks wrong or out of date, follow the code's actual behaviour, fix the
+  file in your commit, and mention it.
+
+### 0.4 Definition of done & final report
+
+A task is done when:
+- the §7 checks pass (build, unit tests, lint with 0 errors and no new warnings, javac with 0 warnings),
+- every change is committed and `git status` is clean (§6.1),
+- this file still matches the code.
+
+End with a short report covering: what changed (commit hashes and one line each), what you verified
+and how, what you **couldn't** verify (on-device behaviour is usually manual, see §7.3), any
+decisions or deviations, and suggested follow-ups.
+
 ---
 
 ## 1. Project overview
@@ -331,13 +396,60 @@ General rules for every agent:
   and observe with `getViewLifecycleOwner()`.
 - **ViewModels:** obtain them through `new ViewModelProvider(this, ViewModelFactory.from(requireContext()))`.
   Constructors take their dependencies explicitly (no `AndroidViewModel`).
-- **Git:** Conventional Commits (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`), one logical
-  milestone per commit, never commit `local.properties`/`build/`/IDE caches. Line endings are
-  normalised by `.gitattributes`.
+- **New packages:** each agent's code goes in its own package under `com.example.tomodoom`
+  (see §0.1). Don't put production implementations in `stubs/`.
+
+### 6.1 Git workflow
+
+- Commit on the current branch (normally `main`). **Never push** unless the task says so.
+- **One logical milestone per commit**, and every commit must compile and pass the §7 checks.
+  Don't save everything for one commit at the end.
+- **Conventional Commits:** `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`, `build:`.
+  A summary line of 72 characters or fewer, a blank line, then a body explaining what changed and
+  why (bullets are fine). Mention any change outside your role's scope and any new dependency.
+- **Stage explicit paths** (`git add <paths>`), never `git add -A` / `git add .`. Check
+  `git status --short` before committing.
+- **Commit identity:** if `git commit` fails with "Author identity unknown" (WSL git has none
+  set on this machine), reuse the identity of the existing history for that one command instead of
+  editing config:
+  ```bash
+  git -c user.name="$(git log -1 --format=%an)" -c user.email="$(git log -1 --format=%ae)" commit ...
+  ```
+- **Line endings** are normalised by `.gitattributes` (LF in the repo, CRLF for `*.bat`). Android
+  Studio may write CRLF to disk. That's harmless and won't show up as a diff.
+- Never commit `local.properties`, `build/`, `.gradle/`, `.idea/workspace.xml` or other IDE caches.
+
+### 6.2 Gotchas specific to this project
+
+- **Java 8 source level:** `List.of`, `Map.of`, `var`, `String.isBlank()`, `Optional.isEmpty()`,
+  streams on minSdk-24-unsafe APIs and similar fail to compile or crash on old devices. Use
+  `Arrays.asList`, `Collections.unmodifiable*`, and explicit loops.
+- **`android.nonTransitiveRClass=true`:** the app's `R` only contains app resources. Library
+  resources need their own `R`, e.g. `com.google.android.material.R.style.…`. In XML,
+  `?attr/…` and `@style/Widget.MaterialComponents.…` work as normal.
+- **`BuildConfig` is enabled** (`buildFeatures.buildConfig = true`). Gate debug-only UI with
+  `BuildConfig.DEBUG`.
+- **Theme:** `Theme.MaterialComponents.DayNight.DarkActionBar`, not Material3. Use
+  MaterialComponents attributes (`?attr/textAppearanceHeadline6`, `?attr/materialButtonOutlinedStyle`).
+  Night-mode colours live in `res/values-night/colors.xml`, so add both variants for any new colour.
+- **Navigation:** the host is a `FragmentContainerView` NavHostFragment. Get the `NavController`
+  from `NavHostFragment#getNavController()`, not `Navigation.findNavController(activity, id)`.
+  A new top-level tab means a menu item **and** a nav-graph destination with the same id, plus that
+  id in `MainActivity`'s `AppBarConfiguration`.
+- **Dependencies** must be compatible with compileSdk 34 / AGP 8.1.1. Many current AndroidX
+  releases need compileSdk 35+, so check before you bump anything. Pin exact versions.
+- **Switch on strings** works with the `AccessorySlot` / `McpPetActionHandler.TOOL_*` constants
+  because they are compile-time constants. Keep new constants `static final` literals.
 
 ---
 
 ## 7. Build & verification commands
+
+### 7.1 Commands
+
+**Standard check to run after every milestone** (use the variant for your environment below):
+`assembleDebug testDebugUnitTest lintDebug`. The lint text report is
+`app/build/reports/lint-results-debug.txt`; its last line is the error/warning count.
 
 Requires **JDK 17** (Android Studio's bundled JBR works) and the Android SDK with platform 34
 (`sdk.dir` in `local.properties`, which Android Studio generates and which is never committed).
@@ -366,6 +478,9 @@ JAVA_HOME='C:\Program Files\Android\Android Studio\jbr' WSLENV=JAVA_HOME \
   cmd.exe /c gradlew.bat assembleDebug testDebugUnitTest --console=plain
 ```
 (If you pipe the output, e.g. to `tail`, add `set -o pipefail` so a failing build isn't reported as exit code 0.)
+To tell which environment you're in: if `uname -r` contains `microsoft` and `which java` finds
+nothing, use the WSL command. The first build of a session can take a minute while the Gradle
+daemon starts.
 
 A change counts as verified when `assembleDebug` and `testDebugUnitTest` succeed with no errors and
 `lintDebug` reports **0 errors**. The current lint baseline is two accepted warning types:
@@ -373,9 +488,38 @@ A change counts as verified when `assembleDebug` and `testDebugUnitTest` succeed
 versions require compileSdk 35+ or a newer AGP). Don't introduce new lint warnings. javac currently
 builds with zero warnings, so keep it that way.
 
+### 7.2 Unit tests
+
+- JVM tests live in `app/src/test/java/com/example/tomodoom/<package>/…Test.java`, using JUnit 4
+  (the only test dependency). See `model/PetStateTest` for the style.
+- Pure-Java code (`model/`, and any logic you extract from Android classes) must have tests.
+  Keep new domain logic free of `android.*` so it stays testable on the JVM.
+- Classes using `SharedPreferences`, `Log`, `LiveData` or views can't run in plain JVM tests (the
+  android.jar stubs throw). Either move the logic into a pure-Java helper and test that, or add a
+  test dependency such as `androidx.arch.core:core-testing` or Robolectric in a `build:` commit.
+- Instrumented tests (`app/src/androidTest`) need a device or emulator. Write them if they're
+  useful, but say in your report if you couldn't run them.
+
+### 7.3 What you probably can't verify
+
+Agents in this environment usually can't launch an emulator or device. Don't claim on-device
+behaviour you didn't observe. Instead, list the relevant steps of the §8 script (plus any new steps
+for your feature) as "manual verification needed", and add those new steps to §8.
+
 ---
 
 ## 8. Manual end-to-end check (debug build, with the stubs)
+
+Debug helpers available in the debug build:
+- **Mock chat commands:** `quiz` (new quiz), `help`, `/tool <name> key=value …` (calls an MCP tool
+  as if the backend had), anything else is echoed back.
+- **Pets debug row** (`BuildConfig.DEBUG` only): *Simulate doom-scroll* (goes through
+  `DoomScrollHpBridge`) and *Reset pet*.
+- **`StubDoomScrollMonitor.simulateDoomScroll(pkg, durationMs, penalty)`:** tests the
+  monitor → listener path in code.
+- **Logcat tags:** `PetStateRepository` (every HP change with its reason), `ChatRepository`,
+  `DefaultMcpHandler`, `MockTruFarChatService`, `StubDoomScrollMonitor`.
+
 
 1. Launch the app. The **Pets** tab shows `Tomo`, **HP 50 / 100** and status "Okay".
 2. Choose **Hat → Cap**. The placeholder viewport text shows `Hat: Cap`.
@@ -385,3 +529,28 @@ builds with zero warnings, so keep it that way.
 6. In Chat, type `/tool get_pet_state` (or `/tool award_hp amount=5`). A SYSTEM message shows the MCP result.
 7. Pets debug row: **Simulate doom-scroll** → HP −5. **Reset pet** → back to 50/100, nothing equipped.
 8. Kill and relaunch the app. HP and equipped items persist (SharedPreferences). The chat transcript resets (in memory only).
+
+---
+
+## 9. Project status & known gaps
+
+Update this table in the same commit when your task changes a subsystem's status.
+
+| Subsystem | Status | Implementation in `AppContainer` |
+|---|---|---|
+| Pet state + persistence | ✅ Done | `PetStateRepository` |
+| MCP tool bridge | ✅ Production-capable default | `DefaultMcpPetActionHandler` |
+| Pets UI (HP header, customisation, debug row) | ✅ Skeleton done | `PetsFragment` / `PetsViewModel` |
+| Chat UI | ✅ Skeleton done | `ChatFragment` / `ChatViewModel` / `ChatRepository` |
+| Pet rendering | ⏳ Stub (text placeholder) | `PlaceholderManiengineRenderer` → Maniengine Agent |
+| Item catalog | ⏳ Placeholder (9 hard-coded items) | `AccessoryCatalog` → Maniengine Agent |
+| TruFar backend | ⏳ Mock (local scripted bot) | `MockTruFarChatService` → TruFar/MCP Agent |
+| Doom-scroll detection | ⏳ Stub (no detection) | `StubDoomScrollMonitor` → Doom Scroll Agent |
+
+Known gaps and TODOs (not assigned to anyone yet):
+- No doom-scroll permission/onboarding UI. The Doom Scroll Agent owns it (§5.3).
+- The chat transcript isn't persisted, and quiz replay protection only lasts for the process
+  lifetime. Real backends must use globally unique quiz IDs.
+- Non-UI user-facing text (MCP results, chat notices, mock bot) is inline English, not in `strings.xml`.
+- Nothing happens yet when HP reaches 0 beyond the "Fainted" status label. No notifications.
+- No instrumented/UI tests yet. Only `PetStateTest` (JVM).
