@@ -45,6 +45,13 @@ message and your final report.
 7. **Update this file** in the same commit whenever you change a contract, the package map,
    persistence keys, threading behaviour, build commands, or §9 status.
 8. **Report** as described in §0.4.
+9. **Update CLAUDE.md at the end of every turn.** Before you hand control back (end of a task, a
+   milestone, or any turn where you changed code or learned something about the repo), re-read the
+   sections your work touched and bring them up to date: package map, contracts, persistence keys,
+   threading, build commands, palette/theming (§6.3), the §8 manual check and §9 status. Record any
+   new gotcha you hit in §6.2. Commit the update with the work it describes; if the turn made no
+   other commit, commit it on its own as `docs: update CLAUDE.md`. If nothing needs changing, say
+   so in your report.
 
 ### 0.3 Decisions and ambiguity
 
@@ -63,7 +70,7 @@ message and your final report.
 A task is done when:
 - the §7 checks pass (build, unit tests, lint with 0 errors and no new warnings, javac with 0 warnings),
 - every change is committed and `git status` is clean (§6.1),
-- this file still matches the code.
+- this file still matches the code, and was reviewed at the end of the turn (§0.2 step 9).
 
 End with a short report covering: what changed (commit hashes and one line each), what you verified
 and how, what you **couldn't** verify (on-device behaviour is usually manual, see §7.3), any
@@ -152,7 +159,8 @@ com.example.tomodoom
     └── chat/ChatFragment, ChatAdapter   RecyclerView (3 view types) + input bar
 ```
 
-Resources: `res/layout/fragment_pets.xml`, `fragment_chat.xml`, `item_chat_{user,bot,system}.xml`,
+Resources: `res/values/colors.xml` + `res/values/themes.xml` (palette and theme, §6.3; no
+`values-night/`), `res/layout/fragment_pets.xml`, `fragment_chat.xml`, `item_chat_{user,bot,system}.xml`,
 `item_accessory_chip.xml`, `res/menu/bottom_nav_menu.xml`, `res/navigation/mobile_navigation.xml`.
 
 ### Dependency direction (enforced by convention)
@@ -431,12 +439,7 @@ General rules for every agent:
   `BuildConfig.DEBUG`.
 - **Theme:** `Theme.MaterialComponents.Light.DarkActionBar`, not Material3. Use
   MaterialComponents attributes (`?attr/textAppearanceHeadline6`, `?attr/materialButtonOutlinedStyle`).
-  The app is **light only** (it ignores system dark mode), so there is no `values-night/`. All colours
-  come from the palette in `res/values/colors.xml`: `floral_white` #FBF7EF (background/surfaces),
-  `eggshell` #F7F0DE (borders, dividers, subtle fills), `charcoal` #585B5E (primary), `jet` #383A3D
-  (primary text, primary variant), `slate_grey` #8C8F92 (secondary text, hints). Prefer theme
-  attributes (`?attr/colorPrimary`, `?android:attr/textColorSecondary`) or a semantic colour that
-  aliases a palette token over new hex values.
+  The app is **light only**: don't add `values-night/` resources. Colours follow §6.3.
 - **Navigation:** the host is a `FragmentContainerView` NavHostFragment. Get the `NavController`
   from `NavHostFragment#getNavController()`, not `Navigation.findNavController(activity, id)`.
   A new top-level tab means a menu item **and** a nav-graph destination with the same id, plus that
@@ -447,6 +450,33 @@ General rules for every agent:
   because they are compile-time constants. Keep new constants `static final` literals.
 
 ---
+
+### 6.3 Colour palette & theming
+
+The app uses one fixed, light-only palette, defined as tokens in `res/values/colors.xml`:
+
+| Token | Hex | Role | Theme attributes it feeds |
+|---|---|---|---|
+| `floral_white` | `#FBF7EF` | Background and surfaces; text/icons on dark fills | `android:windowBackground`, `android:colorBackground`, `colorSurface`, `colorOnPrimary`, `colorOnSecondary` |
+| `eggshell` | `#F7F0DE` | Borders, dividers, subtle fills (bot bubble, system notice) | none (use directly or through a semantic alias) |
+| `charcoal` | `#585B5E` | Primary: action bar, user bubble, buttons, selected chip/tab, progress, input underline | `colorPrimary`, `colorSecondary` |
+| `jet` | `#383A3D` | Primary text, status bar, darker accents | `colorPrimaryVariant`, `colorSecondaryVariant`, `colorOnBackground`, `colorOnSurface`, `android:textColorPrimary` |
+| `slate_grey` | `#8C8F92` | Secondary text, hints, de-emphasised labels (e.g. pet status) | `android:textColorSecondary`, `android:textColorHint` |
+
+Rules:
+- **No raw hex values** in layouts, drawables or Java. Reach for a theme attribute first
+  (`?attr/colorPrimary`, `?android:attr/textColorSecondary`), then a palette token.
+- For a component-specific colour, add a **semantic alias** in `colors.xml` that points at a token
+  (as `bubble_bot_background`, `system_notice_background`, `viewport_background` and
+  `viewport_stroke` do) rather than a new hex value. Adding a new token means a palette change:
+  update the table above in the same commit.
+- `eggshell` on `floral_white` has very low contrast. Borders that must be visible use a 2dp stroke
+  (as the pet viewport does), and cards are flat (`cardElevation="0dp"`) with a 1dp eggshell stroke.
+- `slate_grey` on `floral_white` is about 3.0:1 (`jet` is about 10.7:1, `eggshell` about 1.06:1), so keep it for secondary or large text. Body text
+  uses `jet`.
+- Renderers (Maniengine) may use their own art colours inside the viewport, but the chrome around
+  it follows this palette.
+- Launcher icon colours (`ic_launcher_*`) are still the template defaults and are outside the palette.
 
 ## 7. Build & verification commands
 
