@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Right-side customisation panel: the END drawer of fragment_pets.xml's pets_drawer.
+     Layout params (width, gravity) live on the <include>. PetsFragment makes the root clickable so
+     taps on empty panel space don't fall through to the content underneath.
+     Overdraw is ignored because this is a drawer that must be opaque, not a window root. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/colorSurface"
+    android:orientation="vertical"
+    tools:ignore="Overdraw"
+    tools:layout_width="280dp">
+
+    <!-- Header -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:minHeight="56dp"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingEnd="4dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/customise_title"
+            android:textAppearance="?attr/textAppearanceHeadline6" />
+
+        <ImageButton
+            android:id="@+id/customise_close"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/customise_close"
+            app:srcCompat="@drawable/ic_close_24dp"
+            app:tint="?attr/colorOnSurface" />
+    </LinearLayout>
+
+    <com.google.android.material.tabs.TabLayout
+        android:id="@+id/slot_tabs"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:tabGravity="start"
+        app:tabMode="scrollable" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/item_chips"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="16dp"
+            app:selectionRequired="true"
+            app:singleLine="false"
+            app:singleSelection="true" />
+    </ScrollView>
+</LinearLayout>

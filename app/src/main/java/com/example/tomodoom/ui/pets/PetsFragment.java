@@ -5,9 +5,12 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
+import androidx.core.view.GravityCompat;
+import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 
@@ -27,7 +30,11 @@ import com.google.android.material.tabs.TabLayout;
 
 /**
  * Pets page: HP header, the pet viewport (drawn entirely by {@link ManiengineAssetRenderer}),
- * customisation controls and, in debug builds, a debug row.
+ * a customise FAB and, in debug builds, a debug row.
+ *
+ * <p>The customisation controls (slot tabs + item chips) live in a right-side panel: the END
+ * drawer of {@code pets_drawer}. It opens only from the FAB (edge-swipe is locked off while it is
+ * closed) and closes via its close button, a scrim tap, a swipe, or Back.</p>
  */
 public class PetsFragment extends Fragment {
 
@@ -38,6 +45,13 @@ public class PetsFragment extends Fragment {
     /** Slot whose chips are currently shown. */
     @Nullable
     private String chipSlot;
+    /** Closes the customisation panel on Back; enabled only while the panel is open. */
+    private final OnBackPressedCallback closePanelOnBack = new OnBackPressedCallback(false) {
+        @Override
+        public void handleOnBackPressed() {
+            closeCustomisePanel();
+        }
+    };
 
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater,
@@ -54,11 +68,19 @@ public class PetsFragment extends Fragment {
                 .get(PetsViewModel.class);
         renderer = AppContainer.from(requireContext()).createAssetRenderer();
 
+        setUpCustomisePanel();
         setUpSlotTabs();
         setUpDebugPanel();
 
         viewModel.getSelectedSlot().observe(getViewLifecycleOwner(), this::showSlot);
         viewModel.getPetState().observe(getViewLifecycleOwner(), this::renderState);
+    }
+
+    @Override
+    public void onViewStateRestored(@Nullable Bundle savedInstanceState) {
+        super.onViewStateRestored(savedInstanceState);
+        // DrawerLayout restores an open panel without notifying its DrawerListener.
+        syncCustomisePanelState();
     }
 
     @Override
@@ -99,11 +121,62 @@ public class PetsFragment extends Fragment {
     }
 
     // ---------------------------------------------------------------------------------------
-    // Customisation controls
+    // Customisation panel (END drawer)
+    // ---------------------------------------------------------------------------------------
+
+    private void setUpCustomisePanel() {
+        DrawerLayout drawer = binding.petsDrawer;
+        drawer.setDrawerTitle(GravityCompat.END, getString(R.string.customise_title));
+        // Swallow taps on empty panel space so they don't reach the content beneath the drawer.
+        // Set here rather than in XML to avoid lint's KeyboardInaccessibleWidget on the root.
+        binding.customisePanel.getRoot().setClickable(true);
+        drawer.addDrawerListener(new DrawerLayout.SimpleDrawerListener() {
+            @Override
+            public void onDrawerOpened(@NonNull View drawerView) {
+                syncCustomisePanelState();
+            }
+
+            @Override
+            public void onDrawerClosed(@NonNull View drawerView) {
+                syncCustomisePanelState();
+            }
+        });
+        binding.customiseFab.setOnClickListener(v -> openCustomisePanel());
+        binding.customisePanel.customiseClose.setOnClickListener(v -> closeCustomisePanel());
+        requireActivity().getOnBackPressedDispatcher()
+                .addCallback(getViewLifecycleOwner(), closePanelOnBack);
+    }
+
+    private void openCustomisePanel() {
+        binding.petsDrawer.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED, GravityCompat.END);
+        binding.petsDrawer.openDrawer(GravityCompat.END);
+        closePanelOnBack.setEnabled(true); // Back also works during the open animation
+    }
+
+    private void closeCustomisePanel() {
+        if (binding != null) {
+            binding.petsDrawer.closeDrawer(GravityCompat.END);
+        }
+    }
+
+    /**
+     * Open: unlocked (swipe/scrim close it) and Back closes it. Closed: locked so it only opens
+     * from the FAB (no edge-swipe or peek), and Back falls through to navigation.
+     */
+    private void syncCustomisePanelState() {
+        boolean open = binding.petsDrawer.isDrawerOpen(GravityCompat.END);
+        binding.petsDrawer.setDrawerLockMode(open
+                ? DrawerLayout.LOCK_MODE_UNLOCKED
+                : DrawerLayout.LOCK_MODE_LOCKED_CLOSED, GravityCompat.END);
+        closePanelOnBack.setEnabled(open);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Customisation controls (inside the panel)
     // ---------------------------------------------------------------------------------------
 
     private void setUpSlotTabs() {
-        TabLayout tabs = binding.slotTabs;
+        TabLayout tabs = binding.customisePanel.slotTabs;
         for (String slot : AccessorySlot.ALL) {
             tabs.addTab(tabs.newTab().setText(slotLabel(slot)).setTag(slot), false);
         }
@@ -127,7 +200,7 @@ public class PetsFragment extends Fragment {
     }
 
     private void showSlot(@NonNull String slot) {
-        TabLayout tabs = binding.slotTabs;
+        TabLayout tabs = binding.customisePanel.slotTabs;
         for (int i = 0; i < tabs.getTabCount(); i++) {
             TabLayout.Tab tab = tabs.getTabAt(i);
             if (tab != null && slot.equals(tab.getTag()) && !tab.isSelected()) {
@@ -141,7 +214,7 @@ public class PetsFragment extends Fragment {
 
     private void rebuildChips(@NonNull String slot) {
         chipSlot = slot;
-        binding.itemChips.removeAllViews();
+        binding.customisePanel.itemChips.removeAllViews();
         addItemChip(slot, null, getString(R.string.item_none));
         for (AccessoryItem item : viewModel.getItemsForSlot(slot)) {
             addItemChip(slot, item.getId(), item.getDisplayName());
@@ -154,12 +227,12 @@ public class PetsFragment extends Fragment {
 
     private void addItemChip(@NonNull String slot, @Nullable String itemId, @NonNull String label) {
         Chip chip = (Chip) getLayoutInflater()
-                .inflate(R.layout.item_accessory_chip, binding.itemChips, false);
+                .inflate(R.layout.item_accessory_chip, binding.customisePanel.itemChips, false);
         chip.setId(View.generateViewId());
         chip.setText(label);
         chip.setTag(itemId);
         chip.setOnClickListener(v -> viewModel.equipItem(slot, itemId));
-        binding.itemChips.addView(chip);
+        binding.customisePanel.itemChips.addView(chip);
     }
 
     /** Checks the chip matching the equipped item for the visible slot ("None" when empty). */
@@ -168,12 +241,12 @@ public class PetsFragment extends Fragment {
             return;
         }
         String equipped = state.getEquippedItem(chipSlot);
-        for (int i = 0; i < binding.itemChips.getChildCount(); i++) {
-            View child = binding.itemChips.getChildAt(i);
+        for (int i = 0; i < binding.customisePanel.itemChips.getChildCount(); i++) {
+            View child = binding.customisePanel.itemChips.getChildAt(i);
             Object tag = child.getTag();
             boolean matches = equipped == null ? tag == null : equipped.equals(tag);
             if (matches) {
-                binding.itemChips.check(child.getId());
+                binding.customisePanel.itemChips.check(child.getId());
                 return;
             }
         }

@@ -155,13 +155,15 @@ com.example.tomodoom
 │   └── ChatViewModel             exposes transcript + active quiz, sends messages
 │
 └── ui/
-    ├── pets/PetsFragment         HP header, pet viewport (FrameLayout), customisation controls
+    ├── pets/PetsFragment         HP header, pet viewport (FrameLayout), customise FAB → right-side
+    │                             DrawerLayout panel (END drawer) holding the customisation controls
     └── chat/ChatFragment, ChatAdapter   RecyclerView (3 view types) + input bar
 ```
 
 Resources: `res/values/colors.xml` + `res/values/themes.xml` (palette and theme, §6.3; no
-`values-night/`), `res/layout/fragment_pets.xml`, `fragment_chat.xml`, `item_chat_{user,bot,system}.xml`,
-`item_accessory_chip.xml`, `res/menu/bottom_nav_menu.xml`, `res/navigation/mobile_navigation.xml`.
+`values-night/`), `res/layout/fragment_pets.xml` (root `DrawerLayout` `pets_drawer`: main content + `<include>` of
+`panel_customise.xml` as the END drawer), `fragment_chat.xml`, `item_chat_{user,bot,system}.xml`,
+`item_accessory_chip.xml`, `res/drawable/ic_hanger_24dp.xml` (customise FAB), `ic_close_24dp.xml`, `res/menu/bottom_nav_menu.xml`, `res/navigation/mobile_navigation.xml`.
 
 ### Dependency direction (enforced by convention)
 
@@ -353,6 +355,9 @@ General rules for every agent:
 - **You also own:** `model.AccessoryCatalog`. Replace the placeholder items with your real asset
   manifest, keeping the item IDs stable once shipped (they're persisted in prefs), and the asset
   files under `app/src/main/assets/` or `res/` in whatever format you choose.
+- **Layout note:** the customise FAB (`customise_fab`, ~56dp, a sibling of the viewport) floats over
+  the viewport's top-right corner about 12dp in from the edges, so keep essential art clear of it. The
+  customisation controls are in the right-side panel (`panel_customise.xml`), not under the viewport.
 - **Acceptance:** equipping/unequipping on the Pets tab updates the viewport immediately. Rotating
   or switching tabs doesn't leak views (`release` cleans up). Nothing happens off the main thread
   in `render`.
@@ -446,6 +451,19 @@ General rules for every agent:
   id in `MainActivity`'s `AppBarConfiguration`.
 - **Dependencies** must be compatible with compileSdk 34 / AGP 8.1.1. Many current AndroidX
   releases need compileSdk 35+, so check before you bump anything. Pin exact versions.
+- **Pets customisation panel (`DrawerLayout`):** `androidx.drawerlayout` (1.1.1) and
+  `androidx.activity` come in transitively as compile-scope dependencies of Material. Don't pin
+  drawerlayout 1.1.1 in `build.gradle.kts`: that adds a `GradleDependency` lint warning. Rules:
+  - Drawer content must be clickable or taps on empty panel space fall through to the views beneath.
+    `PetsFragment` sets it in Java, because XML `clickable` triggers `KeyboardInaccessibleWidget`.
+  - When DrawerLayout restores an open drawer it fires **no** `DrawerListener` callback, so
+    `PetsFragment` re-syncs the lock mode and Back callback in `onViewStateRestored`.
+  - Back closes the panel through a view-lifecycle `OnBackPressedCallback` that is only enabled
+    while the panel is open.
+  - The drawer is `LOCK_MODE_LOCKED_CLOSED` while closed (no edge swipe; it opens only from the
+    FAB) and unlocked while open.
+  - Lint flags `Overdraw` on an included drawer root that has a background. It's a false positive
+    and is suppressed with `tools:ignore`.
 - **Switch on strings** works with the `AccessorySlot` / `McpPetActionHandler.TOOL_*` constants
   because they are compile-time constants. Keep new constants `static final` literals.
 
@@ -557,7 +575,13 @@ Debug helpers available in the debug build:
 
 
 1. Launch the app. The **Pets** tab shows `Tomo`, **HP 50 / 100** and status "Okay".
-2. Choose **Hat → Cap**. The placeholder viewport text shows `Hat: Cap`.
+2. Tap the **hanger FAB** (right side, just below the HP card). The **Customise pet** panel slides in
+   from the right over a dimmed scrim. Choose **Hat → Cap**, then close the panel (✕, tap the scrim,
+   Back, or swipe it right). The placeholder viewport text shows `Hat: Cap`. Also check:
+   - a right-edge swipe does *not* open the panel;
+   - the panel stays open across rotation and across a Pets → Chat → Pets round trip;
+   - the bottom nav still switches tabs while the panel is open;
+   - with the panel closed, Back leaves the app as before.
 3. Open **Chat**. The mock bot greets you. Type `quiz`, and the bot asks a question (e.g. "What is 2 + 2?").
 4. Answer correctly (`4`). The bot confirms, and a SYSTEM message shows **"+10 HP awarded via MCP! (60/100 HP)"**.
 5. Switch to **Pets**: **HP 60 / 100**.
@@ -575,7 +599,7 @@ Update this table in the same commit when your task changes a subsystem's status
 |---|---|---|
 | Pet state + persistence | ✅ Done | `PetStateRepository` |
 | MCP tool bridge | ✅ Production-capable default | `DefaultMcpPetActionHandler` |
-| Pets UI (HP header, customisation, debug row) | ✅ Skeleton done | `PetsFragment` / `PetsViewModel` |
+| Pets UI (HP header, FAB-triggered customisation side panel, debug row) | ✅ Skeleton done | `PetsFragment` / `PetsViewModel` |
 | Chat UI | ✅ Skeleton done | `ChatFragment` / `ChatViewModel` / `ChatRepository` |
 | Pet rendering | ⏳ Stub (text placeholder) | `PlaceholderManiengineRenderer` → Maniengine Agent |
 | Item catalog | ⏳ Placeholder (9 hard-coded items) | `AccessoryCatalog` → Maniengine Agent |
@@ -589,3 +613,6 @@ Known gaps and TODOs (not assigned to anyone yet):
 - Non-UI user-facing text (MCP results, chat notices, mock bot) is inline English, not in `strings.xml`.
 - Nothing happens yet when HP reaches 0 beyond the "Fainted" status label. No notifications.
 - No instrumented/UI tests yet. Only `PetStateTest` (JVM).
+- On phones, the open customisation panel (280dp) covers most of the pet viewport, so equip changes
+  re-render live but are only fully visible once the panel closes. A narrower panel or a bottom
+  sheet would fix that if live preview matters.
