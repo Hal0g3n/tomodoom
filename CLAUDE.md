@@ -89,7 +89,8 @@ virtual pet whose **HP** reflects your digital habits:
 | You pass a quiz from the TruFar chatbot | Pet **gains** HP (applied via an MCP tool) | TruFar chat + MCP bridge |
 | You equip clothes or accessories | The pet's look changes | Maniengine renderer |
 
-The app has two bottom-navigation tabs: **Pets** (HP, pet viewport, customisation) and **Chat**
+The app has two bottom-navigation tabs: **Pets** (HP, pet viewport, and a customisation side panel
+opened from a hanger FAB; no action bar) and **Chat**
 (TruFar chatbot + quizzes).
 
 ### Tech stack (fixed — don't change it without updating this file)
@@ -115,7 +116,8 @@ Root package: `com.example.tomodoom`. Source root: `app/src/main/java/com/exampl
 ```
 com.example.tomodoom
 ├── TomodoomApplication.java      Application subclass; owns the AppContainer; starts the monitor
-├── MainActivity.java             Single activity; BottomNavigationView ↔ NavController (Pets | Chat)
+├── MainActivity.java             Single activity; BottomNavigationView ↔ NavController (Pets | Chat);
+│                                 hides the action bar on Pets, shows it elsewhere
 │
 ├── model/                        Immutable, pure-Java value objects (no android.* imports)
 │   ├── PetState                  name, currentHp, maxHp, equipped items (slot → itemId)
@@ -161,9 +163,12 @@ com.example.tomodoom
 ```
 
 Resources: `res/values/colors.xml` + `res/values/themes.xml` (palette and theme, §6.3; no
-`values-night/`), `res/layout/fragment_pets.xml` (root `DrawerLayout` `pets_drawer`: main content + `<include>` of
-`panel_customise.xml` as the END drawer), `fragment_chat.xml`, `item_chat_{user,bot,system}.xml`,
-`item_accessory_chip.xml`, `res/drawable/ic_hanger_24dp.xml` (customise FAB), `ic_close_24dp.xml`, `res/menu/bottom_nav_menu.xml`, `res/navigation/mobile_navigation.xml`.
+`values-night/`), `res/layout/fragment_pets.xml` (root `DrawerLayout` `pets_drawer`: a `ConstraintLayout` with
+`hp_card`, `pet_viewport`, `debug_panel` and `customise_fab`, plus an `<include>` of
+`panel_customise.xml` as the END drawer), `panel_customise.xml` (header + close button, `slot_tabs`,
+`item_chips`), `fragment_chat.xml`, `item_chat_{user,bot,system}.xml`, `item_accessory_chip.xml`,
+`res/drawable/ic_hanger_24dp.xml` (customise FAB) and `ic_close_24dp.xml` (panel close),
+`res/menu/bottom_nav_menu.xml`, `res/navigation/mobile_navigation.xml`.
 
 ### Dependency direction (enforced by convention)
 
@@ -445,6 +450,10 @@ General rules for every agent:
 - **Theme:** `Theme.MaterialComponents.Light.DarkActionBar`, not Material3. Use
   MaterialComponents attributes (`?attr/textAppearanceHeadline6`, `?attr/materialButtonOutlinedStyle`).
   The app is **light only**: don't add `values-night/` resources. Colours follow §6.3.
+- **Action bar per destination:** the theme keeps `DarkActionBar`, and `MainActivity` hides the
+  action bar on `navigation_pets` and shows it on every other destination, through a
+  `NavController` `OnDestinationChangedListener`. A new destination gets the bar unless you add it
+  there. Don't switch the theme to `NoActionBar`: `setupActionBarWithNavController` needs an action bar.
 - **Navigation:** the host is a `FragmentContainerView` NavHostFragment. Get the `NavController`
   from `NavHostFragment#getNavController()`, not `Navigation.findNavController(activity, id)`.
   A new top-level tab means a menu item **and** a nav-graph destination with the same id, plus that
@@ -477,7 +486,7 @@ The app uses one fixed, light-only palette, defined as tokens in `res/values/col
 |---|---|---|---|
 | `floral_white` | `#FBF7EF` | Background and surfaces; text/icons on dark fills | `android:windowBackground`, `android:colorBackground`, `colorSurface`, `colorOnPrimary`, `colorOnSecondary` |
 | `eggshell` | `#F7F0DE` | Borders, dividers, subtle fills (bot bubble, system notice) | none (use directly or through a semantic alias) |
-| `charcoal` | `#585B5E` | Primary: action bar, user bubble, buttons, selected chip/tab, progress, input underline | `colorPrimary`, `colorSecondary` |
+| `charcoal` | `#585B5E` | Primary: action bar (Chat), customise FAB, user bubble, buttons, selected chip/tab, progress, input underline | `colorPrimary`, `colorSecondary` |
 | `jet` | `#383A3D` | Primary text, status bar, darker accents | `colorPrimaryVariant`, `colorSecondaryVariant`, `colorOnBackground`, `colorOnSurface`, `android:textColorPrimary` |
 | `slate_grey` | `#8C8F92` | Secondary text, hints, de-emphasised labels (e.g. pet status) | `android:textColorSecondary`, `android:textColorHint` |
 
@@ -536,7 +545,8 @@ nothing, use the WSL command. The first build of a session can take a minute whi
 daemon starts.
 
 A change counts as verified when `assembleDebug` and `testDebugUnitTest` succeed with no errors and
-`lintDebug` reports **0 errors**. The current lint baseline is two accepted warning types:
+`lintDebug` reports **0 errors**. The current lint baseline is **12 warnings** of two accepted types
+(11 `GradleDependency` + 1 `OldTargetApi`):
 `OldTargetApi` (`targetSdk = 34` is fixed by the stack) and `GradleDependency` (newer AndroidX
 versions require compileSdk 35+ or a newer AGP). Don't introduce new lint warnings. javac currently
 builds with zero warnings, so keep it that way.
@@ -574,7 +584,9 @@ Debug helpers available in the debug build:
   `DefaultMcpHandler`, `MockTruFarChatService`, `StubDoomScrollMonitor`.
 
 
-1. Launch the app. The **Pets** tab shows `Tomo`, **HP 50 / 100** and status "Okay".
+1. Launch the app. The **Pets** tab has **no action bar** (the HP card sits right under the status
+   bar) and shows `Tomo`, **HP 50 / 100** and status "Okay". Below the HP card, a hanger FAB sits at the
+   top-right of the viewport.
 2. Tap the **hanger FAB** (right side, just below the HP card). The **Customise pet** panel slides in
    from the right over a dimmed scrim. Choose **Hat → Cap**, then close the panel (✕, tap the scrim,
    Back, or swipe it right). The placeholder viewport text shows `Hat: Cap`. Also check:
@@ -582,7 +594,7 @@ Debug helpers available in the debug build:
    - the panel stays open across rotation and across a Pets → Chat → Pets round trip;
    - the bottom nav still switches tabs while the panel is open;
    - with the panel closed, Back leaves the app as before.
-3. Open **Chat**. The mock bot greets you. Type `quiz`, and the bot asks a question (e.g. "What is 2 + 2?").
+3. Open **Chat**. The action bar reading "Chat" reappears. The mock bot greets you. Type `quiz`, and the bot asks a question (e.g. "What is 2 + 2?").
 4. Answer correctly (`4`). The bot confirms, and a SYSTEM message shows **"+10 HP awarded via MCP! (60/100 HP)"**.
 5. Switch to **Pets**: **HP 60 / 100**.
 6. In Chat, type `/tool get_pet_state` (or `/tool award_hp amount=5`). A SYSTEM message shows the MCP result.
@@ -599,7 +611,7 @@ Update this table in the same commit when your task changes a subsystem's status
 |---|---|---|
 | Pet state + persistence | ✅ Done | `PetStateRepository` |
 | MCP tool bridge | ✅ Production-capable default | `DefaultMcpPetActionHandler` |
-| Pets UI (HP header, FAB-triggered customisation side panel, debug row) | ✅ Skeleton done | `PetsFragment` / `PetsViewModel` |
+| Pets UI (no action bar, HP header, FAB-triggered customisation side panel, debug row) | ✅ Skeleton done | `PetsFragment` / `PetsViewModel` |
 | Chat UI | ✅ Skeleton done | `ChatFragment` / `ChatViewModel` / `ChatRepository` |
 | Pet rendering | ⏳ Stub (text placeholder) | `PlaceholderManiengineRenderer` → Maniengine Agent |
 | Item catalog | ⏳ Placeholder (9 hard-coded items) | `AccessoryCatalog` → Maniengine Agent |
