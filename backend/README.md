@@ -28,6 +28,7 @@ Design details and the captured TruFar protocol are in `CLAUDE.md` §5.2 ("Relay
 | `store.py` | sessions + the "turn in flight" lease (Firestore, or memory for tests) |
 | `markers.py` | `[[CORRECT]]`/`[[WRONG]]` fallback (port of the app's `QuizMarkerParser`) |
 | `config.py` | environment variables |
+| `Procfile`, `.python-version`, `.gcloudignore` | Cloud Run build: gunicorn command, Python 3.12, upload exclusions |
 
 ## Configuration (environment variables)
 
@@ -38,8 +39,11 @@ Design details and the captured TruFar protocol are in `CLAUDE.md` §5.2 ("Relay
 | `TRUFAR_CONVERSATION_ID` | the number at the end of `/api/mashang/core/answer/<id>` in DevTools (e.g. `13549`) |
 | `TRUFAR_COOKIE` | the whole `cookie` request header from that request (DevTools → Headers) |
 | `TRUFAR_BASE_URL` | optional, default `https://trufar.cn` |
-| `GOOGLE_APPLICATION_CREDENTIALS` | path to the Firebase service-account JSON (turns on Firestore) |
-| `TOMODOOM_STORE` | optional: `firestore` or `memory` (default: firestore if the credentials are set) |
+| `GOOGLE_CLOUD_PROJECT` | Google Cloud project id (set on Cloud Run so Firestore knows the project) |
+| `GOOGLE_APPLICATION_CREDENTIALS` | path to a service-account JSON; only needed **outside** Google Cloud |
+| `TOMODOOM_STORE` | optional: `firestore` or `memory` (default: firestore on Cloud Run or when a key file is set) |
+
+On Cloud Run, `BACKEND_TOKEN`, `MCP_KEY` and `TRUFAR_COOKIE` come from Secret Manager (see below).
 
 Make random secrets with `python -c "import secrets; print(secrets.token_urlsafe(32))"`.
 **Never commit** the cookie, tokens or service-account file. The cookie is your TruFar login:
@@ -53,7 +57,7 @@ anyone who has it can use your account.
 cd backend
 python -m venv .venv && .venv/Scripts/activate      # macOS/Linux: source .venv/bin/activate
 pip install -r requirements-dev.txt
-python -m pytest tests                              # 62 tests, no network
+python -m pytest tests                              # 67 tests, no network
 # Local server with an in-memory store:
 BACKEND_TOKEN=dev MCP_KEY=dev TRUFAR_CONVERSATION_ID=13549 TRUFAR_COOKIE='...' flask --app app run
 ```
@@ -61,7 +65,68 @@ BACKEND_TOKEN=dev MCP_KEY=dev TRUFAR_CONVERSATION_ID=13549 TRUFAR_COOKIE='...' f
 The app requires HTTPS, so a phone can't use `http://localhost`. Test the app against the
 deployed server (or an HTTPS tunnel such as `cloudflared tunnel --url http://localhost:5000`).
 
-## Deploy on PythonAnywhere
+## Deploy on Google Cloud Run (recommended)
+
+All commands run in **Cloud Shell** (console.cloud.google.com → the **>_** button), which has
+`gcloud` built in. The region `asia-east1` (Taiwan) is the closest Tier-1 region to trufar.cn.
+
+1. **Project + billing:** at console.firebase.google.com → **Add project** (Analytics not needed),
+   then upgrade it to the **Blaze** plan. A card is required; this usage stays within the free
+   tier. Add a budget alert under *Billing → Budgets & alerts* to be safe.
+2. **APIs and the database:**
+   ```bash
+   gcloud config set project <project-id>
+   gcloud services enable run.googleapis.com cloudbuild.googleapis.com \
+     artifactregistry.googleapis.com secretmanager.googleapis.com firestore.googleapis.com
+   gcloud firestore databases create --location=asia-east1
+   ```
+   If the database already exists (for example, created from the Firebase console), that last
+   command says so. That's fine.
+3. **Secrets.** Each value is pasted at a silent prompt, so it's never shown or kept in shell history:
+   ```bash
+   read -rsp "BACKEND_TOKEN: " V && printf %s "$V" | gcloud secrets create backend-token --data-file=- ; echo
+   read -rsp "MCP_KEY: " V && printf %s "$V" | gcloud secrets create mcp-key --data-file=- ; echo
+   read -rsp "TRUFAR_COOKIE: " V && printf %s "$V" | gcloud secrets create trufar-cookie --data-file=- ; echo
+   unset V
+   ```
+4. **Permissions** for the service's runtime account (the default compute service account):
+   ```bash
+   P=$(gcloud config get-value project)
+   SA=$(gcloud projects describe $P --format='value(projectNumber)')-compute@developer.gserviceaccount.com
+   for R in roles/secretmanager.secretAccessor roles/datastore.user; do
+     gcloud projects add-iam-policy-binding $P --member=serviceAccount:$SA --role=$R --condition=None
+   done
+   ```
+5. **Deploy:**
+   ```bash
+   git clone https://github.com/Hal0g3n/tomodoom.git && cd tomodoom/backend
+   gcloud run deploy tomodoom-relay --source . --region asia-east1 --allow-unauthenticated \
+     --max-instances 2 --timeout 300 \
+     --set-env-vars TRUFAR_CONVERSATION_ID=<conversation id>,GOOGLE_CLOUD_PROJECT=$P \
+     --set-secrets BACKEND_TOKEN=backend-token:latest,MCP_KEY=mcp-key:latest,TRUFAR_COOKIE=trufar-cookie:latest
+   ```
+   Answer **Y** if it offers to create an Artifact Registry repository or grant Cloud Build
+   permissions. It ends by printing the service URL, `https://tomodoom-relay-….run.app`.
+   - `--allow-unauthenticated` is intended: the app and TruFar must reach it, and the app token
+     and MCP key protect it.
+   - If the build fails with a permissions error, grant the same service account
+     `roles/cloudbuild.builds.builder` and run the deploy again.
+6. **Check:** opening `<url>/` shows `"ok": true`. Logs are at *Cloud Run → tomodoom-relay →
+   Logs*, or `gcloud run services logs read tomodoom-relay --region asia-east1`.
+7. **App and TruFar:** follow steps 4–5 of the PythonAnywhere section below, using the run.app
+   URL instead of the PythonAnywhere one.
+
+**Updating:** run `cd ~/tomodoom && git pull`, then repeat the step 5 deploy command.
+**New TruFar cookie:**
+```bash
+read -rsp "TRUFAR_COOKIE: " V && printf %s "$V" | gcloud secrets versions add trufar-cookie --data-file=- ; unset V; echo
+gcloud run services update tomodoom-relay --region asia-east1   # new revision picks up :latest
+```
+
+## Deploy on PythonAnywhere (paid plans only)
+
+The **free plan can't reach trufar.cn** (confirmed: the relay answers "TruFar unreachable from
+host"). These steps only work on a paid account. Steps 4–5 (app and TruFar setup) apply to any host.
 
 1. **Firestore:** in the Firebase console, create a project, then *Build → Firestore Database →
    Create database* (production mode; no client rules are needed because only this server uses
@@ -105,15 +170,18 @@ deployed server (or an HTTPS tunnel such as `cloudflared tunnel --url http://loc
 
 ## Known limitations
 
-- **PythonAnywhere free tier:** outbound traffic goes through an allowlist proxy, and trufar.cn is
-  probably not on it. If it isn't, the app shows *"TruFar unreachable from host (PythonAnywhere
-  free allowlist?)"*. Fix it by upgrading to a paid account or hosting the same code elsewhere
-  (Render, Railway, Fly.io, or your PC plus a tunnel). No code change is needed.
-- **One web worker (free tier):** Kafka's `/mcp` call arrives while `/messages` still occupies the
-  only worker, so it waits until the turn ends and is then rejected. The `[[CORRECT]]` marker
-  still grants the HP, which is why the prompt asks for both.
+- **PythonAnywhere free tier:** outbound traffic goes through an allowlist proxy that blocks
+  trufar.cn (confirmed). The app shows *"TruFar unreachable from host (PythonAnywhere free
+  allowlist?)"*. Use Cloud Run or a paid account. With a single web worker, Kafka's `/mcp` call
+  also can't be served until the turn ends; on Cloud Run, gunicorn's 8 threads avoid that. The
+  prompt still asks for the `[[CORRECT]]` marker as a fallback.
+- **Cloud Run reaching trufar.cn** hasn't been confirmed yet. trufar.cn is China-hosted and could
+  block or slow down Google Cloud addresses. The first chat after a deploy tells you.
+- **Cold starts:** after a period with no traffic, Cloud Run's first request takes a few extra
+  seconds. That's well within the app's 120-second timeout.
 - **Cookie expiry:** when the TruFar login expires, the app shows *"TruFar login expired: refresh
-  TRUFAR_COOKIE"*. Copy a fresh `cookie` header from DevTools into the WSGI file and reload.
+  TRUFAR_COOKIE"*. Copy a fresh `cookie` header from DevTools and add it as a new Secret Manager
+  version (see "New TruFar cookie" above), or into the WSGI file on PythonAnywhere.
 - **One shared TruFar conversation:** every app session talks to the same conversation (fine for
   a one-person demo). Only one turn runs at a time; a second one gets HTTP 409 "Kafka is busy".
   Per-user conversations need the request TruFar sends for "new chat", which hasn't been captured yet.

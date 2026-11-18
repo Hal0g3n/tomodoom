@@ -784,14 +784,19 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
 - **LLM-graded HP is persuadable:** a user can talk Kafka into emitting `[[CORRECT]]`. Each award
   is bounded by `OpenAiCompatibleChatService.CORRECT_ANSWER_HP` (10) and the per-award cap, but
   there's no rate limit. Add one in the handler if it gets abused.
-- **Relay backend hosting (PythonAnywhere free tier):** outbound HTTP goes through an allowlist
-  proxy, and trufar.cn is probably not on it. The relay then answers *"TruFar unreachable from
-  host (PythonAnywhere free allowlist?)"*. Fix it with a paid account or another host; the code
-  doesn't change. With a **single web worker**, Kafka's `/mcp` call waits for the turn to end and
-  is then rejected, so Kafka's prompt also asks for the `[[CORRECT]]` marker as an HP fallback.
-- **TruFar cookie expiry:** the relay authenticates with a copied browser cookie. When it expires,
-  the app shows "TruFar login expired: refresh TRUFAR_COOKIE". Copy a fresh `cookie` header from
-  DevTools into the PythonAnywhere WSGI file and reload. Never commit it.
+- **PythonAnywhere free can't host the relay** (confirmed by a live test): its allowlist proxy
+  blocks trufar.cn, and the relay answers *"TruFar unreachable from host (PythonAnywhere free
+  allowlist?)"* instantly. That's why the relay runs on Cloud Run. With a single web worker,
+  Kafka's `/mcp` call would also have to wait for the turn to end; Cloud Run's 8 gunicorn threads
+  avoid that. Kafka's prompt still asks for the `[[CORRECT]]` marker as an HP fallback.
+- **Cloud Run notes:** `--allow-unauthenticated` is intentional (see §5.2). The first request
+  after idle has a few seconds of cold start (the app's timeout is 120 s). Whether trufar.cn
+  accepts Google Cloud addresses was still unconfirmed when this was written.
+- **TruFar cookie expiry:** the relay authenticates with a copied cookie from a **separate TruFar
+  bot account** (so your own login is never exposed). When it expires, the app shows "TruFar login
+  expired: refresh TRUFAR_COOKIE". Add a fresh `cookie` header as a new version of the
+  `trufar-cookie` secret, then run `gcloud run services update tomodoom-relay --region asia-east1`
+  (`backend/README.md`). Never commit it or paste it into chats.
 - **org.json in JVM tests:** android.jar only has throwing stubs, so `org.json:json` is a
   `testImplementation` dependency. Tests can then call `AgentProfileLoader.parse(JSONObject)` on the
   real asset (unit tests run with `app/` as the working directory).
@@ -1005,17 +1010,17 @@ Debug helpers available in the debug build:
 **Kafka on trufar.cn via the relay**: deploy `backend/` (see its README), set `TRUFAR_API_URL`/`TRUFAR_API_TOKEN`
 and leave `TRUFAR_LLM_URL` unset:
 
-18. `https://<you>.pythonanywhere.com/` returns `"ok": true`. Open **Chat** and wait (up to about a
-    minute): Kafka's TruFar greeting appears, with no `__START__` bubble.
-19. Answer Kafka's question correctly. The PythonAnywhere server log shows `MCP award_hp amount=10 -> ok`
-    (or `award=10 via marker`), the reply shows no `[[…]]` marker, and a SYSTEM message shows
-    **"+10 HP awarded via MCP!"**. A wrong answer gets no HP.
+18. The Cloud Run URL (`https://tomodoom-relay-….run.app/`) returns `"ok": true`. Open **Chat**
+    and wait (up to about a minute): Kafka's TruFar greeting appears, with no `__START__` bubble.
+19. Answer Kafka's question correctly. The Cloud Run logs (*Cloud Run → tomodoom-relay → Logs*)
+    show `MCP award_hp amount=10 -> ok` (or `award=10 via marker`), the reply shows no `[[…]]`
+    marker, and a SYSTEM message shows **"+10 HP awarded via MCP!"**. A wrong answer gets no HP.
 20. Send a message while another is still being answered (e.g. from a second device). That one
     gets `⚠ TruFar error: … HTTP 409: Kafka is busy…`.
-21. Put a stale `TRUFAR_COOKIE` in the WSGI file and reload: the app shows `HTTP 503: TruFar login
-    expired: refresh TRUFAR_COOKIE`. A wrong `TRUFAR_API_TOKEN` shows `HTTP 401`. On the free
-    tier, `TruFar unreachable from host (PythonAnywhere free allowlist?)` means trufar.cn is blocked
-    (§6.2).
+21. Add a stale cookie as a new `trufar-cookie` secret version and run `gcloud run services update`:
+    the app shows `HTTP 503: TruFar login expired: refresh TRUFAR_COOKIE`. A wrong
+    `TRUFAR_API_TOKEN` shows `HTTP 401`. `TruFar unreachable from host` means the host can't
+    reach trufar.cn (§6.2).
 
 ---
 
@@ -1033,14 +1038,15 @@ Update this table in the same commit when your task changes a subsystem's status
 | Chat UI | ✅ Skeleton done | `ChatFragment` / `ChatViewModel` / `ChatRepository` |
 | Pet rendering | ✅ scene-3 rabbit (three.js, offline) via the HTML/WebView pipeline; add-ons are primitive placeholders | `HtmlManiengineRenderer` + `assets/maniengine/` |
 | Item catalog | ⏳ Placeholder (6 hard-coded items: hats and accessories) | `AccessoryCatalog` → Maniengine Agent |
-| TruFar backend | ✅ Relay to Kafka on trufar.cn (`backend/`, tested locally only, not yet deployed); OpenAI-compatible client as an alternative; mock when unconfigured | `HttpTruFarChatService` (`TRUFAR_API_URL` → relay) / `OpenAiCompatibleChatService` (`TRUFAR_LLM_URL`) / `MockTruFarChatService` |
+| TruFar backend | ✅ Relay to Kafka on trufar.cn (`backend/`), packaged for Cloud Run but not yet deployed there; tested locally; PythonAnywhere free confirmed blocked. OpenAI-compatible client as an alternative; mock when unconfigured | `HttpTruFarChatService` (`TRUFAR_API_URL` → relay) / `OpenAiCompatibleChatService` (`TRUFAR_LLM_URL`) / `MockTruFarChatService` |
 | Doom-scroll detection | ✅ Usage Access polling in a foreground service; portrait only, 1 HP per minute, warnings every 10 minutes (not yet tested on a device) | `UsageStatsDoomScrollMonitor` |
 
 Known gaps and TODOs (not assigned to anyone yet):
-- The relay (`backend/`) has been tested only against a fake TruFar (pytest plus an HTTP smoke
-  test), not against trufar.cn, Firestore or PythonAnywhere. Unconfirmed: whether PythonAnywhere
-  free can reach trufar.cn, which MCP transport TruFar's client uses (the relay speaks
-  Streamable HTTP with JSON responses), and how long the TruFar cookie lasts.
+- The relay (`backend/`) has been tested against a fake TruFar (pytest plus an HTTP smoke test)
+  and deployed once to PythonAnywhere free (it ran, but trufar.cn was blocked). Not yet tested:
+  - Cloud Run, Firestore, and a real trufar.cn reply
+  - which MCP transport TruFar's client uses (the relay speaks Streamable HTTP with JSON responses)
+  - how long the TruFar cookie lasts
 - All app sessions share one TruFar conversation (`TRUFAR_CONVERSATION_ID`). Per-user
   conversations need the "new chat" request captured from trufar.cn.
 - The chat transcript isn't persisted, and quiz replay protection only lasts for the process
