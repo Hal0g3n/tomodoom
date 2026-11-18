@@ -237,6 +237,12 @@ public final class UsageStatsDoomScrollMonitor implements DoomScrollMonitor {
                     tick.penaltyIntervals * HP_PER_PENALTY_INTERVAL,
                     nowMillis));
         }
+        if (tick != null && tick.warningSessionMillis > 0L) {
+            DoomScrollListener currentListener = listener;
+            if (currentListener != null) {
+                currentListener.onDoomScrollWarning(tick.sourcePackage, tick.warningSessionMillis);
+            }
+        }
     }
 
     /** The display's current size reflects the rotation the foreground app is using. */

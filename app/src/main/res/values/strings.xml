@@ -19,8 +19,16 @@
     <string name="item_none">None</string>
     <string name="debug_simulate_doom_scroll">Simulate doom-scroll (−%1$d HP)</string>
     <string name="debug_reset_pet">Reset pet</string>
-    <string name="usage_access_explanation">Allow Usage Access to detect long sessions in social and video apps. Monitoring checks about every 15 seconds while Tomodoom is active.</string>
+    <string name="usage_access_explanation">Allow Usage Access so Tomodoom can notice portrait scrolling in social and video apps. Your pet loses 1 HP for every minute of scrolling.</string>
     <string name="usage_access_open_settings">Enable</string>
+
+    <!-- Doom-scroll notifications -->
+    <string name="doom_scroll_warning_channel">Scrolling warnings</string>
+    <string name="doom_scroll_warning_title">Time to look up</string>
+    <plurals name="doom_scroll_warning_text">
+        <item quantity="one">You\'ve been scrolling for %1$d minute. Your pet is losing HP.</item>
+        <item quantity="other">You\'ve been scrolling for %1$d minutes. Your pet is losing HP.</item>
+    </plurals>
 
     <!-- Onboarding -->
     <string name="onboarding_emoji" translatable="false">🐾</string>

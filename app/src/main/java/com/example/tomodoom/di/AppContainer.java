@@ -12,6 +12,7 @@ import com.example.tomodoom.contracts.DoomScrollMonitor;
 import com.example.tomodoom.contracts.ManiengineAssetRenderer;
 import com.example.tomodoom.contracts.McpPetActionHandler;
 import com.example.tomodoom.contracts.TruFarChatService;
+import com.example.tomodoom.doomscroll.DoomScrollNotifier;
 import com.example.tomodoom.doomscroll.UsageStatsDoomScrollMonitor;
 import com.example.tomodoom.maniengine.HtmlManiengineRenderer;
 import com.example.tomodoom.repository.ChatRepository;
@@ -79,7 +80,7 @@ public final class AppContainer {
 
         // Doom-scroll detections → HP loss. Keep this wiring when swapping the monitor.
         doomScrollHpBridge = new DoomScrollHpBridge(petStateRepository);
-        doomScrollMonitor.setListener(doomScrollHpBridge);
+        doomScrollMonitor.setListener(new DoomScrollNotifier(appContext, doomScrollHpBridge));
     }
 
     /** @return the process-wide container held by {@link TomodoomApplication}. */
