@@ -181,7 +181,7 @@ com.example.tomodoom
 │   └── ChatViewModel             exposes transcript + active quiz, sends messages
 │
 └── ui/
-    ├── onboarding/OnboardingActivity   LAUNCHER: names the pet on first launch (and after Reset pet),
+    ├── onboarding/OnboardingActivity   LAUNCHER: names the pet on first launch only,
     │                             otherwise forwards straight to MainActivity and finishes
     ├── MainPagerAdapter          FragmentStateAdapter: page index ↔ bottom-nav item id
     │                             (Customise=0, Pets=1 = default, Chat=2)
@@ -265,8 +265,8 @@ ui  ──►  viewmodel  ──►  repository  ──►  contracts  ◄──
     Returns the new snapshot. `reason` is a short machine-readable tag (`"quiz_passed:<id>"`,
     `"doom_scroll:<pkg>"`, `"mcp:award_hp"`, `"debug"`) that gets logged.
   - `PetState equipItem(String slot, @Nullable String itemId)`: `null` unequips the slot.
-  - `PetState resetPetState()`: wipes the prefs back to `PetState.createDefault()` (this also
-    clears the onboarding flag, so onboarding shows again on the next launch).
+  - `PetState resetPetState()`: restores the default HP and unequips everything. It keeps the pet's
+    name and the onboarding flag, so onboarding only ever runs once.
   - `boolean isOnboardingComplete()` / `PetState completeOnboarding(String petName)`: the
     onboarding flag; `completeOnboarding` also sets the name (validate it with `PetNames.normalize`).
 - Persistence: prefs file **`tomodoom_pet_state`**, keys `pet_name`, `current_hp`, `max_hp`,
@@ -724,6 +724,8 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
   checks `isOnboardingComplete()` before inflating anything and forwards to `MainActivity` if set.
   Anything that should run on every launch belongs in `TomodoomApplication` or `MainActivity`,
   not in the onboarding screen.
+- **Read-only emulators lose app data:** an emulator started with `-read-only` discards its data
+  on shutdown, so the app is a fresh install (with onboarding) after each emulator restart.
 - **Maniengine overrides are applied by the page, not the editor.** `pet-scene.js` matches each
   `OVERRIDES` entry by unique top-level name, else by `scene.children` index (the camera is added
   first so the indices match the export). Nested paths (`"46/16"`) are skipped with a
@@ -851,7 +853,7 @@ Debug helpers available in the debug build:
   device connected to inspect and live-edit the pet page.
 
 
-0. Fresh install (or after **Reset pet** + relaunch): the onboarding screen shows "Meet your new
+0. Fresh install: the onboarding screen shows "Meet your new
    pet" with the name field prefilled with `Tomo`. Clearing it disables **Start**; the counter caps
    at 20. Type `Mochi` and tap **Start** (or the keyboard's Done): the Pets tab opens and its
    header shows `Mochi`. Rotation keeps the typed text. Relaunching skips onboarding. (The steps
@@ -881,8 +883,8 @@ Debug helpers available in the debug build:
 4. Answer correctly (`4`). The bot confirms, and a SYSTEM message shows **"+10 HP awarded via MCP! (60/100 HP)"**.
 5. Switch to **Pets**: **HP 60 / 100**.
 6. In Chat, type `/tool get_pet_state` (or `/tool award_hp amount=5`). A SYSTEM message shows the MCP result.
-7. Pets debug row: **Simulate doom-scroll** → HP −5. **Reset pet** → back to 50/100, nothing equipped.
-8. Kill and relaunch the app. HP and equipped items persist (SharedPreferences). If you used **Reset pet** in step 7, onboarding shows first. The chat transcript resets (in memory only).
+7. Pets debug row: **Simulate doom-scroll** → HP −5. **Reset pet** → back to 50/100, nothing equipped, name unchanged.
+8. Kill and relaunch the app. HP and equipped items persist (SharedPreferences). Onboarding doesn't show again, even if you used **Reset pet** in step 7. The chat transcript resets (in memory only).
 
 **Kafka (real LLM)**: build with `TRUFAR_LLM_URL`/`TRUFAR_LLM_API_KEY` set (§5.2):
 

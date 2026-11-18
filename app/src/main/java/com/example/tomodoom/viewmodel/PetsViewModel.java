@@ -40,7 +40,7 @@ public class PetsViewModel extends ViewModel {
                 "debug.simulated", DEBUG_SESSION_MILLIS, DoomScrollEvent.DEFAULT_HP_PENALTY));
     }
 
-    /** Debug: restores the default pet. */
+    /** Debug: restores the default HP and unequips everything, keeping the pet's name. */
     public void debugResetPet() {
         petStateRepository.resetPetState();
     }

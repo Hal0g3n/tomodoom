@@ -18,8 +18,8 @@ import com.example.tomodoom.model.PetNames;
 import com.example.tomodoom.viewmodel.OnboardingViewModel;
 
 /**
- * Launcher activity. On the first launch (or after Reset pet) it asks the user to name their pet,
- * then opens {@link MainActivity}. Once onboarding is complete it forwards straight to
+ * Launcher activity. On the first launch it asks the user to name their pet, then opens
+ * {@link MainActivity}. Once onboarding is complete it forwards straight to
  * {@link MainActivity} without showing anything.
  */
 public class OnboardingActivity extends AppCompatActivity {

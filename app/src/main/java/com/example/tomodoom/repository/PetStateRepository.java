@@ -146,8 +146,8 @@ public final class PetStateRepository {
     }
 
     /**
-     * @return whether the user has named their pet on the onboarding screen. Cleared by
-     * {@link #resetPetState()}, so a reset pet goes through onboarding again on the next launch.
+     * @return whether the user has named their pet on the onboarding screen. Once set, it stays
+     * set: {@link #resetPetState()} keeps it.
      */
     @AnyThread
     public boolean isOnboardingComplete() {
@@ -184,14 +184,21 @@ public final class PetStateRepository {
         }
     }
 
-    /** Wipes all persisted pet data and restores {@link PetState#createDefault()}. */
+    /**
+     * Restores the default HP and unequips everything. The pet's name and the onboarding flag are
+     * kept, because onboarding only runs once.
+     *
+     * @return the new snapshot.
+     */
     @AnyThread
     @NonNull
     public PetState resetPetState() {
         synchronized (lock) {
-            PetState fresh = PetState.createDefault();
+            PetState fresh = PetState.createDefault().withName(current.getPetName());
+            boolean onboardingComplete = prefs.getBoolean(KEY_ONBOARDING_COMPLETE, false);
             SharedPreferences.Editor editor = prefs.edit().clear();
             writeCore(editor, fresh);
+            editor.putBoolean(KEY_ONBOARDING_COMPLETE, onboardingComplete);
             editor.apply();
             Log.i(TAG, "pet state reset");
             publishLocked(fresh);
