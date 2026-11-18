@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html>
+<head><!--__M3D_LIVE__--><script>(function m3dLoader(O, domFactory, identityFactory) {
+  var W = window;
+  W.__m3dScenes = W.__m3dScenes || [];
+    var identity=identityFactory && (W.__m3dImportedIdentity ||= identityFactory());
+  W.__THREE_DEVTOOLS__ = W.__THREE_DEVTOOLS__ || new EventTarget();
+  var U = O.filter(function (d) { return d.ui; });
+  O = O.filter(function (d) { return !d.ui; });
+  var uiDone=new Set(), reasons=new Map(), openedAt=Date.now();
+  function report() {
+    var entries=U.map(function(d){return {type:'ui',label:d.ref?.parameter || d.ref?.id || d.ref?.tag,status:uiDone.has(d)?'applied':Date.now()-openedAt>10000?'missing':'waiting'};});
+    O.forEach(function(d,i) {
+      var done=D?.[i]&&(!d.pa||d.o||d.x||d.ord||D['p'+i])&&(d.n===undefined||d.o||d.x||D['n'+i]);
+      entries.push({type:d.ms?'material':d.ord?'order':d.x?'remove':d.o?'create':d.rt?'runtime':'object',
+        label:d.name || d.objectRef || d.path,id:d.objectRef,scene:d.sceneRef,
+        slots:d.ms?Object.keys(d.slots||{}):undefined,
+        status:done?'applied':reasons.get(i)||(Date.now()-openedAt>10000?'missing':'waiting')});
+    });
+    var next={entries:entries.slice(0,100),total:entries.length,applied:entries.filter(function(e){return e.status==='applied';}).length};
+    if(JSON.stringify(next)!==JSON.stringify(W.__m3dRestoreStatus)) {
+      W.__m3dRestoreStatus=next;
+      W.dispatchEvent(new Event('m3d:restore-status'));
+    }
+  }
+  if (U.length) {
+    var dom = domFactory(document), pending = U.slice(), attempt = 0;
+    function applyUI() {
+      pending = pending.filter(function (d) {
+        if(!dom.apply(d.ref,d.values))return true;
+        uiDone.add(d);
+        return false;
+      });
+      report();
+      if (pending.length && ++attempt < 40) setTimeout(applyUI,250);
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded',applyUI,{once:true});
+    else applyUI();
+  }
+  if (!O.length) {report();return;}
+  var R = [], D = {}, N = {}, C = {}, need = 0, busy = false, fin = false, frames = 0;
+  O.forEach(function (d) { need++; if (d.ord) return; if (!d.o && !d.x && d.pa) need++; if (!d.o && !d.x && d.n !== undefined) need++; });
+  W.__m3dLivePending = true;
+  setTimeout(function () { W.__m3dLivePending = false; }, 4000);
+  W.__THREE_DEVTOOLS__.addEventListener('observe', function (e) {
+    var o = e.detail;
+    if (o && o.isScene && W.__m3dScenes.indexOf(o) < 0) W.__m3dScenes.push(o);
+    if (o && o.isWebGLRenderer) {
+      var f = o.render.bind(o), r = { o: o, s: null, c: null };
+      R.push(r);
+      o.render = function (s, c) {
+        if (!o.getRenderTarget || !o.getRenderTarget()) {
+          r.s = s; r.c = c;
+          if (!busy && !fin && frames < 1500 && (++frames <= 120 || frames % 10 === 0)) { busy = true; try { apply(true); } catch (_) {} busy = false; }
+        }
+        return f(s, c);
+      };
+    }
+  });
+  function pick() {
+    var b = null, n = 0;
+    var scenes=W.__m3dScenes.slice();
+    if(Array.isArray(W.AFRAME?.scenes))W.AFRAME.scenes.forEach(function (el) {
+      if(el?.object3D && scenes.indexOf(el.object3D)<0)scenes.push(el.object3D);
+    });
+    scenes.forEach(function (s) {
+      var c=0;
+      try {s.traverse(function (o) {if(o!==s)c+=o.geometry?4:1;});} catch (_) {return;}
+      if(c>n){n=c;b=s;}
+    });
+    return b;
+  }
+  function at(s, path) {
+    var cur = s, ix = String(path).split('/');
+    for (var i = 0; i < ix.length; i++) { cur = cur && cur.children && cur.children[+ix[i]]; if (!cur) return null; }
+    return cur;
+  }
+  function within(o, root) { for (var c = o; c; c = c.parent) if (c === root) return true; return false; }
+  function mark(t) {
+    t.traverse(function (n) { n.__m3dGone = true; });
+    var l = (W.__m3dScenes || []).concat(W.__M3D_SCENE ? [W.__M3D_SCENE] : []);
+    l.forEach(function (sc) {
+      if (!sc || sc.__m3dG) return;
+      sc.__m3dG = 1;
+      var oa = sc.add;
+      sc.add = function () { var a = [], i; for (i = 0; i < arguments.length; i++) if (!(arguments[i] && arguments[i].__m3dGone)) a.push(arguments[i]); return a.length ? oa.apply(this, a) : this; };
+    });
+  }
+  var identityIndexes=new Map();
+  var legacyIdentityIndexes=new Map();
+  function find(s, all, ref, strict) {
+    if (!ref) return null;
+    if (!ref.sceneRef && Number.isSafeInteger(ref.sc) && W.__m3dScenes[ref.sc]!==s) return null;
+    if (ref.root) return s;
+    if (ref.o) return N[ref.o] || null;
+    if (ref.objectRef && identity && ref.sceneRef) {
+      var entry=identityIndexes.get(s);
+      if(!entry) {entry=identity.index(s,ref.sceneRef);identityIndexes.set(s,entry);}
+      if(entry.byId.has(ref.objectRef))return entry.byId.get(ref.objectRef)||null;
+      var previous=legacyIdentityIndexes.get(s);
+      if(!previous) {
+        previous=[identity.index(s,ref.sceneRef,12),identity.index(s,ref.sceneRef,11)];
+        legacyIdentityIndexes.set(s,previous);
+      }
+      var first=previous[0].byId.get(ref.objectRef), second=previous[1].byId.get(ref.objectRef);
+      if(first===null||second===null)return null;
+      return first&&second&&first!==second ? null : first||second||null;
+    }
+    var hasPath = ref.path !== undefined && ref.path !== '';
+    var key = s.uuid + '|' + (strict ? 'S' : 'L') + (ref.name || '') + '|' + (hasPath ? ref.path : '');
+    if (C[key]) return C[key];
+    var t = null, c;
+    var q = hasPath ? at(s, ref.path) : null;
+    if (ref.name) {
+      c = all.filter(function (o) { return o.parent && o.__m3dN0 === ref.name; });
+      if (!c.length) c = all.filter(function (o) { return o.parent && o.name === ref.name; });
+      if (c.length === 1 || (c.length && !strict && !ref.sg)) t = c[0];
+      else if (c.length > 1) t = one(c, ref) || (q && c.indexOf(q) >= 0 && fits(q, ref) ? q : null);
+    } else if (hasPath) {
+      // No name. Old tables (no fingerprint): the child index, as before. New ones: the index only if that object still looks like
+      // the one the entry was made for; otherwise the one unnamed object with this shape at this original position; otherwise nothing.
+      if (!ref.sg) t = q;
+      else if (q && !q.__m3dN0 && fits(q, ref) && home(q, ref)) t = q;
+      else t = one(all.filter(function (o) { return o.parent && !o.__m3dN0; }), ref) || (q && !q.__m3dN0 && fits(q, ref) ? q : null);
+    }
+    if (t) C[key] = t;
+    return t;
+  }
+  // Fingerprint of an object: sg = type + vertex count, b = its position before any manual change (setProps keeps it in __m3dP0).
+  function fits(o, ref) { if (!ref.sg) return true; var g=o.geometry, a=g&&g.attributes&&g.attributes.position, count=a&&a.count||g&&g.vertices&&g.vertices.length; return (o.type || 'Object3D') + (count ? ':' + count : '') === ref.sg; }
+  function home(o, ref) { var b = ref.b, p = o.__m3dP0 || o.position; return !b || Math.abs(p.x - b[0]) + Math.abs(p.y - b[1]) + Math.abs(p.z - b[2]) < 0.002; }
+  function one(c, ref) { if (!ref.sg || !ref.b) return null; var m = c.filter(function (o) { return fits(o, ref) && home(o, ref); }); return m.length === 1 ? m[0] : null; }
+  function setProps(t, d) {
+    if (d.ms) {
+      var slots = Array.isArray(t.material) ? t.material : Array.isArray(t.material?.materials) ? t.material.materials : [t.material];
+      var slotRefs=identity && identity.slotRefs(t), edits=[];
+      for (var key in d.slots) {
+        var spec=d.slots[key], index=spec.slotRef&&slotRefs ? slotRefs.indexOf(spec.slotRef) : Number(key), mat=slots[index];
+        if (mat?.type!==spec.type || mat.isShaderMaterial || mat.isRawShaderMaterial || !mat.color?.setHex ||
+          !Number.isInteger(spec.color) || spec.color<0 || spec.color>0xffffff) return false;
+        edits.push([mat,spec.color]);
+      }
+      edits.forEach(function(edit){edit[0].color.setHex(edit[1]);});
+      return true;
+    }
+    if (d.p) { if (!t.__m3dP0) t.__m3dP0 = { x: t.position.x, y: t.position.y, z: t.position.z }; t.position.set(d.p[0], d.p[1], d.p[2]); t.rotation.set(d.r[0], d.r[1], d.r[2]); t.scale.set(d.s[0], d.s[1], d.s[2]); }
+    if (d.v !== undefined) t.visible = d.v;
+    if (d.cs !== undefined) t.castShadow = !!d.cs;
+    if (d.rs !== undefined) t.receiveShadow = !!d.rs;
+    if (d.m && t.material && !Array.isArray(t.material)) putMat(t.material, d.m);
+    if (d.lt && (t.isLight || /Light$/.test(t.type))) putLt(t, d.lt);
+    t.updateMatrixWorld(true);
+    var app=W.__M3D_EDITOR__;if(app&&app.onEditorObjectChange)app.onEditorObjectChange(t,d);
+  }
+  // map 贴图：值是 JSON 字符串 {u,rp,of,c,ro}；'' 只清掉编辑器自己贴的图（带 __m3dMap 标记），脚本自己的贴图不碰
+  function putMap(mt, s) {
+    if (typeof s !== 'string' || !('map' in mt)) return;
+    var cur = mt.map;
+    if (!s) { mt.__m3dMapWant = ''; if (cur && cur.__m3dMap) { try { if (cur.image && cur.image.pause) cur.image.pause(); } catch (_) {} mt.map = null; mt.needsUpdate = true; } return; }
+    if (cur && cur.__m3dMap === s) return;
+    var d; try { d = JSON.parse(s); } catch (_) { return; }
+    if (!d || !d.u) return;
+    function tf(t) { if (d.rp) t.repeat.set(d.rp[0], d.rp[1]); if (d.of) t.offset.set(d.of[0], d.of[1]); if (d.c) t.center.set(d.c[0], d.c[1]); t.rotation = d.ro || 0; t.__m3dMap = s; }
+    mt.__m3dMapWant = s;   // 同步记下：贴图类要等 import('three')，场景快照可能先发出去
+    if (cur && cur.__m3dMap && cur.__m3dU === d.u) { tf(cur); return; }
+    function go(T) {
+      if (!T || !T.Texture || mt.__m3dMapWant !== s) return;
+      var t;
+      if (d.v) {   // 视频贴图
+        if (!T.VideoTexture) return;
+        var el = document.createElement('video');
+        el.crossOrigin = 'anonymous'; el.loop = true; el.muted = true; el.playsInline = true; el.src = d.u;
+        var pl = el.play(); if (pl && pl.catch) pl.catch(function () {});
+        t = new T.VideoTexture(el);
+      } else {
+        var im = new Image(); t = new T.Texture(im);
+        im.crossOrigin = 'anonymous';
+        im.onload = function () { t.needsUpdate = true; };
+        im.src = d.u;
+      }
+      t.colorSpace = 'srgb'; t.wrapS = t.wrapT = 1000; t.__m3dU = d.u; tf(t);
+      var old = mt.map; mt.map = t; mt.needsUpdate = true;
+      if (old && old.__m3dMap) { try { if (old.image && old.image.pause) old.image.pause(); } catch (_) {} if (old.dispose) old.dispose(); }
+    }
+    if (W.__m3dT) go(W.__m3dT);
+    else try { import('three').then(function (T) { W.__m3dT = T; go(T); }, function () {}); } catch (_) {}
+  }
+  function putMat(mt, p) {
+    for (var k in p) {
+      if (!Object.prototype.hasOwnProperty.call(p, k) || k === 'type') continue;
+      var v = p[k];
+      if (k === 'map') { putMap(mt, v); continue; }
+      if (mt[k] && typeof mt[k].setHex==='function') mt[k].setHex(v); else if (typeof mt[k] === typeof v) mt[k] = v;
+    }
+    mt.needsUpdate = true;
+  }
+  function putLt(l, p) {
+    if ('c' in p && l.color && l.color.isColor && isFinite(p.c)) l.color.setHex(p.c);
+    if ('g' in p && l.groundColor && l.groundColor.isColor && isFinite(p.g)) l.groundColor.setHex(p.g);
+    var m = { i: 'intensity', d: 'distance', de: 'decay', a: 'angle', p: 'penumbra' };
+    for (var k in m) if (k in p && typeof l[m[k]] === 'number' && isFinite(p[k])) l[m[k]] = Number(p[k]);
+    if (l.shadow) { var sm = { b: 'bias', nb: 'normalBias', rd: 'radius' }; for (var j in sm) if (j in p && typeof l.shadow[sm[j]] === 'number' && isFinite(p[j])) l.shadow[sm[j]] = Number(p[j]); }
+  }
+  var T0 = null;
+  function lightCtor(all, ty) {
+    var f = null;
+    all.forEach(function (o) { if (!f && o.isLight && o.type === ty) f = o.constructor; });
+    if (f) return f;
+    if (T0 === null) { T0 = 0; try { import('three').then(function (m) { T0 = m; }, function () { T0 = false; }); } catch (_) { T0 = false; } }
+    return T0 && typeof T0[ty] === 'function' ? T0[ty] : null;
+  }
+  function d64(x, T) { var b = atob(x), u = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return new T(u.buffer); }
+  var K0 = null;
+  // 2026-11-10: borrow the BASE class. The first Mesh in a scene is often a subclass (three's Sky / Water extend Mesh, build their own
+  // 1x1x1 box + ShaderMaterial and ignore the constructor arguments): every primitive added from the editor came out as a locked sky box.
+  function baseOf(C, ok) {
+    for (var i = 0; i < 4; i++) { var P = Object.getPrototypeOf(C), t = null; if (typeof P !== 'function') break; try { t = new P(); } catch (_) {} if (t && ok(t)) C = P; else break; }
+    return C;
+  }
+  function kit(s, all) {
+    if (K0) return K0;
+    var K = { mats: {}, obj: Object.getPrototypeOf(s.constructor) };
+    all.forEach(function (o) {
+      var pos = o.geometry && o.geometry.attributes && o.geometry.attributes.position;
+      if (!K.mesh && o.type === 'Mesh' && pos && !pos.isInterleavedBufferAttribute) {
+        K.mesh = baseOf(o.constructor, function (t) { return !!t.isMesh; }); K.attr = pos.constructor;
+        var C = o.geometry.constructor;
+        for (var i = 0; i < 4; i++) { var P = Object.getPrototypeOf(C), t = null; try { t = new P(); } catch (_) {} if (t && t.isBufferGeometry) C = P; else break; }
+        K.geo = C;
+      }
+      var mt = o.material;
+      if (mt && !Array.isArray(mt) && /^Mesh.*Material$/.test(mt.type) && !K.mats[mt.type]) K.mats[mt.type] = baseOf(mt.constructor, function (t) { return t.type === mt.type && !t.isShaderMaterial; });
+    });
+    return K.mesh && K.geo && K.attr ? (K0 = K) : null;
+  }
+  function mkGeo(K, d) {
+    var g = new K.geo();
+    g.setAttribute('position', new K.attr(d64(d.pos, Float32Array), 3));
+    if (d.nor) g.setAttribute('normal', new K.attr(d64(d.nor, Float32Array), 3));
+    if (d.uv) g.setAttribute('uv', new K.attr(d64(d.uv, Float32Array), 2));
+    if (d.idx) g.setIndex(Array.prototype.slice.call(d64(d.idx, d.ix === 32 ? Uint32Array : Uint16Array)));
+    g.computeBoundingSphere(); g.computeBoundingBox();
+    return g;
+  }
+  function mkMat(K, d) {
+    var C = K.mats[d.type] || K.mats.MeshStandardMaterial || K.mats.MeshPhysicalMaterial || K.mats.MeshBasicMaterial || K.mats[Object.keys(K.mats)[0]];
+    var m = new C(); putMat(m, d); return m;
+  }
+  function apply(inFrame) {
+    var app=W.__M3D_EDITOR__;if(document.querySelector('meta[name="mani-garden-template"]')&&(!app||!app.ready))return false;
+    var s = app&&app.scene||pick(), groups = new Map();
+    var candidates=W.__m3dScenes.slice();
+    if(s&&!candidates.includes(s))candidates.push(s);
+    var ids=identity&&identity.sceneMatches(candidates);
+    identityIndexes.clear();
+    legacyIdentityIndexes.clear();
+    O.forEach(function(d,i) {
+      var scope=Number.isSafeInteger(d.sc) ? d.sc : d.pa?.sc;
+      var stable=d.sceneRef||d.pa?.sceneRef;
+      var scene=stable&&ids ? ids.get(stable)
+        : Number.isSafeInteger(scope) ? candidates[scope] : s;
+      if (!scene || !(scene.isScene || scene.type==='Scene')) return;
+      if (!groups.has(scene)) groups.set(scene,[]);
+      groups.get(scene).push([d,i]);
+    });
+    groups.forEach(function(entries,scene){applyScene(scene,entries,inFrame);});
+    if (W.__m3dLivePending && groups.size) { W.__m3dLivePending = false; try { W.dispatchEvent(new Event('m3d:live-applied')); } catch (_) {} }
+    fin = Object.keys(D).length >= need;
+    report();
+    return fin;
+  }
+  function applyScene(s, entries, inFrame) {
+    function each(fn) { entries.forEach(function(entry){fn(entry[0],entry[1]);}); }
+    var all = []; s.traverse(function (o) { all.push(o); });
+    all.forEach(function (o) { if (o.__m3dN0 === undefined) o.__m3dN0 = o.name; });
+    function own(d) { return d.targetOid ? N[d.targetOid] || null : find(s, all, d, !!(d.x || d.pa)); }
+    each(function (d) {
+      if (d.ord) { if (d.ids && d.ids.length > 1) { find(s, all, d.pa, true); d.ids.forEach(function (r) { find(s, all, r, true); }); } return; }
+      if (d.o) { if (d.c) find(s, all, d.c, true); if (d.pa) find(s, all, d.pa, true); return; }
+      if(d.rt)return;own(d); if (d.pa) find(s, all, d.pa, true);
+    });
+    var hit = 0, prog = true;
+    var app=W.__M3D_EDITOR__, edits=new Set();
+    each(function(d,i){if(!D[i]&&d.rt&&app&&app.setProjectState){app.setProjectState(d.state);D[i]=1;hit++;}});
+    while (prog) {
+      prog = false;
+      each(function (d, i) {
+        if (D[i] || !d.o) return;
+        if (d.x) { D[i] = 1; return; }
+        var par = find(s, all, d.pa, true); if (!par) return;
+        var t;
+        if (d.g) { var Base = Object.getPrototypeOf(s.constructor); t = new Base(); }
+        else if (d.nm) {
+          var K = kit(s, all); if (!K) return;
+          t = new K.mesh(mkGeo(K, d.geo), mkMat(K, d.mt));
+        } else if (d.lt) {
+          var LC = lightCtor(all, d.lt.t); if (!LC) return;
+          t = new LC();
+        } else {
+          var src = find(s, all, d.c, true); if (!src) return;
+          t = src.clone(false);
+          if (t.material) t.material = Array.isArray(t.material) ? t.material.map(function (m) { return m.clone(); }) : t.material.clone();
+        }
+        t.name = d.name || ''; t.__m3dN0 = t.name; setProps(t, d); par.add(t);
+        N[d.o] = t; t.userData = t.userData || {}; t.userData.__m3dO = d.o; D[i] = 1; hit++; prog = true; all.push(t); edits.add('structure');
+      });
+    }
+    [false,true].forEach(function (slots) {
+      each(function (d,i) {
+        if (!!d.ms !== slots || D[i] || d.o || d.x || d.ord || d.rt) return;
+        var t = own(d);
+        if(!t) {
+          if(d.objectRef&&identityIndexes.get(s)?.byId.has(d.objectRef))reasons.set(i,'conflict');
+          return;
+        }
+        if (typeof d.v==='boolean' && d.v!==t.visible) edits.add('structure');
+        if(d.p&&identity?.objectAuthority(t)) {reasons.set(i,'project-controlled');return;}
+        if(setProps(t,d)===false) {reasons.set(i,'material-mismatch');return;}
+        D[i] = 1; hit++;reasons.delete(i);
+        if (d.p) edits.add(t.isLight?'lights':'transforms');
+        if (d.ms || d.m) edits.add('materials');
+        if (d.lt) edits.add('lights');
+      });
+    });
+    each(function (d, i) {
+      if (D['p' + i] || d.o || d.x || d.ord || !d.pa) return;
+      var t = own(d), np = find(s, all, d.pa, true); if (!t || !np) return;
+      D['p' + i] = 1;
+      if (t !== np && !within(np, t)) { np.add(t); t.updateMatrixWorld(true); hit++; edits.add('structure'); }
+    });
+    each(function (d, i) {
+      if (D['n' + i] || d.o || d.x || d.n === undefined) return;
+      var t = own(d); if (!t) return;
+      t.name = d.n; D['n' + i] = 1; hit++;
+    });
+    each(function (d, i) {
+      if (D[i] || !d.ord) return;
+      if (!d.ids || d.ids.length < 2) { D[i] = 1; return; }
+      var par = find(s, all, d.pa, true); if (!par) return;
+      var ks = [], ok = true;
+      d.ids.forEach(function (r) { var t = find(s, all, r, true); if (!t) ok = false; else if (t.parent === par && ks.indexOf(t) < 0) ks.push(t); });
+      if (!ok) return;
+      var kids = par.children, slots = [];
+      for (var k = 0; k < kids.length; k++) if (ks.indexOf(kids[k]) >= 0) slots.push(k);
+      for (var j = 0; j < slots.length; j++) kids[slots[j]] = ks[j];
+      D[i] = 1; hit++;
+    });
+    var rm = [];
+    each(function (d, i) { if (D[i] || d.o || d.ord || !d.x) return; var t = own(d); if (t && t.parent) rm.push([i, t]); });
+    rm.forEach(function (e) { var t = e[1]; if (!t.parent) return; D[e[0]] = 1; hit++; t.visible = false; mark(t); t.parent.remove(t); edits.add('structure'); });
+    edits.forEach(function(kind){W.dispatchEvent(new CustomEvent('m3d:scene-edited',{detail:{scene:s,kind:kind}}));});
+    if (hit) {
+      var a = W.__M3D_EDITOR__; if (a && a.invalidate) a.invalidate();
+      if (!inFrame) R.forEach(function (r) { if (r.s === s && r.c && (!r.o.getRenderTarget || !r.o.getRenderTarget())) r.o.render(r.s, r.c); });
+    }
+  }
+  var n = 0, iv = setInterval(function () {
+    // A locked display or a cold WebGPU pipeline can wait for longer than a minute.
+    // Count retries only after the explicit garden runtime is ready.
+    if(document.querySelector('meta[name="mani-garden-template"]')&&(!W.__M3D_EDITOR__||!W.__M3D_EDITOR__.ready))return;
+    if (apply() || ++n > 300) { fin = true; clearInterval(iv); }
+  }, 200);
+  report();
+  W.addEventListener('m3d:scene-ready',function(){if(!fin)apply();});
+})(/*O*/[{"name":"Tiny pink blue floral dress","path":"21","sg":"Mesh:845","b":[0,0.6664,0.5],"p":[0,0.6664,0.5449],"r":[0,0,0],"s":[1.12,0.72,1.06],"v":true},{"name":"Left blush ear inset","path":"14","sg":"Mesh:825","b":[-0.3136,2.0632,0.5795],"p":[-0.3136,2.0632,0.5795],"r":[0,0,0.1312],"s":[0.106,0.3346,0.0424],"v":true},{"name":"Right blush ear inset","path":"15","sg":"Mesh:825","b":[0.3136,2.0632,0.5795],"p":[0.3136,2.0632,0.5769],"r":[0,0,-0.1312],"s":[0.106,0.3346,0.0424],"v":true},{"name":"Rabbit right ear","path":"13","sg":"Mesh:1353","b":[0.3024,2.0416,0.4682],"p":[0.3024,2.0416,0.4682],"r":[0,0,-0.1312],"s":[0.1896,0.4655,0.1431],"v":true},{"name":"Right Peter Pan collar","path":"46/16","sg":"Mesh:825","b":[0.168,1.0408,0.3074],"p":[0.168,1.0408,0.3074],"r":[0,0,0.3696],"s":[0.2053,0.0933,0.0636],"v":true},{"name":"Right Peter Pan collar","path":"26","sg":"Mesh:825","b":[0.168,1.0408,0.8074],"p":[0.168,1.0408,0.8018],"r":[0,0,0.3696],"s":[0.2053,0.0933,0.0636],"v":true},{"name":"Rabbit flocked body","path":"10","sg":"Mesh:1617","b":[0,0.7672,0.5],"p":[0,0.7672,0.5],"r":[0,0,0],"s":[1.12,0.972,0.848],"v":true},{"name":"Rabbit right arm","path":"24","sg":"Mesh:825","b":[0.5488,0.8608,0.5636],"p":[0.4179,0.8608,0.5636],"r":[0,0,0.2688],"s":[0.1869,0.2852,0.1908],"v":true},{"name":"Delicate mouth seam","path":"20","sg":"Mesh:90","b":[0,1.3742,1.1424],"p":[0,1.3536,1.1424],"r":[0,0,0],"s":[1.06,1,1.06],"v":true},{"name":"Rabbit left arm","path":"23","sg":"Mesh:825","b":[-0.5488,0.8608,0.5636],"p":[-0.4083,0.8579,0.5378],"r":[0,0,-0.2688],"s":[0.1869,0.2852,0.1908],"v":true},{"name":"Nose to smile seam","path":"70","sg":"Mesh:117","b":[0,0,0],"p":[0,0.0175,-0.0083],"r":[0,0,0],"s":[1,1,1],"v":true}]/*O*/, null)</script>
+<meta charset="utf-8">
+<style>html,body{margin:0;height:100%;overflow:hidden}canvas{display:block}</style>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.187.0/examples/jsm/"}}</script>
+</head>
+<body>
+<script type="module">
+import * as THREE from 'three';
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xa9cdec);
+
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.01, 2000);
+camera.name = "Camera";
+camera.position.set(0, 1.7, 6);
+camera.quaternion.set(-0.0416, 0, 0, 0.9991);
+camera.userData = {"__m3d_viewcam":1,"__m3d_id":"z2te3p51ms5t","__m3d_cam_nav":"wasd"};
+camera.userData.__m3d_viewcam = 1;
+camera.userData.__m3d_cam_nav = 'wasd';
+scene.add(camera);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+const canvas = renderer.domElement;
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+/* __M3D_WASD_BEGIN__ */
+const __createWalkCollision = function createWalkCollision(THREE, scene, options = {}) {
+  const radius = Math.max(.05, Number(options.radius) || .25);
+  const eyeHeight = Math.max(.5, Number(options.eyeHeight) || 1.6);
+  const stepHeight = Math.max(0, Number(options.stepHeight) || .25);
+  const eps = 1e-6, colliders = [];
+  const v0 = new THREE.Vector3(), v1 = new THREE.Vector3();
+  const bounds = new THREE.Box3(), localSize = new THREE.Vector3();
+  let lastRefresh = 0;
+
+  function shown(object) {
+    for (let p = object; p; p = p.parent) if (!p.visible) return false;
+    return true;
+  }
+  function isWall(object, size) {
+    const data = object.userData || {};
+    if (data.__m3d_walk_collision === false) return false;
+    if (data.__m3d_walk_collision === 'wall' || data.__m3d_walk_collision === true) return true;
+    const name = object.name || '';
+    if (/(^|[\s_-])wall([\s_-]|$)/i.test(name) && !/(cabinet|outlet|shelf|light|sconce|art|switch|mirror|decor)/i.test(name)) return true;
+    // Preserve existing authored collision boxes when their proportions
+    // describe a wall. Floors, steps and ordinary furniture are not walls.
+    const phys = data.__m3d_phys;
+    return !!phys?.collider && size.y >= 1.2 && Math.min(size.x, size.z) <= .3 && Math.max(size.x, size.z) >= .5;
+  }
+  function refresh() {
+    colliders.length = 0; scene.updateMatrixWorld(true);
+    scene.traverse(object => {
+      if (!object.isMesh || !object.geometry || !shown(object)) return;
+      const geo = object.geometry;
+      if (!geo.boundingBox) geo.computeBoundingBox();
+      if (!geo.boundingBox || geo.boundingBox.isEmpty()) return;
+      geo.boundingBox.getSize(localSize);
+      const matrix = object.matrixWorld;
+      const sx = new THREE.Vector3().setFromMatrixColumn(matrix, 0).length();
+      const sy = new THREE.Vector3().setFromMatrixColumn(matrix, 1).length();
+      const sz = new THREE.Vector3().setFromMatrixColumn(matrix, 2).length();
+      if (Math.min(sx, sy, sz) < eps) return;
+      bounds.copy(geo.boundingBox).applyMatrix4(matrix);
+      if (bounds.isEmpty() || !Number.isFinite(bounds.min.x + bounds.max.x + bounds.min.y + bounds.max.y + bounds.min.z + bounds.max.z)) return;
+      const size = new THREE.Vector3(localSize.x * sx, bounds.max.y - bounds.min.y, localSize.z * sz);
+      if (!isWall(object, size)) return;
+      const inverse = matrix.clone().invert(), local = geo.boundingBox;
+      colliders.push({ object, inverse, matrix: matrix.clone(), minY: bounds.min.y, maxY: bounds.max.y,
+        minX: local.min.x - radius / sx, maxX: local.max.x + radius / sx,
+        minZ: local.min.z - radius / sz, maxZ: local.max.z + radius / sz });
+    });
+    lastRefresh = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    return colliders.length;
+  }
+  function hit(c, start, move) {
+    v0.set(start.x, start.y, start.z).applyMatrix4(c.inverse);
+    v1.set(start.x + move.x, start.y, start.z + move.z).applyMatrix4(c.inverse);
+    const px = v0.x, pz = v0.z, dx = v1.x - px, dz = v1.z - pz;
+    let enter = -Infinity, exit = Infinity, nx = 0, nz = 0;
+    const inside = px > c.minX + eps && px < c.maxX - eps && pz > c.minZ + eps && pz < c.maxZ - eps;
+    if (inside) {
+      const faces = [[px - c.minX, -1, 0], [c.maxX - px, 1, 0], [pz - c.minZ, 0, -1], [c.maxZ - pz, 0, 1]];
+      faces.sort((a, b) => a[0] - b[0]);
+      nx = faces[0][1]; nz = faces[0][2];
+      // A camera starting inside a collision margin must be able to leave.
+      if (dx * nx + dz * nz >= -eps) return null;
+      enter = 0;
+    } else {
+      for (const [p, d, min, max, axis] of [[px, dx, c.minX, c.maxX, 'x'], [pz, dz, c.minZ, c.maxZ, 'z']]) {
+        if (Math.abs(d) < eps) { if (p < min || p > max) return null; continue; }
+        let near = (min - p) / d, far = (max - p) / d, normal = -1;
+        if (near > far) { const tmp = near; near = far; far = tmp; normal = 1; }
+        if (near > enter) { enter = near; nx = axis === 'x' ? normal : 0; nz = axis === 'z' ? normal : 0; }
+        exit = Math.min(exit, far); if (enter > exit) return null;
+      }
+      if (enter < -eps || enter > 1 || exit < 0) return null;
+      enter = Math.max(0, enter);
+    }
+    const normal = new THREE.Vector3(nx, 0, nz).transformDirection(c.matrix);
+    normal.y = 0; if (normal.lengthSq() < eps) return null; normal.normalize();
+    return { time: enter, normal };
+  }
+  function move(position, dx, dz) {
+    if (!Number.isFinite(dx) || !Number.isFinite(dz)) return;
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    if (now - lastRefresh > 1000) refresh();
+    const remaining = new THREE.Vector3(dx, 0, dz), feet = position.y - eyeHeight;
+    for (let pass = 0; pass < 3 && remaining.lengthSq() > eps * eps; pass++) {
+      let first = null;
+      for (const c of colliders) {
+        if (!shown(c.object) || c.maxY <= feet + stepHeight || c.minY >= feet + eyeHeight - .05) continue;
+        const current = hit(c, position, remaining);
+        if (current && (!first || current.time < first.time)) first = current;
+      }
+      if (!first) { position.x += remaining.x; position.z += remaining.z; break; }
+      const t = Math.max(0, first.time - .0001);
+      position.x += remaining.x * t; position.z += remaining.z * t;
+      remaining.multiplyScalar(1 - t);
+      const inward = remaining.dot(first.normal);
+      if (inward < 0) remaining.addScaledVector(first.normal, -inward);
+      else break;
+    }
+  }
+  refresh();
+  return { move, refresh, get count() { return colliders.length; } };
+};
+const keys = {};
+let yaw = 0, pitch = 0, velY = 0, onFloor = false, look = false, lx = 0, ly = 0, last = performance.now();
+const eu = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
+yaw = eu.y; pitch = Math.max(-1.2, Math.min(1.2, eu.x));
+addEventListener('keydown', (e) => {
+  if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+  if (controls.enabled === false) return;
+  keys[e.code] = true; if (e.code === 'Space') e.preventDefault();
+});
+addEventListener('keyup', (e) => { keys[e.code] = false; });
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+canvas.addEventListener('pointerdown', (e) => { if (e.button !== 2 || controls.enabled === false) return; look = true; lx = e.clientX; ly = e.clientY; });
+addEventListener('pointerup', (e) => { if (e.button === 2) look = false; });
+addEventListener('pointermove', (e) => {
+  if (!look || controls.enabled === false) return;
+  yaw -= (e.clientX - lx) * 0.004; pitch -= (e.clientY - ly) * 0.004;
+  pitch = Math.max(-1.2, Math.min(1.2, pitch)); lx = e.clientX; ly = e.clientY;
+});
+const _ray = new THREE.Raycaster(), _down = new THREE.Vector3(0, -1, 0);
+const __walk = __createWalkCollision(THREE, scene, { radius: 0.25, eyeHeight: 1.6, stepHeight: 0.25 });
+const controls = { enabled: true, update() {
+  const now = performance.now(); const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (this.enabled === false) { for (const code in keys) keys[code] = false; look = false; return; }
+  const speed = (keys.ShiftLeft || keys.ShiftRight) ? 9 : 4.5;
+  const f = (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0);
+  const s = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0);
+  const moveX = (-Math.sin(yaw) * f + Math.cos(yaw) * s) * speed * dt;
+  const moveZ = (-Math.cos(yaw) * f - Math.sin(yaw) * s) * speed * dt;
+  __walk.move(camera.position, moveX, moveZ);
+  if (keys.Space && onFloor) { velY = 6.5; onFloor = false; }
+  velY -= 22 * dt; camera.position.y += velY * dt;
+  _ray.set(camera.position, _down);
+  const hits = _ray.intersectObjects(scene.children, true);
+  let floor = null;
+  for (const h of hits) {
+    if (!h.object || !h.object.isMesh || h.object.name === 'sky') continue;
+    if (h.distance > 0.05 && h.distance < 2.05) { floor = h; break; }
+  }
+  if (floor && velY <= 0) { camera.position.y = floor.point.y + 1.6; velY = 0; onFloor = true; }
+  else onFloor = false;
+  camera.quaternion.setFromEuler(new THREE.Euler(pitch, yaw, 0, 'YXZ'));
+} };
+addEventListener('blur', () => { for (const code in keys) keys[code] = false; look = false; });
+addEventListener('m3d:edit-mode', (e) => { controls.enabled = !e.detail?.editing; for (const code in keys) keys[code] = false; look = false; last = performance.now(); });
+/* __M3D_WASD_END__ */
+
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+
+
+
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+
+
+
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+
+
+
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+
+
+
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+
+
+
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+
+
+
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+
+
+
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+
+
+
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+
+
+
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+
+
+
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+
+
+
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{"__m3d_viewcam":1,"__m3d_id":"z2te3p51ms5t","__m3d_cam_nav":"wasd"}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+
+
+
+
+
+
+
+function m3dSkyDomeTexture() {
+  const c = document.createElement('canvas'); c.width = 2; c.height = 512;
+  const g = c.getContext('2d');
+  const gr = g.createLinearGradient(0, 0, 0, 512);
+  gr.addColorStop(0, '#b8d4ff'); gr.addColorStop(0.5, '#d3e2f7'); gr.addColorStop(1, '#e8eef5');
+  g.fillStyle = gr; g.fillRect(0, 0, 2, 512);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+function m3dCheckerTexture() {
+  const c = document.createElement('canvas'); c.width = 4; c.height = 4;
+  const g = c.getContext('2d');
+  g.fillStyle = '#f2f2f2'; g.fillRect(0, 0, 4, 4);
+  g.fillStyle = '#d9d9de'; g.fillRect(0, 0, 2, 2); g.fillRect(2, 2, 2, 2);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(25, 25);
+  t.magFilter = THREE.NearestFilter; t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+const AmbientLight = new THREE.AmbientLight(0xffffff, 0.6);
+AmbientLight.name = "AmbientLight";
+AmbientLight.userData.__m3d_default = 1;
+AmbientLight.userData.__m3d_id = "287bpyvhe4gq";
+scene.add(AmbientLight);
+
+const DirectionalLight = new THREE.DirectionalLight(0xffffff, 2.2);
+DirectionalLight.name = "DirectionalLight";
+DirectionalLight.position.set(-2, 4, 2);
+DirectionalLight.userData.__m3d_default = 1;
+DirectionalLight.userData.__m3d_id = "ytcpbw52xvx7";
+scene.add(DirectionalLight);
+
+const sky = new THREE.Mesh(new THREE.SphereGeometry(400, 32, 15, 0, 6.2832, 0, 3.1416), new THREE.MeshBasicMaterial({ color: 0xffffff, side: 1, depthWrite: false, toneMapped: false, map: m3dSkyDomeTexture() }));
+sky.name = "sky";
+sky.userData.__m3d_id = "yrmzrvvn92p1";
+scene.add(sky);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(100, 100, 1, 1), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, metalness: 0, side: 2, map: m3dCheckerTexture() }));
+ground.name = "ground";
+ground.rotation.set(-1.5708, 0, 0);
+ground.userData.__m3d_phys = {"collider":"mesh"};
+ground.userData.__m3d_id = "nbhcpcjhbd8e";
+scene.add(ground);
+
+// Procedural textile and timber textures keep the miniature self-contained.
+function textileTexture(kind) {
+  const c = document.createElement('canvas'); c.width = c.height = 512;
+  const g = c.getContext('2d');
+  g.fillStyle = kind === 'wood' ? '#9a633f' : kind === 'wall' ? '#eee3cf' : '#fffaf1'; g.fillRect(0,0,512,512);
+  let seed = 71;
+  function rand() { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
+  if (kind === 'wood') {
+    for(let i=0;i<750;i++){ const y=rand()*512; g.strokeStyle=`rgba(55,25,12,${rand()*.15})`; g.beginPath(); g.moveTo(0,y); g.bezierCurveTo(170,y+rand()*8,340,y-5,512,y+3); g.stroke(); }
+  } else {
+    for(let y=20;y<512;y+=48) for(let x=20;x<512;x+=48){
+      const px=x+(Math.floor(y/48)%2)*20, py=y;
+      g.strokeStyle='#849a70'; g.lineWidth=1.4; g.beginPath(); g.moveTo(px,py+13);g.quadraticCurveTo(px+8,py+2,px,py-5);g.stroke();
+      g.fillStyle='#8ca17a';g.beginPath();g.ellipse(px+5,py+7,4,1.8,-.5,0,Math.PI*2);g.fill();
+      g.fillStyle = kind==='wall' ? '#c69799' : (rand()>.48?'#df98aa':'#91b4d0');
+      for(let p=0;p<5;p++){const a=p*Math.PI*2/5;g.beginPath();g.ellipse(px+Math.cos(a)*3,py+Math.sin(a)*3,2.6,2, a,0,Math.PI*2);g.fill();}
+      g.fillStyle='#e3c78e';g.fillRect(px-1,py-1,2,2);
+    }
+    for(let i=0;i<16000;i++){g.fillStyle=rand()>.5?'rgba(255,255,255,.12)':'rgba(90,65,40,.035)';g.fillRect(rand()*512,rand()*512,1,1);}
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.wrapS=t.wrapT=THREE.RepeatWrapping; t.anisotropy=8; return t;
+}
+const floralTexture = textileTexture('floral');
+const wallpaperTexture = textileTexture('wall'); wallpaperTexture.repeat.set(3,1.5);
+const woodTexture = textileTexture('wood');
+const furCanvas = document.createElement('canvas'); furCanvas.width=furCanvas.height=256;
+const furContext=furCanvas.getContext('2d'); furContext.fillStyle='#a8a8a8';furContext.fillRect(0,0,256,256);
+for(let i=0;i<22000;i++){furContext.fillStyle=i%2?'#d0d0d0':'#777777';const x=(i*73.37)%256,y=(i*31.91)%256;furContext.fillRect(x,y,.7,1.7);}
+const furBump = new THREE.CanvasTexture(furCanvas); furBump.wrapS=furBump.wrapT=THREE.RepeatWrapping;furBump.repeat.set(5,5);
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFShadowMap;
+renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=0.9;
+AmbientLight.intensity=1.15;
+DirectionalLight.position.set(-3,7,5); DirectionalLight.intensity=3; DirectionalLight.castShadow=true;
+DirectionalLight.shadow.mapSize.set(2048,2048); DirectionalLight.shadow.camera.left=-7;DirectionalLight.shadow.camera.right=7;DirectionalLight.shadow.camera.top=7;DirectionalLight.shadow.camera.bottom=-7;DirectionalLight.shadow.normalBias=.025;
+ground.material.map=woodTexture; ground.material.color.setHex(0xb98d66);ground.receiveShadow=true;
+
+const backWall = new THREE.Mesh(new THREE.BoxGeometry(12,5,.18),new THREE.MeshStandardMaterial({color:0xffffff,map:wallpaperTexture,roughness:.95}));backWall.name='Wallpaper back wall';backWall.position.set(0,2.5,-3.4);scene.add(backWall);
+const leftWall = new THREE.Mesh(new THREE.BoxGeometry(.18,5,9),new THREE.MeshStandardMaterial({color:0xe8ddc8,roughness:.95}));leftWall.name='Left wall';leftWall.position.set(-6,2.5,1);scene.add(leftWall);
+const skirting = new THREE.Mesh(new THREE.BoxGeometry(11.8,.22,.12),new THREE.MeshStandardMaterial({color:0xf9f0df,roughness:.7}));skirting.name='Ivory skirting';skirting.position.set(0,.11,-3.23);scene.add(skirting);
+const rug = new THREE.Mesh(new THREE.CylinderGeometry(2.5,2.5,.035,96),new THREE.MeshStandardMaterial({color:0xc7a595,roughness:1}));rug.name='Round woven rose rug';rug.position.set(0,.022,.2);rug.scale.set(1,1,.7);scene.add(rug);
+const rugInset = new THREE.Mesh(new THREE.TorusGeometry(2.22,.035,8,96),new THREE.MeshStandardMaterial({color:0xe9d6b9,roughness:1}));rugInset.name='Rug embroidered border';rugInset.rotation.set(Math.PI/2,0,0);rugInset.position.set(0,.055,.2);rugInset.scale.set(1,.7,1);scene.add(rugInset);
+
+// Front-facing cream flocked rabbit.
+const rabbitBody = new THREE.Mesh(new THREE.SphereGeometry(.48,48,32),new THREE.MeshStandardMaterial({color:0xf1dfbe,roughness:1,bumpMap:furBump,bumpScale:.018}));rabbitBody.name='Rabbit flocked body';rabbitBody.position.set(0,1.05,.5);rabbitBody.scale.set(1,1.35,.8);scene.add(rabbitBody);
+const rabbitHead = new THREE.Mesh(new THREE.SphereGeometry(.57,64,48),new THREE.MeshStandardMaterial({color:0xf6e7ce,roughness:1,bumpMap:furBump,bumpScale:.014}));rabbitHead.name='Rabbit cream flocked head';rabbitHead.position.set(0,2.02,.52);rabbitHead.scale.set(1,1.03,.86);scene.add(rabbitHead);
+const leftEar = new THREE.Mesh(new THREE.SphereGeometry(1,40,32),new THREE.MeshStandardMaterial({color:0xf3e3c8,roughness:1,bumpMap:furBump,bumpScale:.013}));leftEar.name='Rabbit left ear';leftEar.position.set(-.27,2.82,.47);leftEar.scale.set(.17,.64,.135);leftEar.rotation.z=.12;scene.add(leftEar);
+const rightEar = new THREE.Mesh(new THREE.SphereGeometry(1,40,32),new THREE.MeshStandardMaterial({color:0xf3e3c8,roughness:1,bumpMap:furBump,bumpScale:.013}));rightEar.name='Rabbit right ear';rightEar.position.set(.27,2.82,.47);rightEar.scale.set(.17,.64,.135);rightEar.rotation.z=-.12;scene.add(rightEar);
+const leftInnerEar = new THREE.Mesh(new THREE.SphereGeometry(1,32,24),new THREE.MeshStandardMaterial({color:0xe5b7ad,roughness:1,bumpMap:furBump,bumpScale:.008}));leftInnerEar.name='Left blush ear inset';leftInnerEar.position.set(-.28,2.85,.575);leftInnerEar.scale.set(.095,.46,.04);leftInnerEar.rotation.z=.12;scene.add(leftInnerEar);
+const rightInnerEar = new THREE.Mesh(new THREE.SphereGeometry(1,32,24),new THREE.MeshStandardMaterial({color:0xe5b7ad,roughness:1,bumpMap:furBump,bumpScale:.008}));rightInnerEar.name='Right blush ear inset';rightInnerEar.position.set(.28,2.85,.575);rightInnerEar.scale.set(.095,.46,.04);rightInnerEar.rotation.z=-.12;scene.add(rightInnerEar);
+const leftEye = new THREE.Mesh(new THREE.SphereGeometry(.083,32,24),new THREE.MeshPhysicalMaterial({color:0x170e0b,roughness:.12,clearcoat:1}));leftEye.name='Left glossy dark eye';leftEye.position.set(-.225,2.12,.969);scene.add(leftEye);
+const rightEye = new THREE.Mesh(new THREE.SphereGeometry(.083,32,24),new THREE.MeshPhysicalMaterial({color:0x170e0b,roughness:.12,clearcoat:1}));rightEye.name='Right glossy dark eye';rightEye.position.set(.225,2.12,.969);scene.add(rightEye);
+const muzzle = new THREE.Mesh(new THREE.SphereGeometry(1,40,24),new THREE.MeshStandardMaterial({color:0xffefda,roughness:1,bumpMap:furBump,bumpScale:.012}));muzzle.name='Rabbit soft muzzle';muzzle.position.set(0,1.91,.98);muzzle.scale.set(.25,.16,.135);scene.add(muzzle);
+const nose = new THREE.Mesh(new THREE.SphereGeometry(1,32,24),new THREE.MeshStandardMaterial({color:0xdba4a4,roughness:.55}));nose.name='Tiny pink nose';nose.position.set(0,1.965,1.109);nose.scale.set(.065,.044,.035);scene.add(nose);
+const smileCurve = new THREE.QuadraticBezierCurve3(new THREE.Vector3(-.065,.018,0),new THREE.Vector3(0,-.045,.012),new THREE.Vector3(.065,.018,0));
+const mouth = new THREE.Mesh(new THREE.TubeGeometry(smileCurve,32,.007,8,false),new THREE.MeshStandardMaterial({color:0x96776a,roughness:1}));mouth.name='Delicate mouth seam';mouth.position.set(0,1.893,1.14);scene.add(mouth);
+const dress = new THREE.Mesh(new THREE.CylinderGeometry(.34,.73,1.02,64,12,true),new THREE.MeshStandardMaterial({color:0xffffff,map:floralTexture,roughness:.95,side:THREE.DoubleSide}));dress.name='Tiny pink blue floral dress';dress.position.set(0,.91,.5);scene.add(dress);
+const hem = new THREE.Mesh(new THREE.TorusGeometry(.726,.025,12,80),new THREE.MeshStandardMaterial({color:0xf7ecd9,roughness:1}));hem.name='Dress ivory stitched hem';hem.rotation.x=Math.PI/2;hem.position.set(0,.405,.5);scene.add(hem);
+const leftArm = new THREE.Mesh(new THREE.SphereGeometry(1,32,24),new THREE.MeshStandardMaterial({color:0xf3e3c8,roughness:1,bumpMap:furBump,bumpScale:.015}));leftArm.name='Rabbit left arm';leftArm.position.set(-.49,1.18,.56);leftArm.scale.set(.17,.38,.18);leftArm.rotation.z=-.25;scene.add(leftArm);
+const rightArm = new THREE.Mesh(new THREE.SphereGeometry(1,32,24),new THREE.MeshStandardMaterial({color:0xf3e3c8,roughness:1,bumpMap:furBump,bumpScale:.015}));rightArm.name='Rabbit right arm';rightArm.position.set(.49,1.18,.56);rightArm.scale.set(.17,.38,.18);rightArm.rotation.z=.25;scene.add(rightArm);
+const collarLeft = new THREE.Mesh(new THREE.SphereGeometry(1,32,24),new THREE.MeshStandardMaterial({color:0xfffcf3,roughness:.8}));collarLeft.name='Left Peter Pan collar';collarLeft.position.set(-.15,1.43,.79);collarLeft.scale.set(.19,.12,.06);collarLeft.rotation.z=-.35;scene.add(collarLeft);
+const collarRight = new THREE.Mesh(new THREE.SphereGeometry(1,32,24),new THREE.MeshStandardMaterial({color:0xfffcf3,roughness:.8}));collarRight.name='Right Peter Pan collar';collarRight.position.set(.15,1.43,.79);collarRight.scale.set(.19,.12,.06);collarRight.rotation.z=.35;scene.add(collarRight);
+const bowLeft = new THREE.Mesh(new THREE.SphereGeometry(1,32,20),new THREE.MeshPhysicalMaterial({color:0xd891a9,roughness:.32,sheen:1,sheenColor:0xf6cad9}));bowLeft.name='Pink satin bow left loop';bowLeft.position.set(-.10,1.30,.883);bowLeft.scale.set(.115,.068,.045);bowLeft.rotation.z=-.3;scene.add(bowLeft);
+const bowRight = new THREE.Mesh(new THREE.SphereGeometry(1,32,20),new THREE.MeshPhysicalMaterial({color:0xd891a9,roughness:.32,sheen:1,sheenColor:0xf6cad9}));bowRight.name='Pink satin bow right loop';bowRight.position.set(.10,1.30,.883);bowRight.scale.set(.115,.068,.045);bowRight.rotation.z=.3;scene.add(bowRight);
+const bowKnot = new THREE.Mesh(new THREE.SphereGeometry(.048,24,16),new THREE.MeshStandardMaterial({color:0xe1a0b8,roughness:.35}));bowKnot.name='Satin bow knot';bowKnot.position.set(0,1.30,.914);scene.add(bowKnot);
+const leftShoe = new THREE.Mesh(new THREE.SphereGeometry(1,40,24),new THREE.MeshStandardMaterial({color:0xe8d7b8,roughness:.48}));leftShoe.name='Left cream Mary Jane shoe';leftShoe.position.set(-.26,.18,.66);leftShoe.scale.set(.235,.155,.36);scene.add(leftShoe);
+const rightShoe = new THREE.Mesh(new THREE.SphereGeometry(1,40,24),new THREE.MeshStandardMaterial({color:0xe8d7b8,roughness:.48}));rightShoe.name='Right cream Mary Jane shoe';rightShoe.position.set(.26,.18,.66);rightShoe.scale.set(.235,.155,.36);scene.add(rightShoe);
+const leftStrap = new THREE.Mesh(new THREE.BoxGeometry(.39,.045,.085),new THREE.MeshStandardMaterial({color:0xfaf0d9,roughness:.5}));leftStrap.name='Left Mary Jane strap';leftStrap.position.set(-.26,.325,.65);scene.add(leftStrap);
+const rightStrap = new THREE.Mesh(new THREE.BoxGeometry(.39,.045,.085),new THREE.MeshStandardMaterial({color:0xfaf0d9,roughness:.5}));rightStrap.name='Right Mary Jane strap';rightStrap.position.set(.26,.325,.65);scene.add(rightStrap);
+
+const dresser = new THREE.Mesh(new THREE.BoxGeometry(2.25,1.15,.9),new THREE.MeshStandardMaterial({color:0xc09266,map:woodTexture,roughness:.65}));dresser.name='Left wooden tea dresser';dresser.position.set(-3.15,.65,-.4);scene.add(dresser);
+const dresserTop = new THREE.Mesh(new THREE.BoxGeometry(2.4,.12,1.02),new THREE.MeshStandardMaterial({color:0xc99769,map:woodTexture,roughness:.55}));dresserTop.name='Dresser overhanging top';dresserTop.position.set(-3.15,1.285,-.4);scene.add(dresserTop);
+const drawerUpper = new THREE.Mesh(new THREE.BoxGeometry(2.08,.40,.06),new THREE.MeshStandardMaterial({color:0xb78456,map:woodTexture,roughness:.6}));drawerUpper.name='Dresser upper drawer';drawerUpper.position.set(-3.15,.94,.085);scene.add(drawerUpper);
+const drawerLower = new THREE.Mesh(new THREE.BoxGeometry(2.08,.40,.06),new THREE.MeshStandardMaterial({color:0xb78456,map:woodTexture,roughness:.6}));drawerLower.name='Dresser lower drawer';drawerLower.position.set(-3.15,.47,.085);scene.add(drawerLower);
+const armchairSeat = new THREE.Mesh(new THREE.BoxGeometry(1.45,.40,1.25),new THREE.MeshStandardMaterial({color:0xf3dfcf,map:floralTexture,roughness:1}));armchairSeat.name='Floral armchair cushion';armchairSeat.position.set(-2.65,.61,-2);scene.add(armchairSeat);
+const armchairBack = new THREE.Mesh(new THREE.BoxGeometry(1.5,1.65,.34),new THREE.MeshStandardMaterial({color:0xe9d4c4,map:floralTexture,roughness:1}));armchairBack.name='Floral armchair back';armchairBack.position.set(-2.65,1.18,-2.64);scene.add(armchairBack);
+const armchairLeft = new THREE.Mesh(new THREE.BoxGeometry(.27,.75,1.3),new THREE.MeshStandardMaterial({color:0xe8cfbc,map:floralTexture,roughness:1}));armchairLeft.name='Armchair left arm';armchairLeft.position.set(-3.43,.8,-2);scene.add(armchairLeft);
+const armchairRight = new THREE.Mesh(new THREE.BoxGeometry(.27,.75,1.3),new THREE.MeshStandardMaterial({color:0xe8cfbc,map:floralTexture,roughness:1}));armchairRight.name='Armchair right arm';armchairRight.position.set(-1.87,.8,-2);scene.add(armchairRight);
+const hutchBase = new THREE.Mesh(new THREE.BoxGeometry(2.25,1.15,.85),new THREE.MeshStandardMaterial({color:0xb18256,map:woodTexture,roughness:.65}));hutchBase.name='Right hutch lower cabinet';hutchBase.position.set(3.15,.575,-1.75);scene.add(hutchBase);
+const hutchBack = new THREE.Mesh(new THREE.BoxGeometry(2.25,2.35,.13),new THREE.MeshStandardMaterial({color:0x9e704c,map:woodTexture,roughness:.75}));hutchBack.name='Hutch timber back';hutchBack.position.set(3.15,2.3,-2.13);scene.add(hutchBack);
+const hutchLeft = new THREE.Mesh(new THREE.BoxGeometry(.12,2.4,.65),new THREE.MeshStandardMaterial({color:0xbb8c5d,map:woodTexture,roughness:.6}));hutchLeft.name='Hutch left upright';hutchLeft.position.set(2.05,2.32,-1.87);scene.add(hutchLeft);
+const hutchRight = new THREE.Mesh(new THREE.BoxGeometry(.12,2.4,.65),new THREE.MeshStandardMaterial({color:0xbb8c5d,map:woodTexture,roughness:.6}));hutchRight.name='Hutch right upright';hutchRight.position.set(4.25,2.32,-1.87);scene.add(hutchRight);
+const hutchShelfOne = new THREE.Mesh(new THREE.BoxGeometry(2.25,.10,.72),new THREE.MeshStandardMaterial({color:0xc19565,map:woodTexture,roughness:.6}));hutchShelfOne.name='Hutch lower display shelf';hutchShelfOne.position.set(3.15,1.22,-1.85);scene.add(hutchShelfOne);
+const hutchShelfTwo = new THREE.Mesh(new THREE.BoxGeometry(2.25,.10,.72),new THREE.MeshStandardMaterial({color:0xc19565,map:woodTexture,roughness:.6}));hutchShelfTwo.name='Hutch middle display shelf';hutchShelfTwo.position.set(3.15,2.02,-1.85);scene.add(hutchShelfTwo);
+const hutchShelfThree = new THREE.Mesh(new THREE.BoxGeometry(2.25,.10,.72),new THREE.MeshStandardMaterial({color:0xc19565,map:woodTexture,roughness:.6}));hutchShelfThree.name='Hutch upper display shelf';hutchShelfThree.position.set(3.15,2.82,-1.85);scene.add(hutchShelfThree);
+const hutchCrown = new THREE.Mesh(new THREE.BoxGeometry(2.48,.17,.79),new THREE.MeshStandardMaterial({color:0xba8b59,map:woodTexture,roughness:.6}));hutchCrown.name='Hutch cornice';hutchCrown.position.set(3.15,3.58,-1.85);scene.add(hutchCrown);
+const bookcaseBack = new THREE.Mesh(new THREE.BoxGeometry(1.65,2.6,.15),new THREE.MeshStandardMaterial({color:0x99704c,map:woodTexture,roughness:.75}));bookcaseBack.name='Background bookcase back';bookcaseBack.position.set(.3,1.3,-3.14);scene.add(bookcaseBack);
+const bookcaseLeft = new THREE.Mesh(new THREE.BoxGeometry(.12,2.6,.58),new THREE.MeshStandardMaterial({color:0xbd9165,map:woodTexture,roughness:.7}));bookcaseLeft.name='Bookcase left stile';bookcaseLeft.position.set(-.55,1.3,-2.91);scene.add(bookcaseLeft);
+const bookcaseRight = new THREE.Mesh(new THREE.BoxGeometry(.12,2.6,.58),new THREE.MeshStandardMaterial({color:0xbd9165,map:woodTexture,roughness:.7}));bookcaseRight.name='Bookcase right stile';bookcaseRight.position.set(1.15,1.3,-2.91);scene.add(bookcaseRight);
+const shelfPool = new THREE.InstancedMesh(new THREE.BoxGeometry(1.7,.08,.60),new THREE.MeshStandardMaterial({color:0xc1976d,map:woodTexture,roughness:.7}),4);shelfPool.name='Bookcase shelves';
+const propMatrix = new THREE.Object3D();
+for(let i=0;i<4;i++){propMatrix.position.set(.3,.12+i*.82,-2.9);propMatrix.updateMatrix();shelfPool.setMatrixAt(i,propMatrix.matrix);}shelfPool.instanceMatrix.needsUpdate=true;shelfPool.computeBoundingSphere();scene.add(shelfPool);
+const books = new THREE.InstancedMesh(new THREE.BoxGeometry(.115,.48,.32),new THREE.MeshStandardMaterial({color:0xffffff,roughness:.9}),21);books.name='Tiny pastel storybooks';
+for(let i=0;i<21;i++){propMatrix.position.set(-.37+(i%7)*.19,.41+Math.floor(i/7)*.82,-2.84);propMatrix.rotation.set(0,0,(i%3-1)*.06);propMatrix.updateMatrix();books.setMatrixAt(i,propMatrix.matrix);books.setColorAt(i,new THREE.Color([0x9cafa1,0xd0a09b,0xc6b281,0x8d9eaf][i%4]));}books.instanceMatrix.needsUpdate=true;books.instanceColor.needsUpdate=true;books.computeBoundingSphere();scene.add(books);
+propMatrix.rotation.set(0,0,0);
+const teacups = new THREE.InstancedMesh(new THREE.CylinderGeometry(.095,.066,.14,24,1,true),new THREE.MeshStandardMaterial({color:0xfff5e4,roughness:.28,side:THREE.DoubleSide}),12);teacups.name='Porcelain display teacups';
+const saucers = new THREE.InstancedMesh(new THREE.CylinderGeometry(.145,.145,.022,32),new THREE.MeshStandardMaterial({color:0xeedac7,roughness:.32}),12);saucers.name='Porcelain saucers';
+const handles = new THREE.InstancedMesh(new THREE.TorusGeometry(.055,.013,8,20),new THREE.MeshStandardMaterial({color:0xffeddb,roughness:.3}),12);handles.name='Porcelain cup handles';
+for(let i=0;i<12;i++){const x=i<9?2.48+(i%3)*.65:-3.8+(i-9)*.55;const y=i<9?1.29+Math.floor(i/3)*.8:1.355;const z=i<9?-1.73:-.3;propMatrix.position.set(x,y+.08,z);propMatrix.updateMatrix();teacups.setMatrixAt(i,propMatrix.matrix);propMatrix.position.set(x,y,z);propMatrix.updateMatrix();saucers.setMatrixAt(i,propMatrix.matrix);propMatrix.position.set(x+.107,y+.09,z);propMatrix.updateMatrix();handles.setMatrixAt(i,propMatrix.matrix);}
+teacups.instanceMatrix.needsUpdate=true;saucers.instanceMatrix.needsUpdate=true;handles.instanceMatrix.needsUpdate=true;teacups.computeBoundingSphere();saucers.computeBoundingSphere();handles.computeBoundingSphere();scene.add(teacups,saucers,handles);
+const teapot = new THREE.Mesh(new THREE.SphereGeometry(.20,32,24),new THREE.MeshStandardMaterial({color:0xf6ecd9,roughness:.3}));teapot.name='Dresser porcelain teapot';teapot.position.set(-3.15,1.53,-.58);teapot.scale.set(1,.85,1);scene.add(teapot);
+const teapotLid = new THREE.Mesh(new THREE.SphereGeometry(.11,24,16),new THREE.MeshStandardMaterial({color:0xe5bdba,roughness:.35}));teapotLid.name='Teapot rose lid';teapotLid.position.set(-3.15,1.70,-.58);teapotLid.scale.set(1,.35,1);scene.add(teapotLid);
+const teapotSpout = new THREE.Mesh(new THREE.ConeGeometry(.075,.30,24),new THREE.MeshStandardMaterial({color:0xf6ecd9,roughness:.3}));teapotSpout.name='Teapot spout';teapotSpout.position.set(-2.91,1.57,-.58);teapotSpout.rotation.z=-.95;scene.add(teapotSpout);
+const teapotHandle = new THREE.Mesh(new THREE.TorusGeometry(.13,.025,12,32),new THREE.MeshStandardMaterial({color:0xf6ecd9,roughness:.3}));teapotHandle.name='Teapot handle';teapotHandle.position.set(-3.37,1.55,-.58);scene.add(teapotHandle);
+const plantPot = new THREE.Mesh(new THREE.CylinderGeometry(.20,.14,.32,32),new THREE.MeshStandardMaterial({color:0xd6ba95,roughness:.8}));plantPot.name='Hutch plant ceramic pot';plantPot.position.set(3.7,3.83,-1.85);scene.add(plantPot);
+const leaves = new THREE.InstancedMesh(new THREE.SphereGeometry(1,16,12),new THREE.MeshStandardMaterial({color:0x668253,roughness:.9}),16);leaves.name='Potted plant leaves';
+for(let i=0;i<16;i++){const a=i*2.399;propMatrix.position.set(3.7+Math.cos(a)*.20,4.03+(i%4)*.09,-1.85+Math.sin(a)*.18);propMatrix.rotation.set(.3,a,.5);propMatrix.scale.set(.07,.22,.035);propMatrix.updateMatrix();leaves.setMatrixAt(i,propMatrix.matrix);}leaves.instanceMatrix.needsUpdate=true;leaves.computeBoundingSphere();scene.add(leaves);
+
+const windowFrame = new THREE.Mesh(new THREE.BoxGeometry(1.9,2.1,.12),new THREE.MeshStandardMaterial({color:0xf8f0df,roughness:.65}));windowFrame.name='Daylight window frame';windowFrame.position.set(-4.55,3,-3.19);scene.add(windowFrame);
+const windowPane = new THREE.Mesh(new THREE.PlaneGeometry(1.65,1.85),new THREE.MeshBasicMaterial({color:0xd8e9ee}));windowPane.name='Soft blue daylight window';windowPane.position.set(-4.55,3,-3.115);scene.add(windowPane);
+const windowMullion = new THREE.Mesh(new THREE.BoxGeometry(.065,1.9,.075),new THREE.MeshStandardMaterial({color:0xfff6e4,roughness:.7}));windowMullion.name='Window center mullion';windowMullion.position.set(-4.55,3,-3.05);scene.add(windowMullion);
+const windowCrossbar = new THREE.Mesh(new THREE.BoxGeometry(1.7,.065,.075),new THREE.MeshStandardMaterial({color:0xfff6e4,roughness:.7}));windowCrossbar.name='Window crossbar';windowCrossbar.position.set(-4.55,3,-3.05);scene.add(windowCrossbar);
+const curtainLeft = new THREE.Mesh(new THREE.BoxGeometry(.45,2.3,.10,12,1,1),new THREE.MeshStandardMaterial({color:0xfffcf0,roughness:1,map:floralTexture}));curtainLeft.name='Left ivory lace curtain';curtainLeft.position.set(-5.36,2.97,-2.96);scene.add(curtainLeft);
+const curtainRight = new THREE.Mesh(new THREE.BoxGeometry(.45,2.3,.10,12,1,1),new THREE.MeshStandardMaterial({color:0xfffcf0,roughness:1,map:floralTexture}));curtainRight.name='Right ivory lace curtain';curtainRight.position.set(-3.74,2.97,-2.96);scene.add(curtainRight);
+// Fold the right ear forward, bending its blush inset with the cream shell.
+function foldRightEar(mesh) {
+  mesh.updateMatrix();
+  const inverse = mesh.matrix.clone().invert();
+  const vertex = new THREE.Vector3();
+  const positions = mesh.geometry.attributes.position;
+  const hingeY = 2.87, hingeZ = .47, radius = .18;
+  for (let i = 0; i < positions.count; i++) {
+    vertex.fromBufferAttribute(positions, i).applyMatrix4(mesh.matrix);
+    const height = vertex.y - hingeY;
+    if (height > 0) {
+      const angle = height / radius;
+      const depth = vertex.z - hingeZ;
+      vertex.y = hingeY + Math.sin(angle) * (radius - depth);
+      vertex.z = hingeZ + radius * (1 - Math.cos(angle)) + depth * Math.cos(angle);
+    }
+    vertex.applyMatrix4(inverse);
+    positions.setXYZ(i, vertex.x, vertex.y, vertex.z);
+  }
+  positions.needsUpdate = true;
+  mesh.geometry.computeVertexNormals();
+  mesh.geometry.computeBoundingBox();
+  mesh.geometry.computeBoundingSphere();
+}
+foldRightEar(rightEar);
+foldRightEar(rightInnerEar);
+// Compress the complete figurine together, keeping its outfit and face aligned.
+const rabbitParts = [rabbitBody, rabbitHead, leftEar, rightEar, leftInnerEar, rightInnerEar, leftEye, rightEye, muzzle, nose, mouth, dress, hem, leftArm, rightArm, collarLeft, collarRight, bowLeft, bowRight, bowKnot, leftShoe, rightShoe, leftStrap, rightStrap];
+const rabbitStubbyTransform = new THREE.Matrix4().set(1.12,0,0,0, 0,.72,0,.0112, 0,0,1.06,-.03, 0,0,0,1);
+for (const part of rabbitParts) { part.updateMatrix(); part.applyMatrix4(rabbitStubbyTransform); }
+// Keep the stubby silhouette, but restore soft, uncompressed facial features.
+// Human-style eyes retain the original editable eye meshes as sclerae.
+leftEye.material = new THREE.MeshPhysicalMaterial({color:0x170e0b,roughness:.12,clearcoat:1});
+rightEye.material = new THREE.MeshPhysicalMaterial({color:0x170e0b,roughness:.12,clearcoat:1});
+leftEye.scale.set(1.08,1.08,1.08);
+rightEye.scale.set(1.08,1.08,1.08);
+const leftIris = new THREE.Mesh(new THREE.SphereGeometry(.043,32,24),new THREE.MeshStandardMaterial({color:0x796044,roughness:.4}));
+leftIris.name = 'Left human hazel iris';
+leftIris.position.set(0,0,.073); leftIris.scale.set(.77,1.11,.3); leftEye.add(leftIris);
+const rightIris = new THREE.Mesh(new THREE.SphereGeometry(.043,32,24),new THREE.MeshStandardMaterial({color:0x796044,roughness:.4}));
+rightIris.name = 'Right human hazel iris';
+rightIris.position.set(0,0,.073); rightIris.scale.set(.77,1.11,.3); rightEye.add(rightIris);
+const leftPupil = new THREE.Mesh(new THREE.SphereGeometry(.021,24,16),new THREE.MeshStandardMaterial({color:0x17110e,roughness:.2}));
+leftPupil.name = 'Left human round pupil';
+leftPupil.position.set(0,0,.086); leftPupil.scale.set(.77,1.11,.25); leftEye.add(leftPupil);
+const rightPupil = new THREE.Mesh(new THREE.SphereGeometry(.021,24,16),new THREE.MeshStandardMaterial({color:0x17110e,roughness:.2}));
+rightPupil.name = 'Right human round pupil';
+rightPupil.position.set(0,0,.086); rightPupil.scale.set(.77,1.11,.25); rightEye.add(rightPupil);
+const leftEyeGlint = new THREE.Mesh(new THREE.SphereGeometry(.008,16,12),new THREE.MeshBasicMaterial({color:0xffffff}));
+leftEyeGlint.name = 'Left eye catchlight';
+leftEyeGlint.position.set(-.009,.013,.093); leftEyeGlint.scale.set(.77,1.11,.4); leftEye.add(leftEyeGlint);
+const rightEyeGlint = new THREE.Mesh(new THREE.SphereGeometry(.008,16,12),new THREE.MeshBasicMaterial({color:0xffffff}));
+rightEyeGlint.name = 'Right eye catchlight';
+rightEyeGlint.position.set(-.009,.013,.093); rightEyeGlint.scale.set(.77,1.11,.4); rightEye.add(rightEyeGlint);
+// Restore simple glossy black eyes without human-style details.
+leftIris.visible = rightIris.visible = false;
+leftPupil.visible = rightPupil.visible = false;
+leftEyeGlint.visible = rightEyeGlint.visible = false;
+muzzle.scale.set(.27,.16,.143);
+nose.scale.set(.068,.046,.037);
+mouth.scale.set(1.06,1,1.06);
+const noseMouthLine = new THREE.Mesh(new THREE.TubeGeometry(new THREE.LineCurve3(new THREE.Vector3(0,1.392,1.177),new THREE.Vector3(0,1.327,1.153)),12,.006,8,false),new THREE.MeshStandardMaterial({color:0x96776a,roughness:1}));
+noseMouthLine.name = 'Nose to smile seam';
+noseMouthLine.position.set(0,0,0);
+scene.add(noseMouthLine);
+// Six fine whiskers fan gently out from the soft muzzle.
+const leftWhiskerUpper = new THREE.Mesh(new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(new THREE.Vector3(-.14,1.40,1.15),new THREE.Vector3(-.31,1.45,1.17),new THREE.Vector3(-.49,1.47,1.13)),20,.0035,6,false),new THREE.MeshStandardMaterial({color:0x9c8778,roughness:1}));
+leftWhiskerUpper.name='Left upper whisker'; leftWhiskerUpper.position.set(0,0,0); scene.add(leftWhiskerUpper);
+const leftWhiskerMiddle = new THREE.Mesh(new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(new THREE.Vector3(-.16,1.38,1.15),new THREE.Vector3(-.34,1.39,1.18),new THREE.Vector3(-.52,1.38,1.13)),20,.0035,6,false),new THREE.MeshStandardMaterial({color:0x9c8778,roughness:1}));
+leftWhiskerMiddle.name='Left middle whisker'; leftWhiskerMiddle.position.set(0,0,0); scene.add(leftWhiskerMiddle);
+const leftWhiskerLower = new THREE.Mesh(new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(new THREE.Vector3(-.14,1.36,1.15),new THREE.Vector3(-.31,1.33,1.17),new THREE.Vector3(-.47,1.29,1.13)),20,.0035,6,false),new THREE.MeshStandardMaterial({color:0x9c8778,roughness:1}));
+leftWhiskerLower.name='Left lower whisker'; leftWhiskerLower.position.set(0,0,0); scene.add(leftWhiskerLower);
+const rightWhiskerUpper = new THREE.Mesh(new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(new THREE.Vector3(.14,1.40,1.15),new THREE.Vector3(.31,1.45,1.17),new THREE.Vector3(.49,1.47,1.13)),20,.0035,6,false),new THREE.MeshStandardMaterial({color:0x9c8778,roughness:1}));
+rightWhiskerUpper.name='Right upper whisker'; rightWhiskerUpper.position.set(0,0,0); scene.add(rightWhiskerUpper);
+const rightWhiskerMiddle = new THREE.Mesh(new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(new THREE.Vector3(.16,1.38,1.15),new THREE.Vector3(.34,1.39,1.18),new THREE.Vector3(.52,1.38,1.13)),20,.0035,6,false),new THREE.MeshStandardMaterial({color:0x9c8778,roughness:1}));
+rightWhiskerMiddle.name='Right middle whisker'; rightWhiskerMiddle.position.set(0,0,0); scene.add(rightWhiskerMiddle);
+const rightWhiskerLower = new THREE.Mesh(new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(new THREE.Vector3(.14,1.36,1.15),new THREE.Vector3(.31,1.33,1.17),new THREE.Vector3(.47,1.29,1.13)),20,.0035,6,false),new THREE.MeshStandardMaterial({color:0x9c8778,roughness:1}));
+rightWhiskerLower.name='Right lower whisker'; rightWhiskerLower.position.set(0,0,0); scene.add(rightWhiskerLower);
+// Shorten each whisker by 20% horizontally, keeping its muzzle attachment fixed.
+for (const whisker of [leftWhiskerUpper, leftWhiskerMiddle, leftWhiskerLower, rightWhiskerUpper, rightWhiskerMiddle, rightWhiskerLower]) {
+  const positions = whisker.geometry.attributes.position;
+  const rootX = positions.getX(0) < 0 ? (whisker === leftWhiskerMiddle ? -.16 : -.14) : (whisker === rightWhiskerMiddle ? .16 : .14);
+  for (let i = 0; i < positions.count; i++) positions.setX(i, rootX + (positions.getX(i) - rootX) * .8);
+  positions.needsUpdate = true;
+  whisker.geometry.computeVertexNormals();
+  whisker.geometry.computeBoundingBox();
+  whisker.geometry.computeBoundingSphere();
+}
+scene.traverse(o=>{if(o.isMesh && o!==sky && o!==ground){o.castShadow=true;o.receiveShadow=true;}});
+// Isolate the rabbit and carpet; retain the hidden floor for safe walking.
+scene.background = null;
+renderer.setClearColor(0x000000, 0);
+const visibleSubjects = new Set([...rabbitParts, noseMouthLine, leftWhiskerUpper, leftWhiskerMiddle, leftWhiskerLower, rightWhiskerUpper, rightWhiskerMiddle, rightWhiskerLower, rug, rugInset, leftIris, rightIris, leftPupil, rightPupil, leftEyeGlint, rightEyeGlint]);
+scene.traverse(object => {
+  if (object.isMesh && !visibleSubjects.has(object)) object.visible = false;
+});
+
+__walk.refresh();
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+window.__M3D_EDITOR__ = { scene, camera, renderer, controls, ready: true, invalidate() { renderer.render(scene, camera); } };
+window.dispatchEvent(new Event('m3d:scene-ready'));
+renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+</script>
+</body>
+</html>
+<!--__M3D_SINGLEFILE__-->
