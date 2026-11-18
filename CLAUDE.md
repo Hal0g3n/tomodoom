@@ -90,7 +90,7 @@ virtual pet whose **HP** reflects your digital habits:
 | You equip clothes or accessories | The pet's look changes | Maniengine renderer |
 
 The app has three bottom-navigation tabs, left to right: **Customise** (live pet preview + slot tabs
-and item chips), **Pets** (HP and the pet viewport; the default page on launch) and **Chat**
+and a grid of item circles), **Pets** (HP and the pet viewport; the default page on launch) and **Chat**
 (TruFar chatbot + quizzes). There is no action bar on any tab. The bottom bar shows icons only: the
 open tab widens, shows its label and enlarges its icon.
 
@@ -182,7 +182,8 @@ com.example.tomodoom
     ├── MainPagerAdapter          FragmentStateAdapter: page index ↔ bottom-nav item id
     │                             (Customise=0, Pets=1 = default, Chat=2)
     ├── PetStage                  MainActivity's ONE pet renderer, lent to the resumed page's viewport
-    ├── customise/CustomiseFragment   pet preview viewport (via PetStage) + slot tabs + item chips
+    ├── customise/CustomiseFragment   pet preview viewport (via PetStage) + full-width slot tabs + item grid
+    ├── customise/AccessoryGridAdapter, AccessoryThumbnails   two-column item circles; item ID → thumbnail
     ├── pets/PetsFragment         HP header, Usage Access card, pet viewport (FrameLayout), debug row
     └── chat/ChatFragment, ChatAdapter   RecyclerView (3 view types) + input bar
 ```
@@ -191,14 +192,17 @@ Resources: `res/values/colors.xml` + `res/values/themes.xml` (palette and theme,
 `values-night/`), `res/layout/fragment_pets.xml` (a `ConstraintLayout` with `hp_card`,
 `usage_access_card` (Usage Access prompt, §5.3), `pet_viewport` and `debug_panel`),
 `fragment_customise.xml` (`customise_header`, `pet_viewport` at 40% of the page height, `slot_tabs`,
-`item_chips` in a ScrollView), `fragment_chat.xml`, `item_chat_{user,bot,system}.xml`,
-`item_accessory_chip.xml`, `res/drawable/ic_hanger_24dp.xml` (Customise tab icon),
+`item_grid` RecyclerView), `fragment_chat.xml`, `item_chat_{user,bot,system}.xml`,
+`item_accessory_circle.xml`, `res/drawable/bg_accessory_circle.xml`, `ic_item_none_24dp.xml`,
+`res/drawable-nodpi/thumb_<itemId>.png` (GENERATED item thumbnails, §5.1),
+`res/drawable/ic_hanger_24dp.xml` (Customise tab icon),
 `activity_main.xml` (`main_pager` ViewPager2 + `nav_view`), `activity_onboarding.xml` (title,
 `pet_name_layout`/`pet_name_input`, `start_button`), `res/menu/bottom_nav_menu.xml`.
 `res/values/dimens.xml` (`pet_viewport_stroke`).
 Assets: `assets/trufar/kafka_agent.json` (the Kafka TruFar agent export, icon stripped; §5.2),
-`assets/maniengine/index.html` (the pet page, §5.1), `pet-model.js` (GENERATED from the scene-3 export)
-and `vendor/three/` (three.js 0.187.0). Tools: `tools/maniengine/extract_model.py` (+ `source/scene-3.html`).
+`assets/maniengine/index.html` (the pet page, §5.1), `pet-scene.js` (model setup + add-ons, shared with the
+thumbnail tool), `pet-model.js` (GENERATED from the scene-3 export) and `vendor/three/` (three.js 0.187.0).
+Tools: `tools/maniengine/extract_model.py` (+ `source/scene-3.html`), `make_thumbnails.py` (+ `thumbnails.html`).
 
 ### Dependency direction (enforced by convention)
 
@@ -416,11 +420,17 @@ CDN importmap). So the export isn't dropped in as is. Put it in `tools/maniengin
 **`python3 tools/maniengine/extract_model.py [export.html]`** (stdlib only; see its README). It
 writes `assets/maniengine/pet-model.js` (`buildModel(THREE, scene, renderer)` + `OVERRIDES`) and
 vendors the matching three.js into `assets/maniengine/vendor/three/`. Never edit `pet-model.js` by
-hand. `assets/maniengine/index.html` is hand-written: it builds the model, applies `OVERRIDES`,
-drops the hidden room meshes, frames the camera on the rabbit, animates by `mood`, and shows
-primitive add-ons for the `AccessoryCatalog` IDs. It looks parts up by mesh name, so a new export
-with renamed parts needs those lookups updated. Other asset types (`.glb`, textures, `.wasm`) can
+hand. `assets/maniengine/pet-scene.js` is hand-written: it builds the model, applies `OVERRIDES`,
+drops the hidden room meshes and builds primitive add-ons for the `AccessoryCatalog` IDs. It looks
+parts up by mesh name, so a new export with renamed parts needs those lookups updated.
+`assets/maniengine/index.html` (also hand-written) frames the camera on the rabbit, animates by
+`mood` and toggles the add-ons. Other asset types (`.glb`, textures, `.wasm`) can
 still sit beside it with relative URLs.
+
+The Customise circles are PNGs of those add-ons. After changing an add-on, run
+**`python3 tools/maniengine/make_thumbnails.py`** (headless Edge) to regenerate
+`res/drawable-nodpi/thumb_<itemId>.png`. A new catalog item also needs a case in
+`ui/customise/AccessoryThumbnails`; `AccessoryThumbnailsTest` fails until it has one.
 
 How the page is hosted (`HtmlManiengineRenderer`):
 - Served from the virtual origin **`https://appassets.androidplatform.net/assets/maniengine/`**
@@ -456,7 +466,7 @@ How the page is hosted (`HtmlManiengineRenderer`):
   extend `ManiengineProtocol` and this section together.
 - **Layout note:** there is **one** WebView, moved (not reloaded) between two viewports: the large
   one on Pets and a preview at 40% of the page height on Customise, above the slot tabs and item
-  chips. Nothing overlays either viewport. The page gets a `resize` each move, so it must refit to
+  circles. Nothing overlays either viewport. The page gets a `resize` each move, so it must refit to
   any size (`index.html` does, in `fit()`). The page that isn't shown has an empty viewport, and
   while you drag between pages the incoming viewport stays empty until the swipe settles.
 - **Acceptance:** equipping/unequipping on the Customise tab updates the viewport immediately. Rotating
@@ -683,7 +693,7 @@ process. This limits battery work but means detection is not guaranteed while th
   checks `isOnboardingComplete()` before inflating anything and forwards to `MainActivity` if set.
   Anything that should run on every launch belongs in `TomodoomApplication` or `MainActivity`,
   not in the onboarding screen.
-- **Maniengine overrides are applied by the page, not the editor.** `index.html` matches each
+- **Maniengine overrides are applied by the page, not the editor.** `pet-scene.js` matches each
   `OVERRIDES` entry by unique top-level name, else by `scene.children` index (the camera is added
   first so the indices match the export). Nested paths (`"46/16"`) are skipped with a
   `console.warn`. Headless-Edge screenshots on this Windows machine report a viewport about 500px
@@ -815,7 +825,8 @@ Debug helpers available in the debug build:
    bar) and shows `Tomo`, **HP 50 / 100** and status "Okay". Until Usage Access is granted, a Usage Access card with an **Enable** button
    sits under the HP card (it disappears once access is granted). The bottom bar shows three icons (Customise, Pets, Chat). Pets is open: its tile is wider, its icon is larger and only it shows a label.
 2. Swipe right (or tap **Customise**). The Customise page shows "Customise pet", a pet preview and
-   Hat / Accessory tabs with item chips. Choose **Hat → Cap**: the preview (the 3D
+   full-width Hat / Accessory tabs above a two-column grid of circles showing each item's model
+   (None first). Tap the **Cap** circle on the Hat tab: its ring darkens and the preview (the 3D
    cream rabbit in a floral dress, on a rug) gains a blue cap at once. Swipe back to Pets: the large
    pet has the hat too. The pet moves between the pages without reloading (no blank flash or
    restart of the hop animation), and only one pet exists: in a debug build `chrome://inspect`
@@ -852,7 +863,7 @@ Update this table in the same commit when your task changes a subsystem's status
 | Pet state + persistence | ✅ Done | `PetStateRepository` |
 | MCP tool bridge | ✅ Production-capable default | `DefaultMcpPetActionHandler` |
 | Pets UI (HP header, pet viewport, debug row) | ✅ Skeleton done | `PetsFragment` / `PetsViewModel` |
-| Customise UI (pet preview, slot tabs, item chips) | ✅ Skeleton done | `CustomiseFragment` / `CustomiseViewModel` |
+| Customise UI (pet preview, slot tabs, item circle grid) | ✅ Skeleton done | `CustomiseFragment` / `CustomiseViewModel` |
 | Onboarding (name the pet) | ✅ Done | `OnboardingActivity` / `OnboardingViewModel` |
 | Chat UI | ✅ Skeleton done | `ChatFragment` / `ChatViewModel` / `ChatRepository` |
 | Pet rendering | ✅ scene-3 rabbit (three.js, offline) via the HTML/WebView pipeline; add-ons are primitive placeholders | `HtmlManiengineRenderer` + `assets/maniengine/` |

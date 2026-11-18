@@ -14,4 +14,9 @@
     <!-- Pets -->
     <color name="viewport_background">@color/floral_white</color>
     <color name="viewport_stroke">@color/eggshell</color>
+
+    <!-- Customise -->
+    <color name="accessory_circle_background">@color/floral_white</color>
+    <color name="accessory_circle_stroke">@color/eggshell</color>
+    <color name="accessory_circle_stroke_selected">@color/charcoal</color>
 </resources>

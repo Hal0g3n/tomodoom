@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Item circle on the Customise page: the equipped item gets a heavier, darker ring. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_selected="true">
+        <shape android:shape="oval">
+            <solid android:color="@color/accessory_circle_background" />
+            <stroke
+                android:width="3dp"
+                android:color="@color/accessory_circle_stroke_selected" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="@color/accessory_circle_background" />
+            <stroke
+                android:width="2dp"
+                android:color="@color/accessory_circle_stroke" />
+        </shape>
+    </item>
+</selector>
