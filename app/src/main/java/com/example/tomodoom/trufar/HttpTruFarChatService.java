@@ -18,14 +18,7 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -41,9 +34,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class HttpTruFarChatService implements TruFarChatService {
 
     private static final String TAG = "HttpTruFarChatService";
-    private static final int CONNECT_TIMEOUT_MILLIS = 15_000;
     private static final int READ_TIMEOUT_MILLIS = 30_000;
-    private static final int MAX_RESPONSE_CHARACTERS = 1_000_000;
     private static final int MAX_TOOL_ROUND_TRIPS = 8;
 
     private static final class ToolCallBudget {
@@ -51,9 +42,7 @@ public final class HttpTruFarChatService implements TruFarChatService {
     }
 
     @NonNull
-    private final String baseUrl;
-    @NonNull
-    private final String bearerToken;
+    private final JsonHttpClient http;
     @NonNull
     private final List<String> supportedToolNames;
     @NonNull
@@ -73,8 +62,7 @@ public final class HttpTruFarChatService implements TruFarChatService {
     public HttpTruFarChatService(@NonNull String baseUrl,
                                  @NonNull String bearerToken,
                                  @NonNull List<String> supportedToolNames) {
-        this.baseUrl = trimTrailingSlashes(baseUrl.trim());
-        this.bearerToken = bearerToken.trim();
+        this.http = new JsonHttpClient(baseUrl, bearerToken, "TruFar", READ_TIMEOUT_MILLIS);
         this.supportedToolNames = new ArrayList<>(supportedToolNames);
     }
 
@@ -349,68 +337,7 @@ public final class HttpTruFarChatService implements TruFarChatService {
     private JSONObject requestJson(@NonNull String method,
                                    @NonNull String path,
                                    @Nullable JSONObject body) throws IOException, JSONException {
-        HttpURLConnection connection = openConnection(method, path, body);
-        try {
-            int status = connection.getResponseCode();
-            if (status < 200 || status >= 300) {
-                throw new IOException("TruFar request failed with HTTP " + status);
-            }
-            if (status == HttpURLConnection.HTTP_NO_CONTENT) {
-                return new JSONObject();
-            }
-            InputStream stream = connection.getInputStream();
-            String response = readResponse(stream);
-            return response.trim().isEmpty() ? new JSONObject() : new JSONObject(response);
-        } finally {
-            connection.disconnect();
-        }
-    }
-
-    @WorkerThread
-    @NonNull
-    private HttpURLConnection openConnection(@NonNull String method,
-                                             @NonNull String path,
-                                             @Nullable JSONObject body) throws IOException {
-        URL url = new URL(baseUrl + path);
-        if (!"https".equalsIgnoreCase(url.getProtocol())) {
-            throw new IOException("TruFar API URL must use HTTPS");
-        }
-        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-        connection.setRequestMethod(method);
-        connection.setConnectTimeout(CONNECT_TIMEOUT_MILLIS);
-        connection.setReadTimeout(READ_TIMEOUT_MILLIS);
-        connection.setRequestProperty("Accept", "application/json");
-        if (!bearerToken.isEmpty()) {
-            connection.setRequestProperty("Authorization", "Bearer " + bearerToken);
-        }
-        if (body != null) {
-            byte[] bytes = body.toString().getBytes(StandardCharsets.UTF_8);
-            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-            connection.setDoOutput(true);
-            connection.setFixedLengthStreamingMode(bytes.length);
-            try (OutputStream output = connection.getOutputStream()) {
-                output.write(bytes);
-            }
-        }
-        return connection;
-    }
-
-    @WorkerThread
-    @NonNull
-    private static String readResponse(@NonNull InputStream stream) throws IOException {
-        StringBuilder response = new StringBuilder();
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(stream, StandardCharsets.UTF_8))) {
-            char[] buffer = new char[4096];
-            int count;
-            while ((count = reader.read(buffer)) != -1) {
-                response.append(buffer, 0, count);
-                if (response.length() > MAX_RESPONSE_CHARACTERS) {
-                    throw new IOException("TruFar response exceeded the size limit");
-                }
-            }
-        }
-        return response.toString();
+        return http.requestJson(method, path, body);
     }
 
     @NonNull
@@ -492,14 +419,5 @@ public final class HttpTruFarChatService implements TruFarChatService {
             Log.w(TAG, "TruFar request failed", error);
             currentListener.onError(error);
         }
-    }
-
-    @NonNull
-    private static String trimTrailingSlashes(@NonNull String value) {
-        int end = value.length();
-        while (end > 0 && value.charAt(end - 1) == '/') {
-            end--;
-        }
-        return value.substring(0, end);
     }
 }
