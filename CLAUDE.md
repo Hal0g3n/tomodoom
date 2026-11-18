@@ -164,7 +164,11 @@ com.example.tomodoom
 │   ├── ManiengineProtocol        pure Java: state JSON + JS delivery script + touch policy (page contract)
 │   └── ManiengineAssets          pure Java: virtual-origin URL → assets/maniengine/ path, MIME types
 │
-├── doomscroll/                   Doom Scroll Agent: UsageStatsDoomScrollMonitor + DoomScrollSessionTracker (§5.3)
+├── doomscroll/                   Doom Scroll Agent (§5.3)
+│   ├── UsageStatsDoomScrollMonitor   polls Usage Access every 15 s; reads portrait from the display
+│   ├── DoomScrollSessionTracker  pure Java: per-minute penalties, 10-minute warnings, session rules
+│   ├── DoomScrollNotifier        wraps DoomScrollHpBridge; posts the warning notification
+│   └── DoomScrollMonitorService  foreground service that keeps polling alive
 │
 ├── di/
 │   ├── AppContainer              THE ONLY PLACE implementations are chosen ("SWAP POINT" comments)
@@ -241,7 +245,7 @@ ui  ──►  viewmodel  ──►  repository  ──►  contracts  ◄──
       │
       └─► ManiengineAssetRenderer.render(viewport, state)
 
- DoomScrollMonitor ─► DoomScrollListener (= DoomScrollHpBridge) ─► PetStateRepository.decreaseHp(...)
+ DoomScrollMonitor ─► DoomScrollNotifier ─► DoomScrollHpBridge ─► PetStateRepository.decreaseHp(...)
 ```
 
 ---
@@ -279,6 +283,7 @@ ui  ──►  viewmodel  ──►  repository  ──►  contracts  ◄──
 | A consequence of the above: right after a mutation, `getPetState().getValue()` may be one frame stale | Use `getCurrentState()` (or the mutator's return value) when you need the value straight away |
 | SharedPreferences writes use `apply()`, never `commit()` | `apply()` updates memory synchronously and writes to disk asynchronously, so the caller never blocks |
 | Contract callbacks (`TruFarChatService.Listener`, `DoomScrollListener`) **may arrive on any thread** | Consumers (repositories) are thread-safe. UI code only sees LiveData, which is always delivered on the main thread |
+| `DoomScrollMonitor.startFromForeground()` is **main-thread only**, called while the app is visible | Android 12+ blocks starting a foreground service from the background |
 | `ManiengineAssetRenderer` methods are **main-thread only** | They touch views. Do decoding/loading on a background thread inside the implementation, then post back to the main thread |
 | Don't block the main thread: no network or disk I/O apart from the repositories' first prefs load | ANR safety |
 | The whole app runs in **one process**. Don't declare `android:process` on services | SharedPreferences and in-memory singletons aren't shared across processes |
@@ -373,18 +378,25 @@ String TOOL_GET_PET_STATE = "get_pet_state";  // params: none
 ### `DoomScrollMonitor` / `DoomScrollListener`
 ```java
 void startMonitoring();   void stopMonitoring();   boolean isMonitoring();
+@MainThread default void startFromForeground() { startMonitoring(); }
 boolean isPermissionGranted();
 void setListener(@Nullable DoomScrollListener listener);
 
-interface DoomScrollListener { void onDoomScrollDetected(@NonNull DoomScrollEvent event); }  // ANY thread
+interface DoomScrollListener {                         // callbacks: ANY thread
+    void onDoomScrollDetected(@NonNull DoomScrollEvent event);
+    default void onDoomScrollWarning(@NonNull String sourcePackage, long sessionMillis) {}
+}
 ```
 - `startMonitoring()`/`stopMonitoring()` are idempotent. `startMonitoring()` is a no-op that logs
   if the permission isn't granted.
-- `AppContainer` sets the listener to `DoomScrollHpBridge`, which calls
+- `AppContainer` sets the listener to `DoomScrollNotifier`, which posts warnings and forwards
+  penalties to `DoomScrollHpBridge`, which calls
   `PetStateRepository.decreaseHp(event.getHpPenalty(), "doom_scroll:" + pkg)`. **The monitor never
   touches the repository directly.** It reports events, and the monitor decides `hpPenalty`
-  (default `DoomScrollEvent.DEFAULT_HP_PENALTY` = 5).
-- `TomodoomApplication.onCreate()` calls `startMonitoring()` if `isPermissionGranted()`.
+  (the real monitor charges 1 HP per minute; `DoomScrollEvent.DEFAULT_HP_PENALTY` = 5 is for the
+  stub and the debug button).
+- `TomodoomApplication.onCreate()` calls `startMonitoring()` if `isPermissionGranted()`. The Pets
+  page calls `startFromForeground()` on resume, which starts the foreground service.
 
 ---
 
@@ -578,8 +590,8 @@ currently exists.
   the permission UI flow. Suggested approach: add a permission card to `PetsFragment`, driven by
   `isPermissionGranted()`, that opens the right Settings screen and calls `startMonitoring()` once
   permission is granted.
-- **Must:** emit `DoomScrollEvent`s with a sensible `hpPenalty`, debounce so one session doesn't
-  drain all the HP, never touch `PetStateRepository` directly, and stay in the default process.
+- **Must:** emit `DoomScrollEvent`s with a sensible `hpPenalty`, never charge the same time twice,
+  never touch `PetStateRepository` directly, and stay in the default process.
 - **Acceptance:** after the permission is granted, a long scroll session in a target app lowers HP
   on the Pets tab. Battery impact is documented in your commit message.
 
@@ -587,11 +599,22 @@ currently exists.
 
 `doomscroll.UsageStatsDoomScrollMonitor` uses the special Android Usage Access setting; the Pets
 tab provides a button to open that setting and starts the monitor when the user returns with access
-granted. It watches Instagram, TikTok, Reddit, YouTube, X/Twitter, Facebook and Snapchat foreground
-usage, emits one 5-HP event after 15 uninterrupted minutes, and applies a 30-minute per-app
-cooldown. Polling is every 15 seconds on a single daemon worker (four checks per minute while the
-app process is alive); it does not use a foreground service and stops if Android kills the app
-process. This limits battery work but means detection is not guaranteed while the process is dead.
+granted. It watches Instagram, TikTok, Reddit, YouTube, X/Twitter, Facebook and Snapchat.
+
+Session rules (`DoomScrollSessionTracker`):
+- The pet loses **1 HP per counted minute**, from the first minute. Part-minutes carry over.
+- A notification appears at **every 10 counted minutes** of a session.
+- Time counts only in a watched app, in **portrait** (display height ≥ width), with the screen on.
+  Landscape pauses the session without losing progress.
+- 60 seconds away from watched apps ends the session. Shorter gaps, in-app screen changes and
+  switching between watched apps keep it going.
+- Only time seen live between polls counts. Replayed usage history and poll gaps over 45 s are
+  never charged.
+
+Polling is every 15 seconds on a single daemon worker. `DoomScrollMonitorService` (type
+`specialUse`, low-priority ongoing notification) keeps the process alive so Android doesn't freeze
+the worker. It doesn't restart after a reboot until the app is opened. Portrait video that isn't
+fullscreen still counts as scrolling, and scrolling in landscape isn't penalised.
 
 ---
 
@@ -698,6 +721,9 @@ process. This limits battery work but means detection is not guaranteed while th
   first so the indices match the export). Nested paths (`"46/16"`) are skipped with a
   `console.warn`. Headless-Edge screenshots on this Windows machine report a viewport about 500px
   wide whatever `--window-size` says, so check framing at ≥500px.
+- **Foreground service start:** start `DoomScrollMonitorService` only through
+  `DoomScrollMonitor.startFromForeground()` while a page is resumed. `Application.onCreate` can run
+  in the background, where Android 12+ throws `ForegroundServiceStartNotAllowedException`.
 - **Switch on strings** works with the `AccessorySlot` / `McpPetActionHandler.TOOL_*` constants
   because they are compile-time constants. Keep new constants `static final` literals.
 
@@ -852,6 +878,15 @@ Debug helpers available in the debug build:
     message shows **"+10 HP awarded via MCP!"**. A wrong answer gets a roast and no HP.
 11. Use a bad key or URL. A SYSTEM `⚠ TruFar error: … HTTP 401…` message appears and the app doesn't crash.
 
+**Doom-scroll detection (real device, watched app installed):**
+
+12. Grant Usage Access and allow notifications. A low-priority "Tomodoom is watching over your pet" notification appears.
+13. Scroll Instagram or YouTube Shorts in portrait. HP drops by 1 each minute.
+14. Keep going to 10 and 20 minutes. A "Time to look up" notification appears each time.
+15. Play a fullscreen landscape YouTube video. HP stops dropping, then resumes when you return to portrait.
+16. Leave watched apps for over a minute, then return. The next warning comes 10 minutes into the new session.
+17. Revoke Usage Access. Monitoring stops and its notification disappears.
+
 ---
 
 ## 9. Project status & known gaps
@@ -869,7 +904,7 @@ Update this table in the same commit when your task changes a subsystem's status
 | Pet rendering | ✅ scene-3 rabbit (three.js, offline) via the HTML/WebView pipeline; add-ons are primitive placeholders | `HtmlManiengineRenderer` + `assets/maniengine/` |
 | Item catalog | ⏳ Placeholder (6 hard-coded items: hats and accessories) | `AccessoryCatalog` → Maniengine Agent |
 | TruFar backend | ✅ Kafka agent via OpenAI-compatible client (mock when unconfigured) | `OpenAiCompatibleChatService` (`TRUFAR_LLM_URL`) / `HttpTruFarChatService` / `MockTruFarChatService` |
-| Doom-scroll detection | ✅ Usage Access polling | `UsageStatsDoomScrollMonitor` |
+| Doom-scroll detection | ✅ Usage Access polling in a foreground service; portrait only, 1 HP per minute, warnings every 10 minutes (not yet tested on a device) | `UsageStatsDoomScrollMonitor` |
 
 Known gaps and TODOs (not assigned to anyone yet):
 - Kafka has no confirmed hosted endpoint. Get a TruFar tokenhub URL/key from the course staff, or
@@ -878,5 +913,5 @@ Known gaps and TODOs (not assigned to anyone yet):
 - The chat transcript isn't persisted, and quiz replay protection only lasts for the process
   lifetime. Real backends must use globally unique quiz IDs.
 - Non-UI user-facing text (MCP results, chat notices, mock bot) is inline English, not in `strings.xml`.
-- Nothing happens yet when HP reaches 0 beyond the "Fainted" status label. No notifications.
+- Nothing happens yet when HP reaches 0 beyond the "Fainted" status label.
 - No instrumented/UI tests yet. JVM tests only (`model`, `doomscroll`, `trufar`, `maniengine`).
