@@ -209,10 +209,12 @@ Assets: `assets/trufar/kafka_agent.json` (the Kafka TruFar agent export, icon st
 thumbnail tool), `pet-model.js` (GENERATED from the scene-3 export) and `vendor/three/` (three.js 0.187.0).
 Tools: `tools/maniengine/extract_model.py` (+ `source/scene-3.html`), `make_thumbnails.py` (+ `thumbnails.html`).
 
-Outside the app: **`backend/`** is the Python relay server (Flask, deployed to PythonAnywhere,
+Outside the app: **`backend/`** is the Python relay server (Flask, hosted on **Google Cloud Run**,
 with Firestore) that connects the app's chat to Kafka on trufar.cn. It's a flat folder of modules
 (`app.py` WSGI entry, `trufar_client.py`, `mcp_server.py`, `store.py`, `markers.py`, `config.py`)
-with pytest tests in `backend/tests/`. It isn't part of the Gradle build; see §5.2 and `backend/README.md`.
+with pytest tests in `backend/tests/`. Cloud Run packaging: `Procfile` (gunicorn), `.python-version`
+(3.12) and `.gcloudignore`; `gcloud run deploy --source backend` builds it with Google's Python
+buildpack, so there's no Dockerfile. It isn't part of the Gradle build; see §5.2 and `backend/README.md`.
 
 ### Dependency direction (enforced by convention)
 
@@ -565,12 +567,28 @@ How `OpenAiCompatibleChatService` behaves:
 #### Relay backend (`backend/`): Kafka on trufar.cn
 
 ```
-app (HttpTruFarChatService) ──/v1/chat/sessions──► relay (Flask, PythonAnywhere) ──► trufar.cn web chat
+app (HttpTruFarChatService) ──/v1/chat/sessions──► relay (Flask, Cloud Run) ──► trufar.cn web chat
           ▲  quiz_evaluated event                    ▲  POST /mcp award_hp               │ Kafka
           └──────────────────────────────────────────┴───────────────────────────────────┘
 ```
 The relay implements the session API below. Deployment, env vars and the TruFar-side setup are
 in `backend/README.md`.
+
+**Hosting (Cloud Run):**
+- Service `tomodoom-relay` in region `asia-east1`, deployed with `--allow-unauthenticated`. That's
+  intended: the app and TruFar call it publicly, and the app token and MCP key are the protection.
+- gunicorn runs 1 worker with **8 threads** (`Procfile`), so Kafka's `/mcp` call is served while
+  the `/messages` request for the same turn is still waiting on TruFar.
+- Secrets come from **Secret Manager** as env vars: `backend-token` → `BACKEND_TOKEN`,
+  `mcp-key` → `MCP_KEY`, `trufar-cookie` → `TRUFAR_COOKIE`. `TRUFAR_CONVERSATION_ID` and
+  `GOOGLE_CLOUD_PROJECT` are plain env vars.
+- `Config.from_env()` picks the Firestore store automatically when `K_SERVICE` (set by Cloud Run)
+  or `GOOGLE_APPLICATION_CREDENTIALS` is present, otherwise memory. On Cloud Run,
+  `firebase_admin.initialize_app()` uses the service's own account (Application Default
+  Credentials), so no key file exists. That account needs `roles/secretmanager.secretAccessor`
+  and `roles/datastore.user`.
+- PythonAnywhere is still documented in the README, but its **free plan is confirmed to block
+  trufar.cn** (§6.2).
 
 **Captured TruFar web protocol** (undocumented; taken from the browser's DevTools, so it may change):
 - `POST https://trufar.cn/api/mashang/core/answer/{conversationId}` with body
@@ -589,7 +607,8 @@ in `backend/README.md`.
   greeting comes back as a `message` event. The greeting never awards HP.
 - Each `/messages` call takes the **turn lease** (`store.begin_turn`), relays the text, and then
   releases it. The lease lives in Firestore (`relay/current`), not in process memory, because
-  PythonAnywhere may run several worker processes and Kafka's MCP call can land in a different one.
+  Cloud Run may run several instances (and PythonAnywhere several worker processes), and Kafka's
+  MCP call can land in a different one.
   Only one turn runs at a time; a second gets HTTP 409 "Kafka is busy". The lease expires after
   `TURN_LEASE_S` (300 s) if a worker dies.
 - HP: Kafka calls the MCP tool **`award_hp(amount 1–10, reason)`** on `POST /mcp` while it

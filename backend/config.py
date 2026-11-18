@@ -26,7 +26,10 @@ class Config:
 
         store = get("TOMODOOM_STORE")
         if not store:
-            store = "firestore" if get("GOOGLE_APPLICATION_CREDENTIALS") else "memory"
+            # Firestore when there are Google credentials: a key file, or Cloud Run's own service
+            # account (Cloud Run sets K_SERVICE). Memory otherwise (tests, local runs).
+            on_google = get("GOOGLE_APPLICATION_CREDENTIALS") or get("K_SERVICE")
+            store = "firestore" if on_google else "memory"
         return Config(
             backend_token=get("BACKEND_TOKEN"),
             mcp_key=get("MCP_KEY"),
