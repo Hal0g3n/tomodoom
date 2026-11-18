@@ -116,11 +116,12 @@ Root package: `com.example.tomodoom`. Source root: `app/src/main/java/com/exampl
 ```
 com.example.tomodoom
 ├── TomodoomApplication.java      Application subclass; owns the AppContainer; starts the monitor
-├── MainActivity.java             Single activity; swipeable ViewPager2 (Customise | Pets | Chat) ↔ BottomNavigationView;
+├── MainActivity.java             Main activity (not exported); swipeable ViewPager2 (Customise | Pets | Chat) ↔ BottomNavigationView;
 │                                 starts on Pets; Back off Pets → Pets; no action bar (NoActionBar theme)
 │
 ├── model/                        Immutable, pure-Java value objects (no android.* imports)
 │   ├── PetState                  name, currentHp, maxHp, equipped items (slot → itemId)
+│   ├── PetNames                  pet-name validation: trim, collapse whitespace, 1–20 chars
 │   ├── PetMood                   THRIVING/OKAY/STRUGGLING/FAINTED from HP (the only HP thresholds)
 │   ├── AccessorySlot             slot IDs: HAT="hat", OUTFIT="outfit", ACCESSORY="accessory"
 │   ├── AccessoryItem             id, slot, displayName
@@ -171,9 +172,12 @@ com.example.tomodoom
 ├── viewmodel/
 │   ├── PetsViewModel             exposes PetState + debug actions
 │   ├── CustomiseViewModel        exposes PetState, selected slot, catalog items, equip action
+│   ├── OnboardingViewModel       onboarding flag, suggested name, submitName()
 │   └── ChatViewModel             exposes transcript + active quiz, sends messages
 │
 └── ui/
+    ├── onboarding/OnboardingActivity   LAUNCHER: names the pet on first launch (and after Reset pet),
+    │                             otherwise forwards straight to MainActivity and finishes
     ├── MainPagerAdapter          FragmentStateAdapter: page index ↔ bottom-nav item id
     │                             (Customise=0, Pets=1 = default, Chat=2)
     ├── customise/CustomiseFragment   pet preview viewport (own renderer instance) + slot tabs + item chips
@@ -187,7 +191,8 @@ Resources: `res/values/colors.xml` + `res/values/themes.xml` (palette and theme,
 `fragment_customise.xml` (`customise_header`, `pet_viewport` at 40% of the page height, `slot_tabs`,
 `item_chips` in a ScrollView), `fragment_chat.xml`, `item_chat_{user,bot,system}.xml`,
 `item_accessory_chip.xml`, `res/drawable/ic_hanger_24dp.xml` (Customise tab icon),
-`activity_main.xml` (`main_pager` ViewPager2 + `nav_view`), `res/menu/bottom_nav_menu.xml`.
+`activity_main.xml` (`main_pager` ViewPager2 + `nav_view`), `activity_onboarding.xml` (title,
+`pet_name_layout`/`pet_name_input`, `start_button`), `res/menu/bottom_nav_menu.xml`.
 `res/values/dimens.xml` (`pet_viewport_stroke`).
 Assets: `assets/trufar/kafka_agent.json` (the Kafka TruFar agent export, icon stripped; §5.2),
 `assets/maniengine/index.html` (the Maniengine page; currently a placeholder, §5.1).
@@ -248,11 +253,14 @@ ui  ──►  viewmodel  ──►  repository  ──►  contracts  ◄──
     Returns the new snapshot. `reason` is a short machine-readable tag (`"quiz_passed:<id>"`,
     `"doom_scroll:<pkg>"`, `"mcp:award_hp"`, `"debug"`) that gets logged.
   - `PetState equipItem(String slot, @Nullable String itemId)`: `null` unequips the slot.
-  - `PetState resetPetState()`: wipes the prefs back to `PetState.createDefault()`.
+  - `PetState resetPetState()`: wipes the prefs back to `PetState.createDefault()` (this also
+    clears the onboarding flag, so onboarding shows again on the next launch).
+  - `boolean isOnboardingComplete()` / `PetState completeOnboarding(String petName)`: the
+    onboarding flag; `completeOnboarding` also sets the name (validate it with `PetNames.normalize`).
 - Persistence: prefs file **`tomodoom_pet_state`**, keys `pet_name`, `current_hp`, `max_hp`,
-  `equipped.<slotId>`. **Only `PetStateRepository` may read or write this file.** A write that
+  `equipped.<slotId>`, `onboarding_complete`. **Only `PetStateRepository` may read or write this file.** A write that
   bypasses it won't reach LiveData observers and will be overwritten.
-- `PetState` is **immutable**. Make modified copies with `withHp(...)` / `withEquippedItem(...)`.
+- `PetState` is **immutable**. Make modified copies with `withHp(...)` / `withName(...)` / `withEquippedItem(...)`.
   Never hold on to a state and assume it is current. Re-read it or observe it.
 
 ### 3.2 Threading contract
@@ -645,6 +653,10 @@ process. This limits battery work but means detection is not guaranteed while th
   bundled asset and no JS interface is added. Don't add `addJavascriptInterface` or file access
   without revisiting that. `new WebView(...)` can throw when the WebView provider is missing or
   updating, so catch it.
+- **Launcher is `OnboardingActivity`**, not `MainActivity` (which is `exported="false"`). It
+  checks `isOnboardingComplete()` before inflating anything and forwards to `MainActivity` if set.
+  Anything that should run on every launch belongs in `TomodoomApplication` or `MainActivity`,
+  not in the onboarding screen.
 - **Switch on strings** works with the `AccessorySlot` / `McpPetActionHandler.TOOL_*` constants
   because they are compile-time constants. Keep new constants `static final` literals.
 
@@ -763,6 +775,11 @@ Debug helpers available in the debug build:
   device connected to inspect and live-edit the pet page.
 
 
+0. Fresh install (or after **Reset pet** + relaunch): the onboarding screen shows "Meet your new
+   pet" with the name field prefilled with `Tomo`. Clearing it disables **Start**; the counter caps
+   at 20. Type `Mochi` and tap **Start** (or the keyboard's Done): the Pets tab opens and its
+   header shows `Mochi`. Rotation keeps the typed text. Relaunching skips onboarding. (The steps
+   below assume you kept `Tomo`.)
 1. Launch the app. The **Pets** tab has **no action bar** (the HP card sits right under the status
    bar) and shows `Tomo`, **HP 50 / 100** and status "Okay". Until Usage Access is granted, a Usage Access card with an **Enable** button
    sits under the HP card (it disappears once access is granted). The bottom nav reads **Customise · Pets · Chat** with Pets selected.
@@ -781,7 +798,7 @@ Debug helpers available in the debug build:
 5. Switch to **Pets**: **HP 60 / 100**.
 6. In Chat, type `/tool get_pet_state` (or `/tool award_hp amount=5`). A SYSTEM message shows the MCP result.
 7. Pets debug row: **Simulate doom-scroll** → HP −5. **Reset pet** → back to 50/100, nothing equipped.
-8. Kill and relaunch the app. HP and equipped items persist (SharedPreferences). The chat transcript resets (in memory only).
+8. Kill and relaunch the app. HP and equipped items persist (SharedPreferences). If you used **Reset pet** in step 7, onboarding shows first. The chat transcript resets (in memory only).
 
 **Kafka (real LLM)**: build with `TRUFAR_LLM_URL`/`TRUFAR_LLM_API_KEY` set (§5.2):
 
@@ -802,6 +819,7 @@ Update this table in the same commit when your task changes a subsystem's status
 | MCP tool bridge | ✅ Production-capable default | `DefaultMcpPetActionHandler` |
 | Pets UI (HP header, pet viewport, debug row) | ✅ Skeleton done | `PetsFragment` / `PetsViewModel` |
 | Customise UI (pet preview, slot tabs, item chips) | ✅ Skeleton done | `CustomiseFragment` / `CustomiseViewModel` |
+| Onboarding (name the pet) | ✅ Done | `OnboardingActivity` / `OnboardingViewModel` |
 | Chat UI | ✅ Skeleton done | `ChatFragment` / `ChatViewModel` / `ChatRepository` |
 | Pet rendering | ✅ HTML/WebView pipeline; ⏳ placeholder page until the Maniengine export lands in `assets/maniengine/` | `HtmlManiengineRenderer` |
 | Item catalog | ⏳ Placeholder (9 hard-coded items) | `AccessoryCatalog` → Maniengine Agent |

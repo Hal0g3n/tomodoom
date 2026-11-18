@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModelProvider;
 
 import com.example.tomodoom.viewmodel.ChatViewModel;
 import com.example.tomodoom.viewmodel.CustomiseViewModel;
+import com.example.tomodoom.viewmodel.OnboardingViewModel;
 import com.example.tomodoom.viewmodel.PetsViewModel;
 
 /**
@@ -42,6 +43,9 @@ public final class ViewModelFactory implements ViewModelProvider.Factory {
         }
         if (modelClass.isAssignableFrom(ChatViewModel.class)) {
             return (T) new ChatViewModel(container.getChatRepository());
+        }
+        if (modelClass.isAssignableFrom(OnboardingViewModel.class)) {
+            return (T) new OnboardingViewModel(container.getPetStateRepository());
         }
         throw new IllegalArgumentException("Unknown ViewModel class: " + modelClass.getName());
     }

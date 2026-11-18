@@ -23,6 +23,14 @@
     <string name="usage_access_explanation">Allow Usage Access to detect long sessions in social and video apps. Monitoring checks about every 15 seconds while Tomodoom is active.</string>
     <string name="usage_access_open_settings">Enable</string>
 
+    <!-- Onboarding -->
+    <string name="onboarding_emoji" translatable="false">🐾</string>
+    <string name="onboarding_title">Meet your new pet</string>
+    <string name="onboarding_subtitle">Give them a name. Scroll less to keep them healthy.</string>
+    <string name="onboarding_name_hint">Pet name</string>
+    <string name="onboarding_start">Start</string>
+    <string name="onboarding_name_error">Enter a name (maximum length: %1$d)</string>
+
     <!-- Chat page -->
     <string name="chat_input_hint">Message TruFar…</string>
     <string name="chat_input_hint_quiz">Type your answer…</string>
