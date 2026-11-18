@@ -101,7 +101,7 @@ opened from a hanger FAB) and **Chat**
 | Java source level | **1.8**. Lambdas and method refs are fine. **No** `var`, switch expressions, records, text blocks, `List.of`/`Map.of`/`Set.of`, `String.isBlank()` or any other Java 9+ API |
 | Android | `compileSdk = 34`, `targetSdk = 34`, **`minSdk = 24`** (check API levels before calling newer APIs)                                                                      |
 | Build | AGP 8.1.1, Gradle 8.0 wrapper, Kotlin DSL build scripts (`*.gradle.kts`)                                                                                                 |
-| UI | XML layouts + **ViewBinding**, `Activity`/`Fragment`, Jetpack Navigation + `BottomNavigationView`, Material Components (`Theme.MaterialComponents.Light.NoActionBar`, light only)  |
+| UI | XML layouts + **ViewBinding**, `Activity`/`Fragment`, swipeable `ViewPager2` pages + `BottomNavigationView` (no Jetpack Navigation), Material Components (`Theme.MaterialComponents.Light.NoActionBar`, light only)  |
 | Architecture | **MVVM**: `ViewModel` + `LiveData` (lifecycle 2.7.0), repositories as single sources of truth                                                                            |
 | Persistence | **`SharedPreferences`** (no Room, no DataStore)                                                                                                                          |
 | DI | Hand-written service locator (`di.AppContainer`). No Hilt or Dagger                                                                                                      |
@@ -116,8 +116,8 @@ Root package: `com.example.tomodoom`. Source root: `app/src/main/java/com/exampl
 ```
 com.example.tomodoom
 ├── TomodoomApplication.java      Application subclass; owns the AppContainer; starts the monitor
-├── MainActivity.java             Single activity; BottomNavigationView ↔ NavController (Pets | Chat);
-│                                 no action bar (NoActionBar theme)
+├── MainActivity.java             Single activity; swipeable ViewPager2 (Pets | Chat) ↔ BottomNavigationView;
+│                                 Back off Pets → Pets; no action bar (NoActionBar theme); implements PageSwipeHost
 │
 ├── model/                        Immutable, pure-Java value objects (no android.* imports)
 │   ├── PetState                  name, currentHp, maxHp, equipped items (slot → itemId)
@@ -167,6 +167,8 @@ com.example.tomodoom
 │   └── ChatViewModel             exposes transcript + active quiz, sends messages
 │
 └── ui/
+    ├── MainPagerAdapter          FragmentStateAdapter: page index ↔ bottom-nav item id (Pets=0, Chat=1)
+    ├── PageSwipeHost             lets a page suspend page swipes (Pets, while its panel is open)
     ├── pets/PetsFragment         HP header, pet viewport (FrameLayout), customise FAB → right-side
     │                             DrawerLayout panel (END drawer) holding the customisation controls
     └── chat/ChatFragment, ChatAdapter   RecyclerView (3 view types) + input bar
@@ -178,7 +180,7 @@ Resources: `res/values/colors.xml` + `res/values/themes.xml` (palette and theme,
 `panel_customise.xml` as the END drawer), `panel_customise.xml` (header + close button, `slot_tabs`,
 `item_chips`), `fragment_chat.xml`, `item_chat_{user,bot,system}.xml`, `item_accessory_chip.xml`,
 `res/drawable/ic_hanger_24dp.xml` (customise FAB) and `ic_close_24dp.xml` (panel close),
-`res/menu/bottom_nav_menu.xml`, `res/navigation/mobile_navigation.xml`.
+`activity_main.xml` (`main_pager` ViewPager2 + `nav_view`), `res/menu/bottom_nav_menu.xml`.
 Assets: `assets/trufar/kafka_agent.json` (the Kafka TruFar agent export, icon stripped; §5.2).
 
 ### Dependency direction (enforced by convention)
@@ -550,12 +552,22 @@ process. This limits battery work but means detection is not guaranteed while th
 - **Theme:** `Theme.MaterialComponents.Light.NoActionBar`, not Material3. Use
   MaterialComponents attributes (`?attr/textAppearanceHeadline6`, `?attr/materialButtonOutlinedStyle`).
   The app is **light only**: don't add `values-night/` resources. Colours follow §6.3.
-- **No action bar:** the theme is `NoActionBar`, so `getSupportActionBar()` returns `null` and
-  `NavigationUI.setupActionBarWithNavController` must not be called. Each page draws its own header
+- **No action bar:** the theme is `NoActionBar`, so `getSupportActionBar()` returns `null`; don't
+  rely on it. Each page draws its own header
   (the HP card on Pets); content starts right under the status bar.
-- **Navigation:** the host is a `FragmentContainerView` NavHostFragment. Get the `NavController`
-  from `NavHostFragment#getNavController()`, not `Navigation.findNavController(activity, id)`.
-  A new top-level tab means a menu item **and** a nav-graph destination with the same id.
+- **Top-level pages (`ViewPager2`):** there is no Jetpack Navigation. `MainActivity` hosts the pages
+  in `main_pager` and keeps it in sync with `nav_view` both ways. `viewpager2` (1.1.0-beta02) comes
+  in transitively from Material, like drawerlayout, so don't pin it. Rules:
+  - A new top-level tab means a menu item in `bottom_nav_menu.xml` **and** an entry in
+    `MainPagerAdapter` (`MENU_ITEM_IDS` + `createFragment`), in the same order.
+  - `FragmentStateAdapter` creates pages lazily (Chat is created the first time you swipe or tap
+    to it) and only the current page is `RESUMED`; the other is capped at `STARTED`. Use
+    `onResume`/`onPause` for "page became visible/hidden".
+  - ViewPager2 restores its page **without** calling `onPageSelected`, so `MainActivity` re-syncs
+    the bottom nav and Back callback in `onRestoreInstanceState`.
+  - A child that needs horizontal drags must either call `PageSwipeHost.setPageSwipeEnabled(false)`
+    (and re-enable in `onPause`), or call `getParent().requestDisallowInterceptTouchEvent(true)` on
+    `ACTION_DOWN` for a smaller area.
 - **Dependencies** must be compatible with compileSdk 34 / AGP 8.1.1. Many current AndroidX
   releases need compileSdk 35+, so check before you bump anything. Pin exact versions.
 - **Pets customisation panel (`DrawerLayout`):** `androidx.drawerlayout` (1.1.1) and
@@ -569,6 +581,8 @@ process. This limits battery work but means detection is not guaranteed while th
     while the panel is open.
   - The drawer is `LOCK_MODE_LOCKED_CLOSED` while closed (no edge swipe; it opens only from the
     FAB) and unlocked while open.
+  - While the panel is open and Pets is resumed, page swipes are disabled through `PageSwipeHost`
+    so swipe-to-close doesn't flip the page. `onPause` re-enables them.
   - Lint flags `Overdraw` on an included drawer root that has a background. It's a false positive
     and is suppressed with `tools:ignore`.
 - **LLM-graded HP is persuadable:** a user can talk Kafka into emitting `[[CORRECT]]`. Each award
@@ -653,8 +667,8 @@ nothing, use the WSL command. The first build of a session can take a minute whi
 daemon starts.
 
 A change counts as verified when `assembleDebug` and `testDebugUnitTest` succeed with no errors and
-`lintDebug` reports **0 errors**. The current lint baseline is **12 warnings** of two accepted types
-(11 `GradleDependency` + 1 `OldTargetApi`):
+`lintDebug` reports **0 errors**. The current lint baseline is **10 warnings** of two accepted types
+(9 `GradleDependency` + 1 `OldTargetApi`):
 `OldTargetApi` (`targetSdk = 34` is fixed by the stack) and `GradleDependency` (newer AndroidX
 versions require compileSdk 35+ or a newer AGP). Don't introduce new lint warnings. javac currently
 builds with zero warnings, so keep it that way.
@@ -701,7 +715,10 @@ Debug helpers available in the debug build:
    - a right-edge swipe does *not* open the panel;
    - the panel stays open across rotation and across a Pets → Chat → Pets round trip;
    - the bottom nav still switches tabs while the panel is open;
+   - while the panel is open, swiping left/right does *not* change page (swiping right closes it);
    - with the panel closed, Back leaves the app as before.
+   - **Swiping:** with the panel closed, swipe left on Pets to reach Chat and right to return. The
+     bottom nav selection follows. Back on Chat returns to Pets.
 3. Open **Chat**. There is no action bar; the transcript starts right under the status bar. The mock bot greets you. Type `quiz`, and the bot asks a question (e.g. "What is 2 + 2?").
 4. Answer correctly (`4`). The bot confirms, and a SYSTEM message shows **"+10 HP awarded via MCP! (60/100 HP)"**.
 5. Switch to **Pets**: **HP 60 / 100**.

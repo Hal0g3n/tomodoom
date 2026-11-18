@@ -27,6 +27,7 @@ import com.example.tomodoom.model.AccessoryItem;
 import com.example.tomodoom.model.AccessorySlot;
 import com.example.tomodoom.model.DoomScrollEvent;
 import com.example.tomodoom.model.PetState;
+import com.example.tomodoom.ui.PageSwipeHost;
 import com.example.tomodoom.viewmodel.PetsViewModel;
 import com.google.android.material.chip.Chip;
 import com.google.android.material.tabs.TabLayout;
@@ -108,6 +109,15 @@ public class PetsFragment extends Fragment {
     public void onResume() {
         super.onResume();
         updateUsageAccessCard();
+        syncCustomisePanelState();
+    }
+
+    @Override
+    public void onPause() {
+        // Leaving the page (swipe, bottom nav or app switch): page swipes must work again even if
+        // the panel is still open, or the user couldn't swipe back to Pets.
+        setPageSwipeEnabled(true);
+        super.onPause();
     }
 
     // ---------------------------------------------------------------------------------------
@@ -177,14 +187,28 @@ public class PetsFragment extends Fragment {
 
     /**
      * Open: unlocked (swipe/scrim close it) and Back closes it. Closed: locked so it only opens
-     * from the FAB (no edge-swipe or peek), and Back falls through to navigation.
+     * from the FAB (no edge-swipe or peek), and Back falls through to navigation. Page swipes
+     * (ViewPager2) are suspended while it is open and this page is resumed.
      */
     private void syncCustomisePanelState() {
+        if (binding == null) {
+            return;
+        }
         boolean open = binding.petsDrawer.isDrawerOpen(GravityCompat.END);
         binding.petsDrawer.setDrawerLockMode(open
                 ? DrawerLayout.LOCK_MODE_UNLOCKED
                 : DrawerLayout.LOCK_MODE_LOCKED_CLOSED, GravityCompat.END);
         closePanelOnBack.setEnabled(open);
+        // While the panel is open, horizontal drags belong to it (swipe-to-close), not the pager.
+        if (isResumed()) {
+            setPageSwipeEnabled(!open);
+        }
+    }
+
+    private void setPageSwipeEnabled(boolean enabled) {
+        if (getActivity() instanceof PageSwipeHost) {
+            ((PageSwipeHost) getActivity()).setPageSwipeEnabled(enabled);
+        }
     }
 
     // ---------------------------------------------------------------------------------------
