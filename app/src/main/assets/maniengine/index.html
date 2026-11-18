@@ -5,16 +5,19 @@
   This page owns the camera, lighting loop and the app contract:
     - reads window.tomodoomPetState at startup and listens for "tomodoom:petstate";
     - mood drives the idle animation, equipped items toggle the add-ons below.
-  No <meta name="tomodoom-touch">: there are no drag controls, so tab swipes work over the pet.
+  tomodoom-touch "centre": one-finger drags starting in the centre turn the rabbit; those starting on
+  the side edges or bottom strip swipe between tabs. Two fingers pinch-zoom (the host keeps multi-touch
+  gestures away from the tab pager).
 -->
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <meta name="tomodoom-touch" content="centre">
   <title>Tomodoom pet</title>
   <style>
     html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; }
-    canvas { display: block; transition: filter .6s; }
+    canvas { display: block; transition: filter .6s; touch-action: none; }
     #error { position: absolute; inset: auto 0 12px; text-align: center; font: 13px sans-serif;
       color: #8C8F92; }
   </style>
@@ -50,26 +53,77 @@ addEventListener('tomodoom:petstate', e => applyState(e.detail));
 applyState(window.tomodoomPetState);
 
 // --- Camera: frame the rabbit (+ the near rug) for whatever aspect the viewport has ---
+const TALL_ASPECT = .8, TALL_DROP = .08, MIN_ZOOM = .75, MAX_ZOOM = 3;
 function fit() {
+  const w = document.documentElement.clientWidth, h = document.documentElement.clientHeight;
+  if (!w || !h) return;  // detached while moving between pages: keep the last good framing
   const size = rabbitBox.getSize(new THREE.Vector3()), centre = rabbitBox.getCenter(new THREE.Vector3());
-  camera.aspect = innerWidth / innerHeight;
+  camera.aspect = w / h;
   const vFov = THREE.MathUtils.degToRad(camera.fov) / 2;
   const fitH = (size.y * .75) / Math.tan(vFov), fitW = (size.x * 1.1) / (Math.tan(vFov) * camera.aspect);
   const dist = Math.max(fitH, fitW, 2.5);
   camera.position.set(0, centre.y + dist * .18, centre.z + dist);
   camera.lookAt(0, centre.y - size.y * .08, centre.z);
+  // Tall (full-page) viewports: sit the rabbit lower, clear of the HP card floating at the top.
+  if (camera.aspect < TALL_ASPECT) camera.setViewOffset(w, h, 0, -h * TALL_DROP, w, h);
+  else camera.clearViewOffset();
   camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
+  renderer.setSize(w, h);
+  renderer.render(scene, camera);  // same frame as the resize, so no frame shows the old aspect
 }
-addEventListener('resize', fit);
+new ResizeObserver(fit).observe(document.documentElement);
 fit();
+
+// --- Touch: one finger in the centre turns the rabbit; two fingers pinch to zoom ---
+// camera.zoom scales the picture uniformly, so the model is never distorted.
+// TAB_EDGE and TAB_BOTTOM mirror ManiengineProtocol: outside the centre, drags belong to the tab pager.
+const TAB_EDGE = .15, TAB_BOTTOM = .2, MAX_FLING = 10, FLING_DECAY = 4, FLING_STALE_MS = 80;
+const pointers = new Map();
+let pinch = null, spin = null, spinVelocity = 0;
+const spread = () => { const [a, b] = [...pointers.values()]; return Math.max(Math.hypot(a.x - b.x, a.y - b.y), 1); };
+const startPinch = () => { pinch = pointers.size === 2 ? { spread: spread(), zoom: camera.zoom } : null; };
+const canvas = renderer.domElement;
+const inCentre = e => e.clientX >= canvas.clientWidth * TAB_EDGE && e.clientX < canvas.clientWidth * (1 - TAB_EDGE)
+  && e.clientY < canvas.clientHeight * (1 - TAB_BOTTOM);
+canvas.addEventListener('pointerdown', e => {
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  startPinch();
+  spinVelocity = 0;
+  spin = pointers.size === 1 && inCentre(e) ? { id: e.pointerId, x: e.clientX, time: e.timeStamp } : null;  // a second finger ends the turn
+});
+canvas.addEventListener('pointermove', e => {
+  if (!pointers.has(e.pointerId)) return;
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (spin && spin.id === e.pointerId) {
+    const turn = (e.clientX - spin.x) / Math.max(canvas.clientWidth, 1) * Math.PI * 2;  // one viewport width = one full turn
+    rabbit.rotation.y += turn;
+    spinVelocity = THREE.MathUtils.clamp(turn / Math.max(e.timeStamp - spin.time, 1) * 1000, -MAX_FLING, MAX_FLING);
+    spin.x = e.clientX;
+    spin.time = e.timeStamp;
+  }
+  if (!pinch) return;
+  camera.zoom = THREE.MathUtils.clamp(pinch.zoom * spread() / pinch.spread, MIN_ZOOM, MAX_ZOOM);
+  camera.updateProjectionMatrix();
+});
+for (const type of ['pointerup', 'pointercancel']) canvas.addEventListener(type, e => {
+  pointers.delete(e.pointerId);
+  startPinch();
+  if (!spin || spin.id !== e.pointerId) return;
+  if (type === 'pointercancel' || e.timeStamp - spin.time > FLING_STALE_MS) spinVelocity = 0;  // held still before lifting: no coast
+  spin = null;
+});
 
 // --- Idle animation per mood; eased so mood changes blend ---
 const goal = { y: 0, tip: 0, droop: 0, squash: 1 };
 let last = performance.now();
 function frame(now) {
-  const t = now / 1000, k = 1 - Math.exp(-Math.min(now - last, 100) / 1000 * 6);
+  const t = now / 1000, dt = Math.max(0, Math.min(now - last, 100)) / 1000, k = 1 - Math.exp(-dt * 6);  // a slow first render can leave now < last
   last = now;
+  if (!spin && spinVelocity) {  // coast after a flick
+    rabbit.rotation.y += spinVelocity * dt;
+    spinVelocity *= Math.exp(-dt * FLING_DECAY);
+    if (Math.abs(spinVelocity) < .02) spinVelocity = 0;
+  }
   if (mood === 'thriving') Object.assign(goal, { y: Math.abs(Math.sin(t * 3)) * .12, tip: 0, droop: -.05, squash: 1 });
   else if (mood === 'struggling') Object.assign(goal, { y: Math.sin(t * .9) * .01, tip: 0, droop: .3, squash: .97 });
   else if (mood === 'fainted') Object.assign(goal, { y: 0, tip: 1.35, droop: .4, squash: 1 });

@@ -188,13 +188,14 @@ com.example.tomodoom
     ├── PetStage                  MainActivity's ONE pet renderer, lent to the resumed page's viewport
     ├── customise/CustomiseFragment   pet preview viewport (via PetStage) + full-width slot tabs + item grid
     ├── customise/AccessoryGridAdapter, AccessoryThumbnails   two-column item circles; item ID → thumbnail
-    ├── pets/PetsFragment         HP header, Usage Access card, pet viewport (FrameLayout), debug row
+    ├── pets/PetsFragment         full-page pet viewport (FrameLayout) under the HP header, Usage Access card, debug row
     └── chat/ChatFragment, ChatAdapter   RecyclerView (3 view types) + input bar
 ```
 
 Resources: `res/values/colors.xml` + `res/values/themes.xml` (palette and theme, §6.3; no
-`values-night/`), `res/layout/fragment_pets.xml` (a `ConstraintLayout` with `hp_card`,
-`usage_access_card` (Usage Access prompt, §5.3), `pet_viewport` and `debug_panel`),
+`values-night/`), `res/layout/fragment_pets.xml` (a `ConstraintLayout`: a borderless `pet_viewport` fills the page, with
+`hp_card`, `usage_access_card` (Usage Access prompt, §5.3) and `debug_panel` floating over it; both cards
+are transparent),
 `fragment_customise.xml` (`customise_header`, `pet_viewport` at 40% of the page height, `slot_tabs`,
 `item_grid` RecyclerView), `fragment_chat.xml`, `item_chat_{user,bot,system}.xml`,
 `item_accessory_circle.xml`, `res/drawable/bg_accessory_circle.xml`, `ic_item_none_24dp.xml`,
@@ -453,8 +454,9 @@ How the page is hosted (`HtmlManiengineRenderer`):
 - JavaScript and DOM storage are on. File/content access is off, there's no JS interface, and the
   main frame can't navigate off the origin. Network URLs (e.g. a CDN script) still load, but bundle
   libraries locally so the pet works offline.
-- The WebView background is transparent (the viewport's `floral_white` shows through), inset by
-  `@dimen/pet_viewport_stroke` and clipped to the viewport's rounded corners.
+- The WebView background is transparent (the window's `floral_white` shows through). In a viewport
+  with a background (Customise) it is inset by `@dimen/pet_viewport_stroke` and clipped to the rounded
+  corners; in the borderless Pets viewport it fills the page edge to edge.
 - `pause`/`resume` call `WebView.onPause()`/`onResume()`. A page should still stop its own
   `requestAnimationFrame` loop on `visibilitychange` if it does heavy work.
 - If there's no usable WebView, or the render process dies (e.g. a WebGL crash), the viewport shows
@@ -472,14 +474,20 @@ How the page is hosted (`HtmlManiengineRenderer`):
   `mood` is a `PetMood` id (`thriving` | `okay` | `struggling` | `fainted`). `equipped` lists only
   filled slots (`hat`, `accessory`), with the catalog display name.
 - **Touch:** by default, horizontal drags on the pet swipe between tabs. A page that needs drags
-  (orbit/rotate controls) adds `<meta name="tomodoom-touch" content="capture">`. The pager then
-  won't take drags that *start* on the viewport, but swiping still works from the HP card and below.
+  declares a policy with `<meta name="tomodoom-touch" content="…">`. `capture` keeps every drag that
+  *starts* on the viewport. `centre` (used by `index.html`) keeps only drags starting in
+  `ManiengineProtocol.isCentreZone`; the outer 15% on each side and the bottom 20% stay with the tab
+  pager. `index.html` mirrors those fractions (`TAB_EDGE`, `TAB_BOTTOM`), and `ManiengineProtocolTest`
+  fails if they drift. A centre drag turns the `rabbit` group (`rotation.y`, one viewport width = one
+  full turn) and a flick coasts to a stop; the rug stays still. A second finger always keeps the gesture in the page (`PetWebView` blocks the pager on
+  `ACTION_POINTER_DOWN`), which is how `index.html` pinch-zooms (`camera.zoom`, 0.75x to 3x).
 - The page talks only one way (app → page). If it ever needs to call back (e.g. "item tapped"),
   extend `ManiengineProtocol` and this section together.
 - **Layout note:** there is **one** WebView, moved (not reloaded) between two viewports: the large
   one on Pets and a preview at 40% of the page height on Customise, above the slot tabs and item
-  circles. Nothing overlays either viewport. The page gets a `resize` each move, so it must refit to
-  any size (`index.html` does, in `fit()`). The page that isn't shown has an empty viewport, and
+  circles. On Pets the cards and debug row float over the pet, so `fit()` sits the rabbit lower in tall
+  viewports. The page is resized on each move, so it must refit to any size without distorting the
+  model (`index.html` does, with a `ResizeObserver` calling `fit()`). The page that isn't shown has an empty viewport, and
   while you drag between pages the incoming viewport stays empty until the swipe settles.
 - **Acceptance:** equipping/unequipping on the Customise tab updates the viewport immediately. Rotating
   or switching tabs doesn't leak views (`release` cleans up). Nothing happens off the main thread
@@ -686,7 +694,7 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
   - ViewPager2 restores its page **without** calling `onPageSelected`, so `MainActivity` re-syncs
     the bottom nav and Back callback in `onRestoreInstanceState`.
   - A child that needs horizontal drags calls `getParent().requestDisallowInterceptTouchEvent(true)`
-    on `ACTION_DOWN` (as the Maniengine WebView does for `tomodoom-touch` capture). If a whole page
+    on `ACTION_DOWN` (as the Maniengine WebView does for its `tomodoom-touch` policy). If a whole page
     ever needs to suspend swiping, add a host callback calling `ViewPager2.setUserInputEnabled`
     (the old `PageSwipeHost` did this for the removed customisation drawer).
 - **Bottom bar:** `labelVisibilityMode="selected"` makes Material widen the open tab and show only
@@ -749,7 +757,8 @@ Rules:
   `viewport_stroke` do) rather than a new hex value. Adding a new token means a palette change:
   update the table above in the same commit.
 - `eggshell` on `floral_white` has very low contrast. Borders that must be visible use a 2dp stroke
-  (as the pet viewport does), and cards are flat (`cardElevation="0dp"`) with a 1dp eggshell stroke.
+  (as the Customise pet viewport does). The Pets cards are flat, transparent and have no stroke, because
+  they float over the pet.
 - `slate_grey` on `floral_white` is about 3.0:1 (`jet` is about 10.7:1, `eggshell` about 1.06:1), so keep it for secondary or large text. Body text
   uses `jet`.
 - Renderers (Maniengine) may use their own art colours inside the viewport, but the chrome around
@@ -859,9 +868,13 @@ Debug helpers available in the debug build:
    lists a single page target. Also check:
    - the selected slot tab and the current page survive rotation;
    - Back on Customise or Chat returns to Pets; Back on Pets leaves the app;
-   - **Swiping:** from Pets, swipe left to Chat and right to Customise. The bottom nav selection
-     follows.
-   - Swiping over the pet also changes page (it doesn't declare `tomodoom-touch`).
+   - **Swiping:** from Pets, starting on a side edge or the bottom strip of the page, swipe left to
+     Chat and right to Customise. The bottom nav selection follows.
+   - **Rotating:** on Pets and Customise, a one-finger drag starting in the centre of the pet turns
+     it both ways without changing page, and a flick coasts to a stop. The rug stays still, worn items
+     turn with the rabbit, and the angle is kept when moving between the two pages.
+   - On Pets the pet has no border and fills the page behind transparent cards. Pinching with two
+     fingers zooms it evenly (0.75x to 3x) without changing page.
    - Mood: HP ≥ the thriving threshold makes the rabbit hop, struggling droops its head and
      desaturates, and 0 HP (Simulate doom-scroll repeatedly) tips it over in grey.
 3. Open **Chat**. There is no action bar; the transcript starts right under the status bar. The mock bot greets you. Type `quiz`, and the bot asks a question (e.g. "What is 2 + 2?").

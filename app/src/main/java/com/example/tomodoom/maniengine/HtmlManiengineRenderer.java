@@ -227,7 +227,9 @@ public final class HtmlManiengineRenderer implements ManiengineAssetRenderer {
         pageReady = true;
         view.evaluateJavascript(ManiengineProtocol.TOUCH_POLICY_QUERY, result -> {
             if (view == webView) {
-                webView.capturesTouch = ManiengineProtocol.capturesTouch(result);
+                String policy = ManiengineProtocol.touchPolicy(result);
+                webView.capturesTouch = ManiengineProtocol.TOUCH_CAPTURE.equals(policy);
+                webView.capturesCentre = ManiengineProtocol.TOUCH_CENTRE.equals(policy);
             }
         });
         deliverIfReady();
@@ -273,12 +275,14 @@ public final class HtmlManiengineRenderer implements ManiengineAssetRenderer {
 
     /**
      * WebView that stops ancestors (the tab pager) from intercepting a multi-touch gesture, so the
-     * page can pinch-zoom, and any drag that starts on it when the page asked to capture touch.
+     * page can pinch-zoom, and any drag the page asked to keep through its touch policy.
      */
     private static final class PetWebView extends WebView {
 
         /** Page asked to keep drags (see {@link ManiengineProtocol#TOUCH_CAPTURE}). */
         boolean capturesTouch;
+        /** Page asked to keep centre drags (see {@link ManiengineProtocol#TOUCH_CENTRE}). */
+        boolean capturesCentre;
 
         PetWebView(@NonNull Context context) {
             super(context);
@@ -291,8 +295,10 @@ public final class HtmlManiengineRenderer implements ManiengineAssetRenderer {
         @Override
         public boolean dispatchTouchEvent(@NonNull MotionEvent event) {
             int action = event.getActionMasked();
-            if (action == MotionEvent.ACTION_POINTER_DOWN
-                    || (capturesTouch && action == MotionEvent.ACTION_DOWN)) {
+            boolean keepDrag = action == MotionEvent.ACTION_DOWN && (capturesTouch
+                    || (capturesCentre && ManiengineProtocol.isCentreZone(
+                            event.getX(), event.getY(), getWidth(), getHeight())));
+            if (action == MotionEvent.ACTION_POINTER_DOWN || keepDrag) {
                 ViewParent parent = getParent();
                 if (parent != null) {
                     parent.requestDisallowInterceptTouchEvent(true);

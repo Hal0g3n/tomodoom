@@ -78,11 +78,45 @@ public class ManiengineProtocolTest {
     }
 
     @Test
+    public void touchPolicy_normalisesEvaluateJavascriptResults() {
+        assertEquals("centre", ManiengineProtocol.touchPolicy(" \"Centre\" "));
+        assertEquals("capture", ManiengineProtocol.touchPolicy("\"capture\""));
+        assertEquals("", ManiengineProtocol.touchPolicy("\"\""));
+        assertEquals("", ManiengineProtocol.touchPolicy(null));
+        assertFalse(ManiengineProtocol.capturesTouch("\"centre\""));
+    }
+
+    @Test
+    public void isCentreZone_leavesSideEdgesAndBottomStripToThePager() {
+        assertTrue(ManiengineProtocol.isCentreZone(500, 400, 1000, 1000));
+        assertTrue(ManiengineProtocol.isCentreZone(150, 0, 1000, 1000));
+        assertFalse(ManiengineProtocol.isCentreZone(149, 400, 1000, 1000));
+        assertFalse(ManiengineProtocol.isCentreZone(850, 400, 1000, 1000));
+        assertTrue(ManiengineProtocol.isCentreZone(500, 799, 1000, 1000));
+        assertFalse(ManiengineProtocol.isCentreZone(500, 800, 1000, 1000));
+        assertFalse(ManiengineProtocol.isCentreZone(0, 0, 0, 0));
+    }
+
+    @Test
     public void bundledEntryPage_listensForTheStateEvent() throws Exception {
-        File entry = new File("src/main/assets/" + ManiengineAssets.ROOT_DIR
-                + ManiengineAssets.ENTRY_FILE);
-        String html = new String(Files.readAllBytes(entry.toPath()), StandardCharsets.UTF_8);
+        String html = bundledEntryPage();
         assertTrue(html.contains(ManiengineProtocol.STATE_EVENT));
         assertTrue(html.contains(ManiengineProtocol.STATE_GLOBAL));
+    }
+
+    @Test
+    public void bundledEntryPage_mirrorsTheCentreTouchZone() throws Exception {
+        String html = bundledEntryPage();
+        assertTrue(html.contains("<meta name=\"" + ManiengineProtocol.TOUCH_META_NAME
+                + "\" content=\"" + ManiengineProtocol.TOUCH_CENTRE + "\">"));
+        assertEquals(0.15, ManiengineProtocol.TAB_SWIPE_EDGE_FRACTION, 0);
+        assertEquals(0.20, ManiengineProtocol.TAB_SWIPE_BOTTOM_FRACTION, 0);
+        assertTrue(html.contains("TAB_EDGE = .15, TAB_BOTTOM = .2"));
+    }
+
+    private static String bundledEntryPage() throws Exception {
+        File entry = new File("src/main/assets/" + ManiengineAssets.ROOT_DIR
+                + ManiengineAssets.ENTRY_FILE);
+        return new String(Files.readAllBytes(entry.toPath()), StandardCharsets.UTF_8);
     }
 }

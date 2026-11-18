@@ -29,7 +29,9 @@ import java.util.Map;
  * {@code AccessorySlot} id; {@code name} falls back to the item id if it isn't in the catalog.</p>
  *
  * <p>The page opts in to keeping horizontal drags (e.g. orbit controls), instead of letting them
- * swipe between tabs, with {@code <meta name="tomodoom-touch" content="capture">}.</p>
+ * swipe between tabs, with {@code <meta name="tomodoom-touch" content="capture">} (every drag that
+ * starts on it) or {@code content="centre"} (only drags starting in {@link #isCentreZone}, leaving
+ * the side edges and bottom strip to the tab pager).</p>
  */
 public final class ManiengineProtocol {
 
@@ -41,6 +43,12 @@ public final class ManiengineProtocol {
     public static final String TOUCH_META_NAME = "tomodoom-touch";
     /** {@code content} value meaning "the page keeps all drags that start on it". */
     public static final String TOUCH_CAPTURE = "capture";
+    /** {@code content} value meaning "the page keeps drags that start in the centre zone". */
+    public static final String TOUCH_CENTRE = "centre";
+    /** Width of each side strip left to the tab pager, as a fraction of the viewport width. */
+    public static final double TAB_SWIPE_EDGE_FRACTION = 0.15;
+    /** Height of the bottom strip left to the tab pager, as a fraction of the viewport height. */
+    public static final double TAB_SWIPE_BOTTOM_FRACTION = 0.20;
 
     /** Evaluates to the page's {@link #TOUCH_META_NAME} content, or {@code ""}. */
     public static final String TOUCH_POLICY_QUERY =
@@ -95,14 +103,33 @@ public final class ManiengineProtocol {
      * @return true if the page asked to capture drags.
      */
     public static boolean capturesTouch(@Nullable String evaluateResult) {
+        return TOUCH_CAPTURE.equals(touchPolicy(evaluateResult));
+    }
+
+    /**
+     * @param evaluateResult the raw {@code evaluateJavascript} result of {@link #TOUCH_POLICY_QUERY}.
+     * @return the page's touch policy in lower case, or {@code ""} if it declared none.
+     */
+    @NonNull
+    public static String touchPolicy(@Nullable String evaluateResult) {
         if (evaluateResult == null) {
-            return false;
+            return "";
         }
         String v = evaluateResult.trim();
         if (v.length() >= 2 && v.charAt(0) == '"' && v.charAt(v.length() - 1) == '"') {
             v = v.substring(1, v.length() - 1).trim();
         }
-        return TOUCH_CAPTURE.equalsIgnoreCase(v);
+        return v.toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * @return true if a touch at ({@code x}, {@code y}) in a {@code width} × {@code height} viewport
+     * belongs to the page under {@link #TOUCH_CENTRE}. {@code index.html} mirrors this test.
+     */
+    public static boolean isCentreZone(float x, float y, int width, int height) {
+        return x >= width * TAB_SWIPE_EDGE_FRACTION
+                && x < width * (1 - TAB_SWIPE_EDGE_FRACTION)
+                && y < height * (1 - TAB_SWIPE_BOTTOM_FRACTION);
     }
 
     /** JSON string literal; also escapes U+2028/2029 and '<' so the JSON is safe inline in JS. */
