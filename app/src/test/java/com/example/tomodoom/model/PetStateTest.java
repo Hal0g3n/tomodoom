@@ -32,6 +32,17 @@ public class PetStateTest {
     }
 
     @Test
+    public void withName_changesOnlyTheName() {
+        PetState s = PetState.createDefault().withHp(70).withEquippedItem(AccessorySlot.HAT, "hat_cap");
+        PetState renamed = s.withName("Mochi");
+        assertEquals("Mochi", renamed.getPetName());
+        assertEquals(70, renamed.getCurrentHp());
+        assertEquals(s.getMaxHp(), renamed.getMaxHp());
+        assertEquals(s.getEquippedItems(), renamed.getEquippedItems());
+        assertEquals(PetState.DEFAULT_PET_NAME, s.getPetName());
+    }
+
+    @Test
     public void constructor_clampsAndSanitises() {
         Map<String, String> equipped = new HashMap<>();
         equipped.put(AccessorySlot.HAT, "hat_cap");

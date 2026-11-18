@@ -98,6 +98,12 @@ public final class PetState {
         return equippedItems.get(slot);
     }
 
+    /** @return a copy with the pet's name set to {@code name} (see {@link PetNames} for validation). */
+    @NonNull
+    public PetState withName(@NonNull String name) {
+        return new PetState(name, currentHp, maxHp, equippedItems);
+    }
+
     /** @return a copy with HP set to {@code hp}, clamped to {@code [0, maxHp]}. */
     @NonNull
     public PetState withHp(int hp) {

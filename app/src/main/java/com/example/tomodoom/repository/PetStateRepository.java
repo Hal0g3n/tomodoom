@@ -43,6 +43,7 @@ public final class PetStateRepository {
     static final String KEY_CURRENT_HP = "current_hp";
     static final String KEY_MAX_HP = "max_hp";
     static final String KEY_EQUIPPED_PREFIX = "equipped.";
+    static final String KEY_ONBOARDING_COMPLETE = "onboarding_complete";
 
     private final Object lock = new Object();
     @NonNull
@@ -139,6 +140,45 @@ public final class PetStateRepository {
             editor.apply();
             Log.d(TAG, "equip " + slot + " = " + itemId);
             publishLocked(next);
+            return next;
+        }
+    }
+
+    /**
+     * @return whether the user has named their pet on the onboarding screen. Cleared by
+     * {@link #resetPetState()}, so a reset pet goes through onboarding again on the next launch.
+     */
+    @AnyThread
+    public boolean isOnboardingComplete() {
+        synchronized (lock) {
+            return prefs.getBoolean(KEY_ONBOARDING_COMPLETE, false);
+        }
+    }
+
+    /**
+     * Names the pet and marks onboarding as complete.
+     *
+     * @param petName the new name; the caller validates it with
+     *                {@link com.example.tomodoom.model.PetNames#normalize(String)}.
+     * @return the new snapshot.
+     * @throws IllegalArgumentException if {@code petName} is empty.
+     */
+    @AnyThread
+    @NonNull
+    public PetState completeOnboarding(@NonNull String petName) {
+        if (petName.isEmpty()) {
+            throw new IllegalArgumentException("petName must be non-empty");
+        }
+        synchronized (lock) {
+            PetState next = current.withName(petName);
+            prefs.edit()
+                    .putString(KEY_PET_NAME, petName)
+                    .putBoolean(KEY_ONBOARDING_COMPLETE, true)
+                    .apply();
+            Log.i(TAG, "onboarding complete");
+            if (!next.equals(current)) {
+                publishLocked(next);
+            }
             return next;
         }
     }
