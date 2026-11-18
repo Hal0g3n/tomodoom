@@ -29,6 +29,10 @@
     <string name="chat_input_hint_quiz">Type your answer…</string>
     <string name="chat_send">Send</string>
 
+    <!-- HtmlManiengineRenderer -->
+    <string name="maniengine_unavailable">Your pet can\'t be shown: this device has no working WebView.</string>
+    <string name="maniengine_crashed">The pet viewer stopped. Switch tabs or reopen the app to reload it.</string>
+
     <!-- PlaceholderManiengineRenderer (stub) -->
     <string name="placeholder_pet_name">🐾 %1$s</string>
     <string name="placeholder_pet_fainted">😵 %1$s (fainted)</string>

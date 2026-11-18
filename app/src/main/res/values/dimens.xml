@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Pet viewport border (bg_pet_viewport). HtmlManiengineRenderer insets its WebView by this
+         much so the border stays visible. -->
+    <dimen name="pet_viewport_stroke">2dp</dimen>
+</resources>

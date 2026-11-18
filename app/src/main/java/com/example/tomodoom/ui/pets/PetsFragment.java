@@ -26,6 +26,7 @@ import com.example.tomodoom.di.ViewModelFactory;
 import com.example.tomodoom.model.AccessoryItem;
 import com.example.tomodoom.model.AccessorySlot;
 import com.example.tomodoom.model.DoomScrollEvent;
+import com.example.tomodoom.model.PetMood;
 import com.example.tomodoom.model.PetState;
 import com.example.tomodoom.ui.PageSwipeHost;
 import com.example.tomodoom.viewmodel.PetsViewModel;
@@ -110,6 +111,9 @@ public class PetsFragment extends Fragment {
         super.onResume();
         updateUsageAccessCard();
         syncCustomisePanelState();
+        if (renderer != null) {
+            renderer.resume(binding.petViewport);
+        }
     }
 
     @Override
@@ -117,6 +121,9 @@ public class PetsFragment extends Fragment {
         // Leaving the page (swipe, bottom nav or app switch): page swipes must work again even if
         // the panel is still open, or the user couldn't swipe back to Pets.
         setPageSwipeEnabled(true);
+        if (renderer != null) {
+            renderer.pause(binding.petViewport);
+        }
         super.onPause();
     }
 
@@ -139,11 +146,17 @@ public class PetsFragment extends Fragment {
 
     @StringRes
     private static int statusLabel(@NonNull PetState state) {
-        float fraction = state.getHpFraction();
-        if (state.isFainted()) return R.string.pet_status_fainted;
-        if (fraction >= 0.75f) return R.string.pet_status_thriving;
-        if (fraction >= 0.40f) return R.string.pet_status_okay;
-        return R.string.pet_status_struggling;
+        switch (PetMood.of(state)) {
+            case FAINTED:
+                return R.string.pet_status_fainted;
+            case THRIVING:
+                return R.string.pet_status_thriving;
+            case OKAY:
+                return R.string.pet_status_okay;
+            case STRUGGLING:
+            default:
+                return R.string.pet_status_struggling;
+        }
     }
 
     // ---------------------------------------------------------------------------------------

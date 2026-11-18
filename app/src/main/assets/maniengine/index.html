@@ -1,0 +1,69 @@
+<!doctype html>
+<!--
+  PLACEHOLDER Maniengine page. Replace this file (and add its sibling files to this folder) with
+  the Maniengine HTML export. The app contract is in CLAUDE.md §5.1 and
+  maniengine/ManiengineProtocol.java:
+    - the app dispatches  window "tomodoom:petstate"  (event.detail = state) on every change and
+      also sets  window.tomodoomPetState  (read it at startup in case the event came first);
+    - state = { name, hp, maxHp, hpFraction, mood, fainted, equipped: { slot: { id, name } } };
+    - served from https://appassets.androidplatform.net/assets/maniengine/, so relative URLs,
+      ES modules, fetch() and .glb/.wasm files work;
+    - <meta name="tomodoom-touch" content="capture"> keeps drags on the page (e.g. orbit
+      controls) instead of swiping tabs. This placeholder doesn't need drags, so it omits it.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <title>Tomodoom pet</title>
+  <style>
+    :root { --ink: #383A3D; --muted: #8C8F92; --fill: #F7F0DE; --body: #585B5E; }
+    html, body { margin: 0; height: 100%; background: transparent; color: var(--ink);
+      font-family: sans-serif; overflow: hidden; user-select: none; }
+    main { height: 100%; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 12px; text-align: center; }
+    .pet { position: relative; width: 120px; height: 104px; border-radius: 50% 50% 44% 44%;
+      background: var(--body); animation: bob 2.4s ease-in-out infinite;
+      transition: filter .4s, transform .4s; }
+    .pet.struggling { filter: saturate(.4) brightness(1.15); }
+    .pet.fainted { animation: none; transform: rotate(-80deg) translateY(10px); filter: grayscale(1); }
+    .eye { position: absolute; top: 38px; width: 12px; height: 16px; border-radius: 50%;
+      background: var(--fill); }
+    .eye.l { left: 34px; } .eye.r { right: 34px; }
+    .fainted .eye { height: 3px; top: 44px; border-radius: 2px; }
+    .mouth { position: absolute; left: 50%; top: 66px; width: 26px; height: 10px; margin-left: -13px;
+      border: 3px solid var(--fill); border-top: none; border-radius: 0 0 16px 16px; }
+    .struggling .mouth, .fainted .mouth { border-radius: 16px 16px 0 0; border: 3px solid var(--fill);
+      border-bottom: none; top: 70px; }
+    .hat { position: absolute; left: 50%; top: -22px; width: 70px; height: 28px; margin-left: -35px;
+      background: var(--ink); border-radius: 14px 14px 4px 4px; display: none; }
+    .has-hat .hat { display: block; }
+    h1 { margin: 0; font-size: 18px; }
+    p { margin: 0; font-size: 13px; color: var(--muted); }
+    @keyframes bob { 50% { transform: translateY(-6px); } }
+  </style>
+</head>
+<body>
+<main>
+  <div id="pet" class="pet"><div class="hat"></div><div class="eye l"></div><div class="eye r"></div><div class="mouth"></div></div>
+  <h1 id="name">…</h1>
+  <p id="items"></p>
+  <p>Placeholder: drop the Maniengine export here</p>
+</main>
+<script>
+  (function () {
+    function render(s) {
+      if (!s) return;
+      var pet = document.getElementById('pet');
+      pet.className = 'pet ' + s.mood + (s.equipped && s.equipped.hat ? ' has-hat' : '');
+      document.getElementById('name').textContent = s.name + ' · ' + s.hp + ' / ' + s.maxHp + ' HP';
+      var names = [];
+      for (var slot in (s.equipped || {})) names.push(slot + ': ' + s.equipped[slot].name);
+      document.getElementById('items').textContent = names.length ? names.join(' · ') : 'Nothing equipped';
+    }
+    window.addEventListener('tomodoom:petstate', function (e) { render(e.detail); });
+    render(window.tomodoomPetState);
+  })();
+</script>
+</body>
+</html>

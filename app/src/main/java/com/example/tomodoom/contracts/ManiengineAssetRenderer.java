@@ -19,7 +19,8 @@ import com.example.tomodoom.model.PetState;
  *     <li>{@code container} is the {@code FrameLayout} {@code R.id.pet_viewport}. The renderer owns
  *     <em>all</em> of its children. Nothing else adds or removes views in it.</li>
  *     <li>{@link #render} is called for every {@link PetState} emission, then {@link #release} once
- *     from {@code PetsFragment#onDestroyView()}. The instance is discarded afterwards.</li>
+ *     from {@code PetsFragment#onDestroyView()}. The instance is discarded afterwards.
+ *     {@link #pause}/{@link #resume} bracket the time the page is visible.</li>
  * </ul>
  *
  * <h3>Threading</h3>
@@ -29,10 +30,14 @@ import com.example.tomodoom.model.PetState;
  * {@link #release}.
  *
  * <h3>Asset format</h3>
- * Not decided yet (raster layers, vector drawables, Lottie, skeletal…). Callers make no
- * assumptions; item IDs come from {@link com.example.tomodoom.model.AccessoryCatalog}.
+ * Maniengine's output is an <b>HTML page</b> (a 3D scene), shown by
+ * {@code maniengine.HtmlManiengineRenderer} in a WebView; the page's state contract is
+ * {@code maniengine.ManiengineProtocol}. Callers still make no assumptions about the format: they
+ * only pass {@link PetState}. Item IDs come from
+ * {@link com.example.tomodoom.model.AccessoryCatalog}.
  *
- * <p>Default implementation: {@code stubs.PlaceholderManiengineRenderer}.</p>
+ * <p>Wired implementation: {@code maniengine.HtmlManiengineRenderer}. Reference/fallback:
+ * {@code stubs.PlaceholderManiengineRenderer}.</p>
  */
 public interface ManiengineAssetRenderer {
 
@@ -60,4 +65,23 @@ public interface ManiengineAssetRenderer {
      */
     @MainThread
     void release(@NonNull ViewGroup container);
+
+    /**
+     * The viewport stopped being visible (the Pets page was paused: another tab, or the app went
+     * to the background). Stop animations and other per-frame work until {@link #resume}. Called
+     * from {@code PetsFragment#onPause()}, possibly before the first {@link #render}.
+     * Optional: the default does nothing.
+     */
+    @MainThread
+    default void pause(@NonNull ViewGroup container) {
+    }
+
+    /**
+     * The viewport is visible again after {@link #pause}. Called from
+     * {@code PetsFragment#onResume()}, including the first resume. Optional: the default does
+     * nothing.
+     */
+    @MainThread
+    default void resume(@NonNull ViewGroup container) {
+    }
 }

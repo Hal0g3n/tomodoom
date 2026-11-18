@@ -121,6 +121,7 @@ com.example.tomodoom
 │
 ├── model/                        Immutable, pure-Java value objects (no android.* imports)
 │   ├── PetState                  name, currentHp, maxHp, equipped items (slot → itemId)
+│   ├── PetMood                   THRIVING/OKAY/STRUGGLING/FAINTED from HP (the only HP thresholds)
 │   ├── AccessorySlot             slot IDs: HAT="hat", OUTFIT="outfit", ACCESSORY="accessory"
 │   ├── AccessoryItem             id, slot, displayName
 │   ├── AccessoryCatalog          placeholder item list per slot (Maniengine agent may replace it)
@@ -156,6 +157,11 @@ com.example.tomodoom
 │   ├── HttpTruFarChatService     client for the /v1/chat/sessions event API (no live backend yet)
 │   └── JsonHttpClient            package-private HTTPS + JSON helper shared by both clients
 │
+├── maniengine/                   Maniengine Agent: the HTML (3D) pet page in a WebView (§5.1)
+│   ├── HtmlManiengineRenderer    WebView renderer wired in AppContainer; pushes state, pause/resume
+│   ├── ManiengineProtocol        pure Java: state JSON + JS delivery script + touch policy (page contract)
+│   └── ManiengineAssets          pure Java: virtual-origin URL → assets/maniengine/ path, MIME types
+│
 ├── doomscroll/                   Doom Scroll Agent: UsageStatsDoomScrollMonitor + DoomScrollSessionTracker (§5.3)
 │
 ├── di/
@@ -181,7 +187,9 @@ Resources: `res/values/colors.xml` + `res/values/themes.xml` (palette and theme,
 `item_chips`), `fragment_chat.xml`, `item_chat_{user,bot,system}.xml`, `item_accessory_chip.xml`,
 `res/drawable/ic_hanger_24dp.xml` (customise FAB) and `ic_close_24dp.xml` (panel close),
 `activity_main.xml` (`main_pager` ViewPager2 + `nav_view`), `res/menu/bottom_nav_menu.xml`.
-Assets: `assets/trufar/kafka_agent.json` (the Kafka TruFar agent export, icon stripped; §5.2).
+`res/values/dimens.xml` (`pet_viewport_stroke`).
+Assets: `assets/trufar/kafka_agent.json` (the Kafka TruFar agent export, icon stripped; §5.2),
+`assets/maniengine/index.html` (the Maniengine page; currently a placeholder, §5.1).
 
 ### Dependency direction (enforced by convention)
 
@@ -270,9 +278,9 @@ ui  ──►  viewmodel  ──►  repository  ──►  contracts  ◄──
 
 ## 4. Contracts (the `contracts` package)
 
-| Interface | Default implementation (in `stubs`) | Owner agent | Where it's wired |
+| Interface | Implementation (stub in `stubs`) | Owner agent | Where it's wired |
 |---|---|---|---|
-| `ManiengineAssetRenderer` | `PlaceholderManiengineRenderer` | **Maniengine Agent** | `AppContainer.createAssetRenderer()` (factory: new instance per Pets view) |
+| `ManiengineAssetRenderer` | `maniengine.HtmlManiengineRenderer` (stub: `PlaceholderManiengineRenderer`) | **Maniengine Agent** | `AppContainer.createAssetRenderer()` (factory: new instance per Pets view) |
 | `TruFarChatService` | `MockTruFarChatService` | **TruFar/MCP Agent** | `AppContainer` constructor, `// SWAP POINT (TruFar/MCP Agent)` |
 | `McpPetActionHandler` | `DefaultMcpPetActionHandler` (production-capable) | **TruFar/MCP Agent** | `AppContainer` constructor, `// SWAP POINT (TruFar/MCP Agent)` |
 | `DoomScrollMonitor` (+ `DoomScrollListener`) | `StubDoomScrollMonitor` | **Doom Scroll Agent** | `AppContainer` constructor, `// SWAP POINT (Doom Scroll Agent)` |
@@ -283,6 +291,8 @@ The full Javadoc on each interface is normative. What follows is a summary.
 ```java
 @MainThread void render(@NonNull ViewGroup container, @NonNull PetState state);
 @MainThread void release(@NonNull ViewGroup container);
+@MainThread default void pause(@NonNull ViewGroup container) {}    // PetsFragment.onPause()
+@MainThread default void resume(@NonNull ViewGroup container) {}   // PetsFragment.onResume()
 ```
 - `container` is the `FrameLayout` `R.id.pet_viewport` in `fragment_pets.xml`. The renderer owns
   all of its children. Nothing else adds views to it.
@@ -290,7 +300,10 @@ The full Javadoc on each interface is normative. What follows is a summary.
   must be idempotent and cheap: diff against what's already displayed and update in place.
 - `release` is called from `PetsFragment.onDestroyView()`. Remove the child views, cancel animations
   and free bitmaps. The instance is discarded afterwards (a new view gets a new instance).
-- Asset/file format is **undecided**. Nothing outside the renderer may assume one.
+- `pause`/`resume` bracket the time the Pets page is visible (it stays alive, `STARTED`, while
+  Chat is shown). Stop per-frame work while paused. Both are optional default no-ops.
+- The asset format is **HTML**: Maniengine exports a 3D scene as a web page, which
+  `HtmlManiengineRenderer` shows (§5.1). Nothing outside the renderer may depend on that.
 
 ### `TruFarChatService`
 ```java
@@ -365,20 +378,60 @@ General rules for every agent:
 5. Run the build commands in §7 before every commit. Every commit must compile.
 
 ### 5.1 Maniengine Agent — pet rendering & customisation assets
-- **Implement:** `contracts.ManiengineAssetRenderer`.
-- **Replace:** `stubs.PlaceholderManiengineRenderer` → return your class from
-  `AppContainer.createAssetRenderer()`.
+- **Implement:** `contracts.ManiengineAssetRenderer`. **Done:** `maniengine.HtmlManiengineRenderer`
+  is wired in `AppContainer.createAssetRenderer()`. `stubs.PlaceholderManiengineRenderer` stays as
+  the text-only reference.
 - **Inputs:** `PetState` (HP for mood/animation, `getEquippedItems()` for the layers, keyed by
   `AccessorySlot` IDs and holding `AccessoryItem` IDs).
 - **You also own:** `model.AccessoryCatalog`. Replace the placeholder items with your real asset
   manifest, keeping the item IDs stable once shipped (they're persisted in prefs), and the asset
-  files under `app/src/main/assets/` or `res/` in whatever format you choose.
+  files under `app/src/main/assets/maniengine/`.
+
+#### Dropping in the Maniengine HTML export
+
+Maniengine's output is an `.html` page (a 3D scene). Copy the export into
+**`app/src/main/assets/maniengine/`** with `index.html` as the entry page, plus whatever it loads
+(JS/modules, `.glb`/`.gltf`, textures, `.wasm`, fonts) beside it with **relative URLs**. Replace
+the placeholder `index.html`. No code change is needed.
+
+How the page is hosted (`HtmlManiengineRenderer`):
+- Served from the virtual origin **`https://appassets.androidplatform.net/assets/maniengine/`**
+  (`ManiengineAssets`), not `file://`, so ES modules, `fetch()` and WASM behave as on a web server.
+  Only files under `assets/maniengine/` are served; anything else on that origin is a 404. Files
+  are read on WebView's IO thread. MIME types come from the extension (`ManiengineAssets.mimeTypeFor`):
+  add a case there for a new file type.
+- JavaScript and DOM storage are on. File/content access is off, there's no JS interface, and the
+  main frame can't navigate off the origin. Network URLs (e.g. a CDN script) still load, but bundle
+  libraries locally so the pet works offline.
+- The WebView background is transparent (the viewport's `floral_white` shows through), inset by
+  `@dimen/pet_viewport_stroke` and clipped to the viewport's rounded corners.
+- `pause`/`resume` call `WebView.onPause()`/`onResume()`. A page should still stop its own
+  `requestAnimationFrame` loop on `visibilitychange` if it does heavy work.
+- If there's no usable WebView, or the render process dies (e.g. a WebGL crash), the viewport shows
+  `maniengine_unavailable`/`maniengine_crashed` instead of crashing the app.
+- Debug builds enable `WebView.setWebContentsDebuggingEnabled`, so you can inspect the page from
+  `chrome://inspect`.
+
+**Page contract** (`ManiengineProtocol`, normative):
+- On load and on every state change, the app sets `window.tomodoomPetState = state` and dispatches
+  `window` event **`tomodoom:petstate`** with `event.detail = state`. A page listens for the event
+  **and** reads `window.tomodoomPetState` at startup (the first event may fire before late-loading
+  code runs). Unchanged states aren't re-sent.
+- `state` is
+  `{ name, hp, maxHp, hpFraction, mood, fainted, equipped: { <slotId>: { id, name } } }`.
+  `mood` is a `PetMood` id (`thriving` | `okay` | `struggling` | `fainted`). `equipped` lists only
+  filled slots (`hat`, `outfit`, `accessory`), with the catalog display name.
+- **Touch:** by default, horizontal drags on the pet swipe between tabs. A page that needs drags
+  (orbit/rotate controls) adds `<meta name="tomodoom-touch" content="capture">`. The pager then
+  won't take drags that *start* on the viewport, but swiping still works from the HP card and below.
+- The page talks only one way (app → page). If it ever needs to call back (e.g. "item tapped"),
+  extend `ManiengineProtocol` and this section together.
 - **Layout note:** the customise FAB (`customise_fab`, ~56dp, a sibling of the viewport) is constrained to
   the viewport's top-right corner, 12dp in from its edges, so keep essential art clear of it. The
   customisation controls are in the right-side panel (`panel_customise.xml`), not under the viewport.
 - **Acceptance:** equipping/unequipping on the Pets tab updates the viewport immediately. Rotating
   or switching tabs doesn't leak views (`release` cleans up). Nothing happens off the main thread
-  in `render`.
+  in `render`. The export loads offline from `assets/maniengine/` and reacts to `tomodoom:petstate`.
 
 ### 5.2 TruFar/MCP Agent — chatbot backend & MCP tool bridge
 - **Implement:** `contracts.TruFarChatService` (network client) and, optionally, extend
@@ -591,6 +644,12 @@ process. This limits battery work but means detection is not guaranteed while th
 - **org.json in JVM tests:** android.jar only has throwing stubs, so `org.json:json` is a
   `testImplementation` dependency. Tests can then call `AgentProfileLoader.parse(JSONObject)` on the
   real asset (unit tests run with `app/` as the working directory).
+- **WebView (Maniengine):** an `OnTouchListener` on a WebView triggers lint
+  `ClickableViewAccessibility`, so `HtmlManiengineRenderer` uses a private `WebView` subclass that
+  overrides `dispatchTouchEvent`. `SetJavaScriptEnabled` is suppressed on purpose: the page is a
+  bundled asset and no JS interface is added. Don't add `addJavascriptInterface` or file access
+  without revisiting that. `new WebView(...)` can throw when the WebView provider is missing or
+  updating, so catch it.
 - **Switch on strings** works with the `AccessorySlot` / `McpPetActionHandler.TOOL_*` constants
   because they are compile-time constants. Keep new constants `static final` literals.
 
@@ -703,7 +762,10 @@ Debug helpers available in the debug build:
 - **`StubDoomScrollMonitor.simulateDoomScroll(pkg, durationMs, penalty)`:** tests the
   monitor → listener path in code.
 - **Logcat tags:** `PetStateRepository` (every HP change with its reason), `ChatRepository`,
-  `DefaultMcpHandler`, `MockTruFarChatService`, `OpenAiChatService`, `StubDoomScrollMonitor`.
+  `DefaultMcpHandler`, `MockTruFarChatService`, `OpenAiChatService`, `StubDoomScrollMonitor`,
+  `HtmlManiengine` (WebView failures, missing assets).
+- **Maniengine page:** in a debug build, open `chrome://inspect` on a desktop Chrome with the
+  device connected to inspect and live-edit the pet page.
 
 
 1. Launch the app. The **Pets** tab has **no action bar** (the HP card sits right under the status
@@ -711,7 +773,8 @@ Debug helpers available in the debug build:
    sits under the HP card (it disappears once access is granted). A hanger FAB sits at the top-right of the viewport.
 2. Tap the **hanger FAB** (right side, just below the HP card). The **Customise pet** panel slides in
    from the right over a dimmed scrim. Choose **Hat → Cap**, then close the panel (✕, tap the scrim,
-   Back, or swipe it right). The placeholder viewport text shows `Hat: Cap`. Also check:
+   Back, or swipe it right). The placeholder Maniengine page (a grey blob) gains a hat, and its
+   caption reads `hat: Cap`. Also check:
    - a right-edge swipe does *not* open the panel;
    - the panel stays open across rotation and across a Pets → Chat → Pets round trip;
    - the bottom nav still switches tabs while the panel is open;
@@ -719,6 +782,8 @@ Debug helpers available in the debug build:
    - with the panel closed, Back leaves the app as before.
    - **Swiping:** with the panel closed, swipe left on Pets to reach Chat and right to return. The
      bottom nav selection follows. Back on Chat returns to Pets.
+   - Swiping over the placeholder pet also changes page (it doesn't declare `tomodoom-touch`).
+     Simulate doom-scroll or a quiz: the page's HP caption updates without reloading.
 3. Open **Chat**. There is no action bar; the transcript starts right under the status bar. The mock bot greets you. Type `quiz`, and the bot asks a question (e.g. "What is 2 + 2?").
 4. Answer correctly (`4`). The bot confirms, and a SYSTEM message shows **"+10 HP awarded via MCP! (60/100 HP)"**.
 5. Switch to **Pets**: **HP 60 / 100**.
@@ -745,7 +810,7 @@ Update this table in the same commit when your task changes a subsystem's status
 | MCP tool bridge | ✅ Production-capable default | `DefaultMcpPetActionHandler` |
 | Pets UI (HP header, FAB-triggered customisation side panel, debug row) | ✅ Skeleton done | `PetsFragment` / `PetsViewModel` |
 | Chat UI | ✅ Skeleton done | `ChatFragment` / `ChatViewModel` / `ChatRepository` |
-| Pet rendering | ⏳ Stub (text placeholder) | `PlaceholderManiengineRenderer` → Maniengine Agent |
+| Pet rendering | ✅ HTML/WebView pipeline; ⏳ placeholder page until the Maniengine export lands in `assets/maniengine/` | `HtmlManiengineRenderer` |
 | Item catalog | ⏳ Placeholder (9 hard-coded items) | `AccessoryCatalog` → Maniengine Agent |
 | TruFar backend | ✅ Kafka agent via OpenAI-compatible client (mock when unconfigured) | `OpenAiCompatibleChatService` (`TRUFAR_LLM_URL`) / `HttpTruFarChatService` / `MockTruFarChatService` |
 | Doom-scroll detection | ✅ Usage Access polling | `UsageStatsDoomScrollMonitor` |
@@ -758,7 +823,7 @@ Known gaps and TODOs (not assigned to anyone yet):
   lifetime. Real backends must use globally unique quiz IDs.
 - Non-UI user-facing text (MCP results, chat notices, mock bot) is inline English, not in `strings.xml`.
 - Nothing happens yet when HP reaches 0 beyond the "Fainted" status label. No notifications.
-- No instrumented/UI tests yet. JVM tests only (`model`, `doomscroll`, `trufar`).
+- No instrumented/UI tests yet. JVM tests only (`model`, `doomscroll`, `trufar`, `maniengine`).
 - On phones, the open customisation panel (280dp) covers most of the pet viewport, so equip changes
   re-render live but are only fully visible once the panel closes. A narrower panel or a bottom
   sheet would fix that if live preview matters.

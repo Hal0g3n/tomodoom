@@ -13,12 +13,12 @@ import com.example.tomodoom.contracts.ManiengineAssetRenderer;
 import com.example.tomodoom.contracts.McpPetActionHandler;
 import com.example.tomodoom.contracts.TruFarChatService;
 import com.example.tomodoom.doomscroll.UsageStatsDoomScrollMonitor;
+import com.example.tomodoom.maniengine.HtmlManiengineRenderer;
 import com.example.tomodoom.repository.ChatRepository;
 import com.example.tomodoom.repository.DoomScrollHpBridge;
 import com.example.tomodoom.repository.PetStateRepository;
 import com.example.tomodoom.stubs.DefaultMcpPetActionHandler;
 import com.example.tomodoom.stubs.MockTruFarChatService;
-import com.example.tomodoom.stubs.PlaceholderManiengineRenderer;
 import com.example.tomodoom.trufar.HttpTruFarChatService;
 import com.example.tomodoom.trufar.OpenAiCompatibleChatService;
 
@@ -95,8 +95,9 @@ public final class AppContainer {
     @MainThread
     @NonNull
     public ManiengineAssetRenderer createAssetRenderer() {
-        // SWAP POINT (Maniengine Agent): return the real renderer here.
-        return new PlaceholderManiengineRenderer();
+        // SWAP POINT (Maniengine Agent): the Maniengine HTML export (assets/maniengine/index.html)
+        // in a WebView. PlaceholderManiengineRenderer is the text-only reference stub.
+        return new HtmlManiengineRenderer();
     }
 
     @NonNull
