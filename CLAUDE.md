@@ -146,6 +146,16 @@ com.example.tomodoom
 │   ├── DefaultMcpPetActionHandler      REAL implementation wired to PetStateRepository
 │   └── StubDoomScrollMonitor           no-op monitor with a debug trigger
 │
+├── trufar/                       TruFar/MCP Agent: real chat clients (§5.2)
+│   ├── OpenAiCompatibleChatService   runs the Kafka agent export on any OpenAI-compatible endpoint
+│   ├── AgentProfile, AgentProfileLoader   TruFar agent export (assets/trufar/*.json) → persona + model settings
+│   ├── QuizMarkerParser          pure Java: strips [[CORRECT]]/[[WRONG]] grading markers from replies
+│   ├── ChatHistoryWindow         pure Java: last-N-turns conversation memory
+│   ├── HttpTruFarChatService     client for the /v1/chat/sessions event API (no live backend yet)
+│   └── JsonHttpClient            package-private HTTPS + JSON helper shared by both clients
+│
+├── doomscroll/                   Doom Scroll Agent: UsageStatsDoomScrollMonitor + DoomScrollSessionTracker (§5.3)
+│
 ├── di/
 │   ├── AppContainer              THE ONLY PLACE implementations are chosen ("SWAP POINT" comments)
 │   └── ViewModelFactory          constructor injection for ViewModels
@@ -162,6 +172,7 @@ com.example.tomodoom
 Resources: `res/values/colors.xml` + `res/values/themes.xml` (palette and theme, §6.3; no
 `values-night/`), `res/layout/fragment_pets.xml`, `fragment_chat.xml`, `item_chat_{user,bot,system}.xml`,
 `item_accessory_chip.xml`, `res/menu/bottom_nav_menu.xml`, `res/navigation/mobile_navigation.xml`.
+Assets: `assets/trufar/kafka_agent.json` (the Kafka TruFar agent export, icon stripped; §5.2).
 
 ### Dependency direction (enforced by convention)
 
@@ -373,7 +384,50 @@ General rules for every agent:
 - **Acceptance:** the manual E2E script in §8 passes against the real backend. No main-thread
   network. Errors show up as SYSTEM messages via `onError`.
 
-#### Current HTTP integration contract
+#### Kafka agent (the chatbot in use)
+
+The chatbot is **Kafka**, a TruFar agent exported from the TruFar editor as JSON. The export is
+bundled as `assets/trufar/kafka_agent.json`, a copy of the export without the base64 icon. To
+change the bot, edit or replace that file; no code change is needed. `AgentProfileLoader` reads:
+- `agent_basic_info.name`
+- `config.pre_prompt` (the persona)
+- `config.model.name` (`deepseek-v4-pro`)
+- `config.model.params.temperature` (0.84)
+- `config.chat_memory_window.window_size` (5 turns)
+
+Everything else in the export (icon, tools, opening statement) is ignored.
+
+TruFar publishes no API for running an agent (none was found when this was written), and the export
+only names the model provider (`trufar_tokenhub`). The app therefore runs the agent itself with
+`trufar.OpenAiCompatibleChatService` against **any OpenAI-compatible `POST {base}/chat/completions`**.
+Set these Gradle properties (e.g. in an untracked `~/.gradle/gradle.properties`):
+
+| Property | Meaning |
+|---|---|
+| `TRUFAR_LLM_URL` | HTTPS base URL; `/chat/completions` is appended (e.g. `https://api.deepseek.com`) |
+| `TRUFAR_LLM_API_KEY` | bearer token (compiled into the APK: dev/testing only, same caveat as below) |
+| `TRUFAR_LLM_MODEL` | optional; overrides the export's model name (e.g. `deepseek-chat` if the endpoint doesn't know `deepseek-v4-pro`) |
+
+`AppContainer` picks the first configured option: `TRUFAR_LLM_URL` → `OpenAiCompatibleChatService`,
+then `TRUFAR_API_URL` → `HttpTruFarChatService`, otherwise `MockTruFarChatService` (offline demo).
+
+How it behaves:
+- `connect()` loads the asset on the worker thread. It then sends the hidden user turn `__START__`,
+  which the persona prompt answers with Kafka's greeting. `__START__` never appears in the transcript.
+- Each request is `{model, temperature, stream:false, messages:[system, …last 5 turns, user]}`. A
+  turn is remembered only if its request succeeds. Read timeout is 90 s.
+- **HP / quiz protocol:** Kafka quizzes in free text, so the service never emits `QuizPrompt`s. The
+  app appends `APP_PROTOCOL_PROMPT` to the persona, which asks the model to end any reply that grades
+  an answer with `[[CORRECT]]` or `[[WRONG]]`. `QuizMarkerParser` strips the markers (it's lenient
+  about case and brackets, and the last marker wins). A graded reply is delivered as
+  `onQuizEvaluated(quizId = "trufar-agent:<session UUID>:<n>", hpReward = CORRECT_ANSWER_HP = 10)`.
+  `ChatRepository` shows it as one bot bubble and, when it passed, calls `onQuizPassed`, so the
+  replay guard and cap still apply. Ungraded replies arrive through `onBotMessage`. A marker in the
+  greeting is ignored.
+- No MCP tools are advertised (the export has none). HTTP errors include the server's
+  `error.message` and surface as SYSTEM messages via `onError`.
+
+#### Session API contract (`HttpTruFarChatService`)
 
 The Android client is `trufar.HttpTruFarChatService`. Configure `TRUFAR_API_URL` and optionally
 `TRUFAR_API_TOKEN` as Gradle project properties (for example in an untracked `~/.gradle/gradle.properties`).
@@ -492,6 +546,12 @@ process. This limits battery work but means detection is not guaranteed while th
   id in `MainActivity`'s `AppBarConfiguration`.
 - **Dependencies** must be compatible with compileSdk 34 / AGP 8.1.1. Many current AndroidX
   releases need compileSdk 35+, so check before you bump anything. Pin exact versions.
+- **LLM-graded HP is persuadable:** a user can talk Kafka into emitting `[[CORRECT]]`. Each award
+  is bounded by `OpenAiCompatibleChatService.CORRECT_ANSWER_HP` (10) and the per-award cap, but
+  there's no rate limit. Add one in the handler if it gets abused.
+- **org.json in JVM tests:** android.jar only has throwing stubs, so `org.json:json` is a
+  `testImplementation` dependency. Tests can then call `AgentProfileLoader.parse(JSONObject)` on the
+  real asset (unit tests run with `app/` as the working directory).
 - **Switch on strings** works with the `AccessorySlot` / `McpPetActionHandler.TOOL_*` constants
   because they are compile-time constants. Keep new constants `static final` literals.
 
@@ -534,6 +594,10 @@ Rules:
 
 Requires **JDK 17** (Android Studio's bundled JBR works) and the Android SDK with platform 34
 (`sdk.dir` in `local.properties`, which Android Studio generates and which is never committed).
+Some machines have no Android Studio or SDK; one known example has only a standalone JDK at
+`C:\Program Files\Eclipse Adoptium\jdk-17.0.16.8-hotspot`. There Gradle can't build, so the most
+you can do is a `javac --release 8 -Xlint:all -Werror` check of pure-Java/`trufar` code against
+stubs, plus running the JUnit tests directly. Say so in the report.
 
 **macOS / Linux (JDK 17 on PATH, Linux/macOS SDK):**
 ```bash
@@ -572,7 +636,7 @@ builds with zero warnings, so keep it that way.
 ### 7.2 Unit tests
 
 - JVM tests live in `app/src/test/java/com/example/tomodoom/<package>/…Test.java`, using JUnit 4
-  (the only test dependency). See `model/PetStateTest` for the style.
+  (plus `org.json:json` so JSON parsing can be tested). See `model/PetStateTest` for the style.
 - Pure-Java code (`model/`, and any logic you extract from Android classes) must have tests.
   Keep new domain logic free of `android.*` so it stays testable on the JVM.
 - Classes using `SharedPreferences`, `Log`, `LiveData` or views can't run in plain JVM tests (the
@@ -599,7 +663,7 @@ Debug helpers available in the debug build:
 - **`StubDoomScrollMonitor.simulateDoomScroll(pkg, durationMs, penalty)`:** tests the
   monitor → listener path in code.
 - **Logcat tags:** `PetStateRepository` (every HP change with its reason), `ChatRepository`,
-  `DefaultMcpHandler`, `MockTruFarChatService`, `StubDoomScrollMonitor`.
+  `DefaultMcpHandler`, `MockTruFarChatService`, `OpenAiChatService`, `StubDoomScrollMonitor`.
 
 
 1. Launch the app. The **Pets** tab shows `Tomo`, **HP 50 / 100** and status "Okay".
@@ -610,6 +674,13 @@ Debug helpers available in the debug build:
 6. In Chat, type `/tool get_pet_state` (or `/tool award_hp amount=5`). A SYSTEM message shows the MCP result.
 7. Pets debug row: **Simulate doom-scroll** → HP −5. **Reset pet** → back to 50/100, nothing equipped.
 8. Kill and relaunch the app. HP and equipped items persist (SharedPreferences). The chat transcript resets (in memory only).
+
+**Kafka (real LLM)**: build with `TRUFAR_LLM_URL`/`TRUFAR_LLM_API_KEY` set (§5.2):
+
+9. Open **Chat**. Kafka sends a sarcastic three-sentence greeting asking for a topic. No `__START__` bubble appears.
+10. Name a topic and answer Kafka's question correctly. The reply shows no `[[…]]` marker, and a SYSTEM
+    message shows **"+10 HP awarded via MCP!"**. A wrong answer gets a roast and no HP.
+11. Use a bad key or URL. A SYSTEM `⚠ TruFar error: … HTTP 401…` message appears and the app doesn't crash.
 
 ---
 
@@ -625,13 +696,15 @@ Update this table in the same commit when your task changes a subsystem's status
 | Chat UI | ✅ Skeleton done | `ChatFragment` / `ChatViewModel` / `ChatRepository` |
 | Pet rendering | ⏳ Stub (text placeholder) | `PlaceholderManiengineRenderer` → Maniengine Agent |
 | Item catalog | ⏳ Placeholder (9 hard-coded items) | `AccessoryCatalog` → Maniengine Agent |
-| TruFar backend | ⏳ Mock (local scripted bot) | `MockTruFarChatService` → TruFar/MCP Agent |
-| Doom-scroll detection | ⏳ Stub (no detection) | `StubDoomScrollMonitor` → Doom Scroll Agent |
+| TruFar backend | ✅ Kafka agent via OpenAI-compatible client (mock when unconfigured) | `OpenAiCompatibleChatService` (`TRUFAR_LLM_URL`) / `HttpTruFarChatService` / `MockTruFarChatService` |
+| Doom-scroll detection | ✅ Usage Access polling | `UsageStatsDoomScrollMonitor` |
 
 Known gaps and TODOs (not assigned to anyone yet):
-- No doom-scroll permission/onboarding UI. The Doom Scroll Agent owns it (§5.3).
+- Kafka has no confirmed hosted endpoint. Get a TruFar tokenhub URL/key from the course staff, or
+  use another OpenAI-compatible provider. The Kafka path has been smoke-tested against a local fake
+  server only.
 - The chat transcript isn't persisted, and quiz replay protection only lasts for the process
   lifetime. Real backends must use globally unique quiz IDs.
 - Non-UI user-facing text (MCP results, chat notices, mock bot) is inline English, not in `strings.xml`.
 - Nothing happens yet when HP reaches 0 beyond the "Fainted" status label. No notifications.
-- No instrumented/UI tests yet. Only `PetStateTest` (JVM).
+- No instrumented/UI tests yet. JVM tests only (`model`, `doomscroll`, `trufar`).
