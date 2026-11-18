@@ -23,6 +23,9 @@
     <string name="usage_access_open_settings">Enable</string>
 
     <!-- Doom-scroll notifications -->
+    <string name="doom_scroll_monitor_channel">Scroll monitoring</string>
+    <string name="doom_scroll_monitor_title">Tomodoom is watching over your pet</string>
+    <string name="doom_scroll_monitor_text">Scrolling in social apps costs your pet HP.</string>
     <string name="doom_scroll_warning_channel">Scrolling warnings</string>
     <string name="doom_scroll_warning_title">Time to look up</string>
     <plurals name="doom_scroll_warning_text">

@@ -1,15 +1,21 @@
 package com.example.tomodoom.ui.pets;
 
+import android.Manifest;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 
@@ -33,10 +39,31 @@ import com.example.tomodoom.viewmodel.PetsViewModel;
  */
 public class PetsFragment extends Fragment {
 
+    private static final String KEY_NOTIFICATIONS_REQUESTED = "notifications_requested";
+
+    /** Warnings are optional, so a denied request needs no follow-up. */
+    private final ActivityResultLauncher<String> notificationPermissionLauncher =
+            registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
+            });
+
+    private boolean notificationsRequested;
     private FragmentPetsBinding binding;
     private PetsViewModel viewModel;
     @Nullable
     private DoomScrollMonitor doomScrollMonitor;
+
+    @Override
+    public void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        notificationsRequested = savedInstanceState != null
+                && savedInstanceState.getBoolean(KEY_NOTIFICATIONS_REQUESTED);
+    }
+
+    @Override
+    public void onSaveInstanceState(@NonNull Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putBoolean(KEY_NOTIFICATIONS_REQUESTED, notificationsRequested);
+    }
 
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater,
@@ -73,6 +100,10 @@ public class PetsFragment extends Fragment {
     public void onResume() {
         super.onResume();
         updateUsageAccessCard();
+        if (doomScrollMonitor != null && doomScrollMonitor.isPermissionGranted()) {
+            doomScrollMonitor.startFromForeground();
+            requestNotificationsOnce();
+        }
         stage().attach(binding.petViewport, viewModel.getPetState().getValue());
     }
 
@@ -127,11 +158,19 @@ public class PetsFragment extends Fragment {
         if (binding == null || doomScrollMonitor == null) {
             return;
         }
-        boolean permissionGranted = doomScrollMonitor.isPermissionGranted();
-        binding.usageAccessCard.setVisibility(permissionGranted ? View.GONE : View.VISIBLE);
-        if (permissionGranted) {
-            doomScrollMonitor.startMonitoring();
+        binding.usageAccessCard.setVisibility(
+                doomScrollMonitor.isPermissionGranted() ? View.GONE : View.VISIBLE);
+    }
+
+    /** Android 13+ needs permission for the scrolling warnings. Asks at most once per launch. */
+    private void requestNotificationsOnce() {
+        if (notificationsRequested || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
+                || ContextCompat.checkSelfPermission(requireContext(),
+                Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+            return;
         }
+        notificationsRequested = true;
+        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS);
     }
 
     /** The activity's shared pet renderer; this page shows the pet only while it is resumed. */

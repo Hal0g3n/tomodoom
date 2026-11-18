@@ -4,6 +4,7 @@ import android.app.AppOpsManager;
 import android.app.usage.UsageEvents;
 import android.app.usage.UsageStatsManager;
 import android.content.Context;
+import android.content.Intent;
 import android.graphics.Point;
 import android.hardware.display.DisplayManager;
 import android.os.Build;
@@ -13,8 +14,10 @@ import android.util.Log;
 import android.view.Display;
 
 import androidx.annotation.AnyThread;
+import androidx.annotation.MainThread;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 
 import com.example.tomodoom.contracts.DoomScrollListener;
 import com.example.tomodoom.contracts.DoomScrollMonitor;
@@ -113,9 +116,26 @@ public final class UsageStatsDoomScrollMonitor implements DoomScrollMonitor {
         }
     }
 
+    @MainThread
+    @Override
+    public void startFromForeground() {
+        if (!isPermissionGranted()) {
+            Log.i(TAG, "Usage Access not granted; monitoring service was not started");
+            return;
+        }
+        try {
+            ContextCompat.startForegroundService(
+                    appContext, new Intent(appContext, DoomScrollMonitorService.class));
+        } catch (IllegalStateException exception) {
+            Log.w(TAG, "Monitoring service could not start; polling without it", exception);
+            startMonitoring();
+        }
+    }
+
     @AnyThread
     @Override
     public void stopMonitoring() {
+        appContext.stopService(new Intent(appContext, DoomScrollMonitorService.class));
         synchronized (lock) {
             monitoring = false;
             if (pollingTask != null) {

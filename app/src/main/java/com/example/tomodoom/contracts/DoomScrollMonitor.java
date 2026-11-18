@@ -1,6 +1,7 @@
 package com.example.tomodoom.contracts;
 
 import androidx.annotation.AnyThread;
+import androidx.annotation.MainThread;
 import androidx.annotation.Nullable;
 
 /**
@@ -37,6 +38,15 @@ public interface DoomScrollMonitor {
      */
     @AnyThread
     void startMonitoring();
+
+    /**
+     * Begins monitoring while the app is visible to the user, which is when Android allows a
+     * foreground service to start. Idempotent. Defaults to {@link #startMonitoring()}.
+     */
+    @MainThread
+    default void startFromForeground() {
+        startMonitoring();
+    }
 
     /** Stops monitoring and releases resources (receivers, polling, services). Idempotent. */
     @AnyThread
