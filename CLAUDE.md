@@ -90,8 +90,8 @@ virtual pet whose **HP** reflects your digital habits:
 | You equip clothes or accessories | The pet's look changes | Maniengine renderer |
 
 The app has two bottom-navigation tabs: **Pets** (HP, pet viewport, and a customisation side panel
-opened from a hanger FAB; no action bar) and **Chat**
-(TruFar chatbot + quizzes).
+opened from a hanger FAB) and **Chat**
+(TruFar chatbot + quizzes). There is no action bar on either tab.
 
 ### Tech stack (fixed — don't change it without updating this file)
 
@@ -101,7 +101,7 @@ opened from a hanger FAB; no action bar) and **Chat**
 | Java source level | **1.8**. Lambdas and method refs are fine. **No** `var`, switch expressions, records, text blocks, `List.of`/`Map.of`/`Set.of`, `String.isBlank()` or any other Java 9+ API |
 | Android | `compileSdk = 34`, `targetSdk = 34`, **`minSdk = 24`** (check API levels before calling newer APIs)                                                                      |
 | Build | AGP 8.1.1, Gradle 8.0 wrapper, Kotlin DSL build scripts (`*.gradle.kts`)                                                                                                 |
-| UI | XML layouts + **ViewBinding**, `Activity`/`Fragment`, Jetpack Navigation + `BottomNavigationView`, Material Components (`Theme.MaterialComponents.Light.DarkActionBar`, light only)  |
+| UI | XML layouts + **ViewBinding**, `Activity`/`Fragment`, Jetpack Navigation + `BottomNavigationView`, Material Components (`Theme.MaterialComponents.Light.NoActionBar`, light only)  |
 | Architecture | **MVVM**: `ViewModel` + `LiveData` (lifecycle 2.7.0), repositories as single sources of truth                                                                            |
 | Persistence | **`SharedPreferences`** (no Room, no DataStore)                                                                                                                          |
 | DI | Hand-written service locator (`di.AppContainer`). No Hilt or Dagger                                                                                                      |
@@ -117,7 +117,7 @@ Root package: `com.example.tomodoom`. Source root: `app/src/main/java/com/exampl
 com.example.tomodoom
 ├── TomodoomApplication.java      Application subclass; owns the AppContainer; starts the monitor
 ├── MainActivity.java             Single activity; BottomNavigationView ↔ NavController (Pets | Chat);
-│                                 hides the action bar on Pets, shows it elsewhere
+│                                 no action bar (NoActionBar theme)
 │
 ├── model/                        Immutable, pure-Java value objects (no android.* imports)
 │   ├── PetState                  name, currentHp, maxHp, equipped items (slot → itemId)
@@ -547,17 +547,15 @@ process. This limits battery work but means detection is not guaranteed while th
   `?attr/…` and `@style/Widget.MaterialComponents.…` work as normal.
 - **`BuildConfig` is enabled** (`buildFeatures.buildConfig = true`). Gate debug-only UI with
   `BuildConfig.DEBUG`.
-- **Theme:** `Theme.MaterialComponents.Light.DarkActionBar`, not Material3. Use
+- **Theme:** `Theme.MaterialComponents.Light.NoActionBar`, not Material3. Use
   MaterialComponents attributes (`?attr/textAppearanceHeadline6`, `?attr/materialButtonOutlinedStyle`).
   The app is **light only**: don't add `values-night/` resources. Colours follow §6.3.
-- **Action bar per destination:** the theme keeps `DarkActionBar`, and `MainActivity` hides the
-  action bar on `navigation_pets` and shows it on every other destination, through a
-  `NavController` `OnDestinationChangedListener`. A new destination gets the bar unless you add it
-  there. Don't switch the theme to `NoActionBar`: `setupActionBarWithNavController` needs an action bar.
+- **No action bar:** the theme is `NoActionBar`, so `getSupportActionBar()` returns `null` and
+  `NavigationUI.setupActionBarWithNavController` must not be called. Each page draws its own header
+  (the HP card on Pets); content starts right under the status bar.
 - **Navigation:** the host is a `FragmentContainerView` NavHostFragment. Get the `NavController`
   from `NavHostFragment#getNavController()`, not `Navigation.findNavController(activity, id)`.
-  A new top-level tab means a menu item **and** a nav-graph destination with the same id, plus that
-  id in `MainActivity`'s `AppBarConfiguration`.
+  A new top-level tab means a menu item **and** a nav-graph destination with the same id.
 - **Dependencies** must be compatible with compileSdk 34 / AGP 8.1.1. Many current AndroidX
   releases need compileSdk 35+, so check before you bump anything. Pin exact versions.
 - **Pets customisation panel (`DrawerLayout`):** `androidx.drawerlayout` (1.1.1) and
@@ -592,7 +590,7 @@ The app uses one fixed, light-only palette, defined as tokens in `res/values/col
 |---|---|---|---|
 | `floral_white` | `#FBF7EF` | Background and surfaces; text/icons on dark fills | `android:windowBackground`, `android:colorBackground`, `colorSurface`, `colorOnPrimary`, `colorOnSecondary` |
 | `eggshell` | `#F7F0DE` | Borders, dividers, subtle fills (bot bubble, system notice) | none (use directly or through a semantic alias) |
-| `charcoal` | `#585B5E` | Primary: action bar (Chat), customise FAB, user bubble, buttons, selected chip/tab, progress, input underline | `colorPrimary`, `colorSecondary` |
+| `charcoal` | `#585B5E` | Primary: customise FAB, user bubble, buttons, selected chip/tab, progress, input underline | `colorPrimary`, `colorSecondary` |
 | `jet` | `#383A3D` | Primary text, status bar, darker accents | `colorPrimaryVariant`, `colorSecondaryVariant`, `colorOnBackground`, `colorOnSurface`, `android:textColorPrimary` |
 | `slate_grey` | `#8C8F92` | Secondary text, hints, de-emphasised labels (e.g. pet status) | `android:textColorSecondary`, `android:textColorHint` |
 
@@ -704,7 +702,7 @@ Debug helpers available in the debug build:
    - the panel stays open across rotation and across a Pets → Chat → Pets round trip;
    - the bottom nav still switches tabs while the panel is open;
    - with the panel closed, Back leaves the app as before.
-3. Open **Chat**. The action bar reading "Chat" reappears. The mock bot greets you. Type `quiz`, and the bot asks a question (e.g. "What is 2 + 2?").
+3. Open **Chat**. There is no action bar; the transcript starts right under the status bar. The mock bot greets you. Type `quiz`, and the bot asks a question (e.g. "What is 2 + 2?").
 4. Answer correctly (`4`). The bot confirms, and a SYSTEM message shows **"+10 HP awarded via MCP! (60/100 HP)"**.
 5. Switch to **Pets**: **HP 60 / 100**.
 6. In Chat, type `/tool get_pet_state` (or `/tool award_hp amount=5`). A SYSTEM message shows the MCP result.
@@ -728,7 +726,7 @@ Update this table in the same commit when your task changes a subsystem's status
 |---|---|---|
 | Pet state + persistence | ✅ Done | `PetStateRepository` |
 | MCP tool bridge | ✅ Production-capable default | `DefaultMcpPetActionHandler` |
-| Pets UI (no action bar, HP header, FAB-triggered customisation side panel, debug row) | ✅ Skeleton done | `PetsFragment` / `PetsViewModel` |
+| Pets UI (HP header, FAB-triggered customisation side panel, debug row) | ✅ Skeleton done | `PetsFragment` / `PetsViewModel` |
 | Chat UI | ✅ Skeleton done | `ChatFragment` / `ChatViewModel` / `ChatRepository` |
 | Pet rendering | ⏳ Stub (text placeholder) | `PlaceholderManiengineRenderer` → Maniengine Agent |
 | Item catalog | ⏳ Placeholder (9 hard-coded items) | `AccessoryCatalog` → Maniengine Agent |
