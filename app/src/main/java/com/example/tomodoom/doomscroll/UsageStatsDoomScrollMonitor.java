@@ -4,9 +4,13 @@ import android.app.AppOpsManager;
 import android.app.usage.UsageEvents;
 import android.app.usage.UsageStatsManager;
 import android.content.Context;
+import android.graphics.Point;
+import android.hardware.display.DisplayManager;
 import android.os.Build;
+import android.os.PowerManager;
 import android.os.Process;
 import android.util.Log;
+import android.view.Display;
 
 import androidx.annotation.AnyThread;
 import androidx.annotation.NonNull;
@@ -26,16 +30,19 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Detects long foreground sessions in common social/video apps using Android Usage Access.
- * Polls every 15 seconds while the app process is alive; an uninterrupted 15-minute session
- * emits one penalty, with a 30-minute per-app cooldown for closely spaced sessions.
+ * Detects doom-scrolling in common social/video apps using Android Usage Access. Polls every
+ * 15 seconds and charges 1 HP per minute a watched app is on screen in portrait. Landscape (such
+ * as fullscreen video) doesn't count. {@link DoomScrollSessionTracker} holds the session rules.
  */
 public final class UsageStatsDoomScrollMonitor implements DoomScrollMonitor {
 
     private static final String TAG = "UsageStatsDoomScrollMonitor";
     private static final long POLL_INTERVAL_MILLIS = TimeUnit.SECONDS.toMillis(15);
-    private static final long MIN_SESSION_MILLIS = TimeUnit.MINUTES.toMillis(15);
-    private static final long PACKAGE_COOLDOWN_MILLIS = TimeUnit.MINUTES.toMillis(30);
+    private static final long MAX_POLL_GAP_MILLIS = TimeUnit.SECONDS.toMillis(45);
+    private static final long PENALTY_INTERVAL_MILLIS = TimeUnit.MINUTES.toMillis(1);
+    private static final int HP_PER_PENALTY_INTERVAL = 1;
+    private static final long WARNING_INTERVAL_MILLIS = TimeUnit.MINUTES.toMillis(10);
+    private static final long AWAY_GRACE_MILLIS = TimeUnit.SECONDS.toMillis(60);
     private static final long EVENT_LOOKBACK_MILLIS = TimeUnit.MINUTES.toMillis(30);
     @SuppressWarnings("deprecation")
     private static final int EVENT_FOREGROUND = UsageEvents.Event.MOVE_TO_FOREGROUND;
@@ -57,6 +64,10 @@ public final class UsageStatsDoomScrollMonitor implements DoomScrollMonitor {
     private final Context appContext;
     @Nullable
     private final UsageStatsManager usageStatsManager;
+    @Nullable
+    private final DisplayManager displayManager;
+    @Nullable
+    private final PowerManager powerManager;
     @NonNull
     private final Object lock = new Object();
     @NonNull
@@ -73,8 +84,10 @@ public final class UsageStatsDoomScrollMonitor implements DoomScrollMonitor {
     public UsageStatsDoomScrollMonitor(@NonNull Context context) {
         appContext = context.getApplicationContext();
         usageStatsManager = (UsageStatsManager) appContext.getSystemService(Context.USAGE_STATS_SERVICE);
-        sessionTracker = new DoomScrollSessionTracker(
-                DOOM_SCROLL_PACKAGES, MIN_SESSION_MILLIS, PACKAGE_COOLDOWN_MILLIS);
+        displayManager = (DisplayManager) appContext.getSystemService(Context.DISPLAY_SERVICE);
+        powerManager = (PowerManager) appContext.getSystemService(Context.POWER_SERVICE);
+        sessionTracker = new DoomScrollSessionTracker(DOOM_SCROLL_PACKAGES, PENALTY_INTERVAL_MILLIS,
+                WARNING_INTERVAL_MILLIS, AWAY_GRACE_MILLIS, MAX_POLL_GAP_MILLIS);
     }
 
     @AnyThread
@@ -113,7 +126,7 @@ public final class UsageStatsDoomScrollMonitor implements DoomScrollMonitor {
                 executor.shutdownNow();
                 executor = null;
             }
-            sessionTracker.resetCurrentSession();
+            sessionTracker.reset();
             lastQueryMillis = 0L;
         }
     }
@@ -188,7 +201,7 @@ public final class UsageStatsDoomScrollMonitor implements DoomScrollMonitor {
             events.getNextEvent(event);
             handleUsageEvent(event);
         }
-        maybeReportLongSession(now);
+        reportDueTime(now);
     }
 
     private void handleUsageEvent(@NonNull UsageEvents.Event event) {
@@ -197,37 +210,51 @@ public final class UsageStatsDoomScrollMonitor implements DoomScrollMonitor {
         if (packageName == null) {
             return;
         }
-        DoomScrollEvent detectedEvent;
         synchronized (lock) {
             if (!monitoring) {
                 return;
             }
             if (type == EVENT_FOREGROUND) {
-                detectedEvent = sessionTracker.onForeground(packageName, event.getTimeStamp());
+                sessionTracker.onForeground(packageName, event.getTimeStamp());
             } else if (type == EVENT_BACKGROUND) {
-                detectedEvent = sessionTracker.onBackground(packageName, event.getTimeStamp());
-            } else {
-                return;
+                sessionTracker.onBackground(packageName, event.getTimeStamp());
             }
         }
-        notifyListener(detectedEvent);
     }
 
-    private void maybeReportLongSession(long nowMillis) {
-        DoomScrollEvent detectedEvent;
+    private void reportDueTime(long nowMillis) {
+        boolean countable = isScreenOnInPortrait();
+        DoomScrollSessionTracker.Tick tick;
         synchronized (lock) {
             if (!monitoring) {
                 return;
             }
-            detectedEvent = sessionTracker.onPoll(nowMillis);
+            tick = sessionTracker.onPoll(nowMillis, countable);
         }
-        notifyListener(detectedEvent);
+        if (tick != null && tick.penaltyIntervals > 0) {
+            notifyListener(new DoomScrollEvent(tick.sourcePackage,
+                    tick.penaltyIntervals * PENALTY_INTERVAL_MILLIS,
+                    tick.penaltyIntervals * HP_PER_PENALTY_INTERVAL,
+                    nowMillis));
+        }
     }
 
-    private void notifyListener(@Nullable DoomScrollEvent event) {
-        if (event == null) {
-            return;
+    /** The display's current size reflects the rotation the foreground app is using. */
+    @SuppressWarnings("deprecation")
+    private boolean isScreenOnInPortrait() {
+        if (powerManager == null || !powerManager.isInteractive() || displayManager == null) {
+            return false;
         }
+        Display display = displayManager.getDisplay(Display.DEFAULT_DISPLAY);
+        if (display == null) {
+            return false;
+        }
+        Point size = new Point();
+        display.getRealSize(size);
+        return DoomScrollSessionTracker.isPortrait(size.x, size.y);
+    }
+
+    private void notifyListener(@NonNull DoomScrollEvent event) {
         DoomScrollListener currentListener = listener;
         if (currentListener != null) {
             currentListener.onDoomScrollDetected(event);
