@@ -195,7 +195,8 @@ Resources: `res/values/colors.xml` + `res/values/themes.xml` (palette and theme,
 `pet_name_layout`/`pet_name_input`, `start_button`), `res/menu/bottom_nav_menu.xml`.
 `res/values/dimens.xml` (`pet_viewport_stroke`).
 Assets: `assets/trufar/kafka_agent.json` (the Kafka TruFar agent export, icon stripped; §5.2),
-`assets/maniengine/index.html` (the Maniengine page; currently a placeholder, §5.1).
+`assets/maniengine/index.html` (the pet page, §5.1), `pet-model.js` (GENERATED from the scene-3 export)
+and `vendor/three/` (three.js 0.187.0). Tools: `tools/maniengine/extract_model.py` (+ `source/scene-3.html`).
 
 ### Dependency direction (enforced by convention)
 
@@ -398,10 +399,18 @@ General rules for every agent:
 
 #### Dropping in the Maniengine HTML export
 
-Maniengine's output is an `.html` page (a 3D scene). Copy the export into
-**`app/src/main/assets/maniengine/`** with `index.html` as the entry page, plus whatever it loads
-(JS/modules, `.glb`/`.gltf`, textures, `.wasm`, fonts) beside it with **relative URLs**. Replace
-the placeholder `index.html`. No code change is needed.
+Maniengine's output is a single `.html` file (an "m3d" export). It holds **no mesh data**: the
+model is three.js code building named meshes from primitives, wrapped in editor plumbing (the
+`m3dLoader` live-edit runtime with a `/*O*/[...]/*O*/` override table, WASD camera controls, and a
+CDN importmap). So the export isn't dropped in as is. Put it in `tools/maniengine/source/` and run
+**`python3 tools/maniengine/extract_model.py [export.html]`** (stdlib only; see its README). It
+writes `assets/maniengine/pet-model.js` (`buildModel(THREE, scene, renderer)` + `OVERRIDES`) and
+vendors the matching three.js into `assets/maniengine/vendor/three/`. Never edit `pet-model.js` by
+hand. `assets/maniengine/index.html` is hand-written: it builds the model, applies `OVERRIDES`,
+drops the hidden room meshes, frames the camera on the rabbit, animates by `mood`, and shows
+primitive add-ons for the `AccessoryCatalog` IDs. It looks parts up by mesh name, so a new export
+with renamed parts needs those lookups updated. Other asset types (`.glb`, textures, `.wasm`) can
+still sit beside it with relative URLs.
 
 How the page is hosted (`HtmlManiengineRenderer`):
 - Served from the virtual origin **`https://appassets.androidplatform.net/assets/maniengine/`**
@@ -657,6 +666,11 @@ process. This limits battery work but means detection is not guaranteed while th
   checks `isOnboardingComplete()` before inflating anything and forwards to `MainActivity` if set.
   Anything that should run on every launch belongs in `TomodoomApplication` or `MainActivity`,
   not in the onboarding screen.
+- **Maniengine overrides are applied by the page, not the editor.** `index.html` matches each
+  `OVERRIDES` entry by unique top-level name, else by `scene.children` index (the camera is added
+  first so the indices match the export). Nested paths (`"46/16"`) are skipped with a
+  `console.warn`. Headless-Edge screenshots on this Windows machine report a viewport about 500px
+  wide whatever `--window-size` says, so check framing at ≥500px.
 - **Switch on strings** works with the `AccessorySlot` / `McpPetActionHandler.TOOL_*` constants
   because they are compile-time constants. Keep new constants `static final` literals.
 
@@ -784,15 +798,16 @@ Debug helpers available in the debug build:
    bar) and shows `Tomo`, **HP 50 / 100** and status "Okay". Until Usage Access is granted, a Usage Access card with an **Enable** button
    sits under the HP card (it disappears once access is granted). The bottom nav reads **Customise · Pets · Chat** with Pets selected.
 2. Swipe right (or tap **Customise**). The Customise page shows "Customise pet", a pet preview and
-   Hat / Outfit / Accessory tabs with item chips. Choose **Hat → Cap**: the preview (the placeholder
-   grey blob) gains a hat at once and its caption reads `hat: Cap`. Swipe back to Pets: the large
+   Hat / Outfit / Accessory tabs with item chips. Choose **Hat → Cap**: the preview (the 3D
+   cream rabbit in a floral dress, on a rug) gains a blue cap at once. Swipe back to Pets: the large
    pet has the hat too. Also check:
    - the selected slot tab and the current page survive rotation;
    - Back on Customise or Chat returns to Pets; Back on Pets leaves the app;
    - **Swiping:** from Pets, swipe left to Chat and right to Customise. The bottom nav selection
      follows.
-   - Swiping over the placeholder pet also changes page (it doesn't declare `tomodoom-touch`).
-     Simulate doom-scroll or a quiz: the page's HP caption updates without reloading.
+   - Swiping over the pet also changes page (it doesn't declare `tomodoom-touch`).
+   - Mood: HP ≥ the thriving threshold makes the rabbit hop, struggling droops its head and
+     desaturates, and 0 HP (Simulate doom-scroll repeatedly) tips it over in grey. Outfits retint the dress.
 3. Open **Chat**. There is no action bar; the transcript starts right under the status bar. The mock bot greets you. Type `quiz`, and the bot asks a question (e.g. "What is 2 + 2?").
 4. Answer correctly (`4`). The bot confirms, and a SYSTEM message shows **"+10 HP awarded via MCP! (60/100 HP)"**.
 5. Switch to **Pets**: **HP 60 / 100**.
@@ -821,7 +836,7 @@ Update this table in the same commit when your task changes a subsystem's status
 | Customise UI (pet preview, slot tabs, item chips) | ✅ Skeleton done | `CustomiseFragment` / `CustomiseViewModel` |
 | Onboarding (name the pet) | ✅ Done | `OnboardingActivity` / `OnboardingViewModel` |
 | Chat UI | ✅ Skeleton done | `ChatFragment` / `ChatViewModel` / `ChatRepository` |
-| Pet rendering | ✅ HTML/WebView pipeline; ⏳ placeholder page until the Maniengine export lands in `assets/maniengine/` | `HtmlManiengineRenderer` |
+| Pet rendering | ✅ scene-3 rabbit (three.js, offline) via the HTML/WebView pipeline; add-ons are primitive placeholders | `HtmlManiengineRenderer` + `assets/maniengine/` |
 | Item catalog | ⏳ Placeholder (9 hard-coded items) | `AccessoryCatalog` → Maniengine Agent |
 | TruFar backend | ✅ Kafka agent via OpenAI-compatible client (mock when unconfigured) | `OpenAiCompatibleChatService` (`TRUFAR_LLM_URL`) / `HttpTruFarChatService` / `MockTruFarChatService` |
 | Doom-scroll detection | ✅ Usage Access polling | `UsageStatsDoomScrollMonitor` |

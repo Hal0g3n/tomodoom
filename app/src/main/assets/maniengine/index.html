@@ -1,15 +1,11 @@
 <!doctype html>
 <!--
-  PLACEHOLDER Maniengine page. Replace this file (and add its sibling files to this folder) with
-  the Maniengine HTML export. The app contract is in CLAUDE.md §5.1 and
-  maniengine/ManiengineProtocol.java:
-    - the app dispatches  window "tomodoom:petstate"  (event.detail = state) on every change and
-      also sets  window.tomodoomPetState  (read it at startup in case the event came first);
-    - state = { name, hp, maxHp, hpFraction, mood, fainted, equipped: { slot: { id, name } } };
-    - served from https://appassets.androidplatform.net/assets/maniengine/, so relative URLs,
-      ES modules, fetch() and .glb/.wasm files work;
-    - <meta name="tomodoom-touch" content="capture"> keeps drags on the page (e.g. orbit
-      controls) instead of swiping tabs. This placeholder doesn't need drags, so it omits it.
+  Tomodoom pet page (CLAUDE.md §5.1). The rabbit comes from the Maniengine export scene-3.html:
+  pet-model.js is GENERATED from it by tools/maniengine/extract_model.py (don't edit it by hand).
+  This page owns the camera, lighting loop and the app contract:
+    - reads window.tomodoomPetState at startup and listens for "tomodoom:petstate";
+    - mood drives the idle animation, equipped items toggle the add-ons below.
+  No <meta name="tomodoom-touch">: there are no drag controls, so tab swipes work over the pet.
 -->
 <html lang="en">
 <head>
@@ -17,53 +13,142 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
   <title>Tomodoom pet</title>
   <style>
-    :root { --ink: #383A3D; --muted: #8C8F92; --fill: #F7F0DE; --body: #585B5E; }
-    html, body { margin: 0; height: 100%; background: transparent; color: var(--ink);
-      font-family: sans-serif; overflow: hidden; user-select: none; }
-    main { height: 100%; display: flex; flex-direction: column; align-items: center;
-      justify-content: center; gap: 12px; text-align: center; }
-    .pet { position: relative; width: 120px; height: 104px; border-radius: 50% 50% 44% 44%;
-      background: var(--body); animation: bob 2.4s ease-in-out infinite;
-      transition: filter .4s, transform .4s; }
-    .pet.struggling { filter: saturate(.4) brightness(1.15); }
-    .pet.fainted { animation: none; transform: rotate(-80deg) translateY(10px); filter: grayscale(1); }
-    .eye { position: absolute; top: 38px; width: 12px; height: 16px; border-radius: 50%;
-      background: var(--fill); }
-    .eye.l { left: 34px; } .eye.r { right: 34px; }
-    .fainted .eye { height: 3px; top: 44px; border-radius: 2px; }
-    .mouth { position: absolute; left: 50%; top: 66px; width: 26px; height: 10px; margin-left: -13px;
-      border: 3px solid var(--fill); border-top: none; border-radius: 0 0 16px 16px; }
-    .struggling .mouth, .fainted .mouth { border-radius: 16px 16px 0 0; border: 3px solid var(--fill);
-      border-bottom: none; top: 70px; }
-    .hat { position: absolute; left: 50%; top: -22px; width: 70px; height: 28px; margin-left: -35px;
-      background: var(--ink); border-radius: 14px 14px 4px 4px; display: none; }
-    .has-hat .hat { display: block; }
-    h1 { margin: 0; font-size: 18px; }
-    p { margin: 0; font-size: 13px; color: var(--muted); }
-    @keyframes bob { 50% { transform: translateY(-6px); } }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; }
+    canvas { display: block; transition: filter .6s; }
+    #error { position: absolute; inset: auto 0 12px; text-align: center; font: 13px sans-serif;
+      color: #8C8F92; }
   </style>
+  <script type="importmap">{ "imports": { "three": "./vendor/three/three.module.js" } }</script>
 </head>
 <body>
-<main>
-  <div id="pet" class="pet"><div class="hat"></div><div class="eye l"></div><div class="eye r"></div><div class="mouth"></div></div>
-  <h1 id="name">…</h1>
-  <p id="items"></p>
-  <p>Placeholder: drop the Maniengine export here</p>
-</main>
+<div id="error"></div>
+<script type="module">
+import * as THREE from 'three';
+import { buildModel, OVERRIDES } from './pet-model.js';
+
+// --- Scene, built exactly as the export does it (camera first, so override child paths match) ---
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(35, innerWidth / innerHeight, 0.05, 100);
+scene.add(camera);
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+
+const { dress } = buildModel(THREE, scene, renderer);
+scene.traverse(o => { if (o.isDirectionalLight) o.shadow.mapSize.set(1024, 1024); });  // phone-sized
+
+// Editor overrides (the export's live-edit table): top-level objects by unique name, else child index.
+for (const o of OVERRIDES) {
+  if (String(o.path).includes('/')) { console.warn('skipping nested override', o.name); continue; }
+  const matches = scene.children.filter(c => c.name === o.name);
+  const target = matches.length === 1 ? matches[0] : scene.children[+o.path];
+  if (!target || target.name !== o.name) { console.warn('unmatched override', o.name); continue; }
+  if (o.p) { target.position.fromArray(o.p); target.rotation.fromArray(o.r); target.scale.fromArray(o.s); }
+  if (o.v !== undefined) target.visible = o.v;
+}
+
+// Drop the hidden room; group what's left into rug + rabbit (pivot at its feet) + head (pivot at neck).
+scene.children.filter(o => o.isMesh && !o.visible).forEach(o => scene.remove(o));
+const isRug = o => /rug/i.test(o.name);
+const isHead = o => /head|ear|eye|muzzle|nose|mouth|whisker|smile/i.test(o.name);
+const meshes = scene.children.filter(o => o.isMesh && !isRug(o));
+const box = (list) => list.reduce((b, o) => b.expandByObject(o), new THREE.Box3());
+const named = (n) => scene.getObjectByName(n);
+
+const rabbitBox = box(meshes), headBox = box([named('Rabbit cream flocked head')]);
+const rabbit = new THREE.Group(), head = new THREE.Group();
+rabbit.position.set(0, rabbitBox.min.y, rabbitBox.getCenter(new THREE.Vector3()).z);
+head.position.set(0, headBox.min.y + 0.1, rabbit.position.z);
+scene.add(rabbit, head);
+for (const m of meshes) (isHead(m) ? head : rabbit).attach(m);
+rabbit.attach(head);
+
+// --- Add-ons for the AccessoryCatalog item IDs, built once in world space, then toggled ---
+const mat = (color, extra) => new THREE.MeshStandardMaterial({ color, roughness: .7, ...extra });
+const mesh = (geo, m, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = true; return o; };
+const top = headBox.max.y, hz = headBox.getCenter(new THREE.Vector3()).z;
+const eyes = ['Left glossy dark eye', 'Right glossy dark eye'].map(n => named(n).getWorldPosition(new THREE.Vector3()));
+const body = box([named('Rabbit flocked body')]);
+function addOn(parent, ...parts) { const g = new THREE.Group(); g.add(...parts); g.visible = false; parent.attach(g); return g; }
+
+const capMat = mat(0x6f8fb8), beanieMat = mat(0xd891a9, { roughness: 1 }), gold = mat(0xe3c06b, { metalness: .6, roughness: .3 });
+const ADDONS = {
+  hat_cap: addOn(head,
+    mesh(new THREE.SphereGeometry(.3, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), capMat, 0, top - .1, hz),
+    mesh(new THREE.CylinderGeometry(.3, .3, .02, 32, 1, false, -Math.PI / 2, Math.PI), capMat, 0, top - .1, hz + .12)),
+  hat_beanie: addOn(head,
+    mesh(new THREE.SphereGeometry(.34, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), beanieMat, 0, top - .14, hz),
+    mesh(new THREE.SphereGeometry(.08, 16, 12), mat(0xfffcf3, { roughness: 1 }), 0, top + .2, hz)),
+  hat_crown: addOn(head,
+    mesh(new THREE.CylinderGeometry(.2, .2, .14, 5, 1, true), gold, 0, top + .02, hz),
+    ...[0, 1, 2, 3, 4].map(i => mesh(new THREE.ConeGeometry(.05, .12, 8), gold,
+      Math.sin(i * 1.2566) * .2, top + .15, hz + Math.cos(i * 1.2566) * .2))),
+  acc_glasses: addOn(head,
+    ...eyes.map(e => mesh(new THREE.TorusGeometry(.1, .012, 8, 32), mat(0x383a3d), e.x, e.y, e.z + .07)),
+    mesh(new THREE.CylinderGeometry(.01, .01, Math.abs(eyes[1].x - eyes[0].x) - .2, 8).rotateZ(Math.PI / 2),
+      mat(0x383a3d), 0, eyes[0].y, eyes[0].z + .08)),
+  acc_scarf: addOn(rabbit,
+    mesh(new THREE.TorusGeometry(.36, .07, 12, 48).rotateX(Math.PI / 2), mat(0xc7604f, { roughness: 1 }), 0, headBox.min.y + .08, hz)),
+  acc_backpack: addOn(rabbit,
+    mesh(new THREE.BoxGeometry(.5, .55, .22), mat(0x8ca17a, { roughness: .9 }), 0, (body.min.y + body.max.y) / 2, body.min.z - .02)),
+};
+const OUTFIT_TINT = { outfit_hoodie: 0xb8c4d6, outfit_raincoat: 0xf2d35b, outfit_tuxedo: 0x4a4a52 };
+
+// --- App contract: tomodoom:petstate ---
+let mood = 'okay';
+function applyState(s) {
+  if (!s) return;
+  mood = s.fainted ? 'fainted' : s.mood;
+  const ids = Object.values(s.equipped || {}).map(item => item.id);
+  for (const id in ADDONS) ADDONS[id].visible = ids.includes(id);
+  const outfit = ids.find(id => id in OUTFIT_TINT);
+  dress.material.color.setHex(outfit ? OUTFIT_TINT[outfit] : 0xffffff);
+  renderer.domElement.style.filter = { struggling: 'saturate(.55)', fainted: 'grayscale(.85)' }[mood] || '';
+}
+addEventListener('tomodoom:petstate', e => applyState(e.detail));
+applyState(window.tomodoomPetState);
+
+// --- Camera: frame the rabbit (+ the near rug) for whatever aspect the viewport has ---
+function fit() {
+  const size = rabbitBox.getSize(new THREE.Vector3()), centre = rabbitBox.getCenter(new THREE.Vector3());
+  camera.aspect = innerWidth / innerHeight;
+  const vFov = THREE.MathUtils.degToRad(camera.fov) / 2;
+  const fitH = (size.y * .75) / Math.tan(vFov), fitW = (size.x * 1.1) / (Math.tan(vFov) * camera.aspect);
+  const dist = Math.max(fitH, fitW, 2.5);
+  camera.position.set(0, centre.y + dist * .18, centre.z + dist);
+  camera.lookAt(0, centre.y - size.y * .08, centre.z);
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+}
+addEventListener('resize', fit);
+fit();
+
+// --- Idle animation per mood; eased so mood changes blend ---
+const goal = { y: 0, tip: 0, droop: 0, squash: 1 };
+let last = performance.now();
+function frame(now) {
+  const t = now / 1000, k = 1 - Math.exp(-Math.min(now - last, 100) / 1000 * 6);
+  last = now;
+  if (mood === 'thriving') Object.assign(goal, { y: Math.abs(Math.sin(t * 3)) * .12, tip: 0, droop: -.05, squash: 1 });
+  else if (mood === 'struggling') Object.assign(goal, { y: Math.sin(t * .9) * .01, tip: 0, droop: .3, squash: .97 });
+  else if (mood === 'fainted') Object.assign(goal, { y: 0, tip: 1.35, droop: .4, squash: 1 });
+  else Object.assign(goal, { y: 0, tip: 0, droop: Math.sin(t * 1.3) * .03, squash: 1 + Math.sin(t * 2) * .012 });
+  rabbit.position.y = THREE.MathUtils.lerp(rabbit.position.y, rabbitBox.min.y + goal.y, mood === 'thriving' ? 1 : k);
+  rabbit.rotation.z = THREE.MathUtils.lerp(rabbit.rotation.z, goal.tip, k * .5);
+  rabbit.scale.y = THREE.MathUtils.lerp(rabbit.scale.y, goal.squash, k);
+  head.rotation.x = THREE.MathUtils.lerp(head.rotation.x, goal.droop, k);
+  renderer.render(scene, camera);
+}
+const run = () => renderer.setAnimationLoop(document.hidden ? null : frame);
+document.addEventListener('visibilitychange', run);
+run();
+</script>
 <script>
-  (function () {
-    function render(s) {
-      if (!s) return;
-      var pet = document.getElementById('pet');
-      pet.className = 'pet ' + s.mood + (s.equipped && s.equipped.hat ? ' has-hat' : '');
-      document.getElementById('name').textContent = s.name + ' · ' + s.hp + ' / ' + s.maxHp + ' HP';
-      var names = [];
-      for (var slot in (s.equipped || {})) names.push(slot + ': ' + s.equipped[slot].name);
-      document.getElementById('items').textContent = names.length ? names.join(' · ') : 'Nothing equipped';
-    }
-    window.addEventListener('tomodoom:petstate', function (e) { render(e.detail); });
-    render(window.tomodoomPetState);
-  })();
+  // Module errors (e.g. no WebGL) don't reach the app; show a hint instead of a blank viewport.
+  addEventListener('error', function (e) {
+    document.getElementById('error').textContent = 'Pet failed to load: ' + (e.message || e);
+  });
 </script>
 </body>
 </html>
