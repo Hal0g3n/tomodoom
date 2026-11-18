@@ -1,6 +1,8 @@
 package com.example.tomodoom.ui.pets;
 
+import android.content.Intent;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -16,6 +18,7 @@ import androidx.lifecycle.ViewModelProvider;
 
 import com.example.tomodoom.BuildConfig;
 import com.example.tomodoom.R;
+import com.example.tomodoom.contracts.DoomScrollMonitor;
 import com.example.tomodoom.contracts.ManiengineAssetRenderer;
 import com.example.tomodoom.databinding.FragmentPetsBinding;
 import com.example.tomodoom.di.AppContainer;
@@ -40,6 +43,8 @@ public class PetsFragment extends Fragment {
 
     private FragmentPetsBinding binding;
     private PetsViewModel viewModel;
+    @Nullable
+    private DoomScrollMonitor doomScrollMonitor;
     @Nullable
     private ManiengineAssetRenderer renderer;
     /** Slot whose chips are currently shown. */
@@ -67,10 +72,14 @@ public class PetsFragment extends Fragment {
         viewModel = new ViewModelProvider(this, ViewModelFactory.from(requireContext()))
                 .get(PetsViewModel.class);
         renderer = AppContainer.from(requireContext()).createAssetRenderer();
+        doomScrollMonitor = AppContainer.from(requireContext()).getDoomScrollMonitor();
 
         setUpCustomisePanel();
         setUpSlotTabs();
         setUpDebugPanel();
+        binding.usageAccessButton.setOnClickListener(v ->
+                startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)));
+        updateUsageAccessCard();
 
         viewModel.getSelectedSlot().observe(getViewLifecycleOwner(), this::showSlot);
         viewModel.getPetState().observe(getViewLifecycleOwner(), this::renderState);
@@ -90,8 +99,15 @@ public class PetsFragment extends Fragment {
             renderer = null;
         }
         chipSlot = null;
+        doomScrollMonitor = null;
         super.onDestroyView();
         binding = null;
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        updateUsageAccessCard();
     }
 
     // ---------------------------------------------------------------------------------------
@@ -276,5 +292,16 @@ public class PetsFragment extends Fragment {
                 getString(R.string.debug_simulate_doom_scroll, DoomScrollEvent.DEFAULT_HP_PENALTY));
         binding.debugDoomScroll.setOnClickListener(v -> viewModel.debugSimulateDoomScroll());
         binding.debugReset.setOnClickListener(v -> viewModel.debugResetPet());
+    }
+
+    private void updateUsageAccessCard() {
+        if (binding == null || doomScrollMonitor == null) {
+            return;
+        }
+        boolean permissionGranted = doomScrollMonitor.isPermissionGranted();
+        binding.usageAccessCard.setVisibility(permissionGranted ? View.GONE : View.VISIBLE);
+        if (permissionGranted) {
+            doomScrollMonitor.startMonitoring();
+        }
     }
 }
