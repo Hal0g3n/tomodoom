@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+.env
+# Firebase service-account keys: keep them on the server only.
+*-firebase-adminsdk-*.json
+serviceAccount*.json
+service-account*.json

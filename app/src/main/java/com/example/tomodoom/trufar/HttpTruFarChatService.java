@@ -34,7 +34,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class HttpTruFarChatService implements TruFarChatService {
 
     private static final String TAG = "HttpTruFarChatService";
-    private static final int READ_TIMEOUT_MILLIS = 30_000;
+    /** Long enough for a relayed TruFar turn: Kafka (deepseek-v4-pro) thinks before replying. */
+    private static final int READ_TIMEOUT_MILLIS = 120_000;
     private static final int MAX_TOOL_ROUND_TRIPS = 8;
 
     private static final class ToolCallBudget {
