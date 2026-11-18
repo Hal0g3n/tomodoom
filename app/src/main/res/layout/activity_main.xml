@@ -16,11 +16,19 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
+    <!-- Icons only; the open tab widens, shows its label and enlarges its icon (MainActivity). -->
     <com.google.android.material.bottomnavigation.BottomNavigationView
         android:id="@+id/nav_view"
         android:layout_width="0dp"
-        android:layout_height="wrap_content"
+        android:layout_height="72dp"
         android:background="?android:attr/windowBackground"
+        app:itemBackground="@drawable/bg_nav_item"
+        app:itemIconSize="28dp"
+        app:itemIconTint="@color/nav_item_tint"
+        app:itemTextAppearanceActive="@style/TextAppearance.Tomodoom.NavLabel"
+        app:itemTextAppearanceInactive="@style/TextAppearance.Tomodoom.NavLabel"
+        app:itemTextColor="@color/nav_item_tint"
+        app:labelVisibilityMode="selected"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"

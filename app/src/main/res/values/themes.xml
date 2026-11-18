@@ -23,4 +23,10 @@
         <!-- Status bar color. -->
         <item name="android:statusBarColor">?attr/colorPrimaryVariant</item>
     </style>
+
+    <!-- Label of the open bottom bar tab (the other tabs show only their icon). -->
+    <style name="TextAppearance.Tomodoom.NavLabel" parent="TextAppearance.MaterialComponents.Caption">
+        <item name="android:textSize">13sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
 </resources>

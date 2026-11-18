@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Bottom bar item: the open tab sits on a rounded tile. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="?attr/colorControlHighlight">
+    <item>
+        <selector>
+            <item android:state_checked="true">
+                <inset
+                    android:insetLeft="6dp"
+                    android:insetTop="4dp"
+                    android:insetRight="6dp"
+                    android:insetBottom="4dp">
+                    <shape android:shape="rectangle">
+                        <solid android:color="@color/eggshell" />
+                        <corners android:radius="16dp" />
+                    </shape>
+                </inset>
+            </item>
+            <item android:drawable="@android:color/transparent" />
+        </selector>
+    </item>
+</ripple>

@@ -91,7 +91,8 @@ virtual pet whose **HP** reflects your digital habits:
 
 The app has three bottom-navigation tabs, left to right: **Customise** (live pet preview + slot tabs
 and item chips), **Pets** (HP and the pet viewport; the default page on launch) and **Chat**
-(TruFar chatbot + quizzes). There is no action bar on any tab.
+(TruFar chatbot + quizzes). There is no action bar on any tab. The bottom bar shows icons only: the
+open tab widens, shows its label and enlarges its icon.
 
 ### Tech stack (fixed — don't change it without updating this file)
 
@@ -655,6 +656,9 @@ process. This limits battery work but means detection is not guaranteed while th
     on `ACTION_DOWN` (as the Maniengine WebView does for `tomodoom-touch` capture). If a whole page
     ever needs to suspend swiping, add a host callback calling `ViewPager2.setUserInputEnabled`
     (the old `PageSwipeHost` did this for the removed customisation drawer).
+- **Bottom bar:** `labelVisibilityMode="selected"` makes Material widen the open tab and show only
+  its label. `MainActivity.emphasiseNavIcon` adds the icon scale and lift. It finds the icon by type
+  because Material's icon view id is private (referencing it triggers lint `PrivateResource`).
 - **Dependencies** must be compatible with compileSdk 34 / AGP 8.1.1. Many current AndroidX
   releases need compileSdk 35+, so check before you bump anything. Pin exact versions.
 - **`androidx.activity` / `drawerlayout` / `viewpager2`** come in transitively as compile-scope
@@ -809,7 +813,7 @@ Debug helpers available in the debug build:
    below assume you kept `Tomo`.)
 1. Launch the app. The **Pets** tab has **no action bar** (the HP card sits right under the status
    bar) and shows `Tomo`, **HP 50 / 100** and status "Okay". Until Usage Access is granted, a Usage Access card with an **Enable** button
-   sits under the HP card (it disappears once access is granted). The bottom nav reads **Customise · Pets · Chat** with Pets selected.
+   sits under the HP card (it disappears once access is granted). The bottom bar shows three icons (Customise, Pets, Chat). Pets is open: its tile is wider, its icon is larger and only it shows a label.
 2. Swipe right (or tap **Customise**). The Customise page shows "Customise pet", a pet preview and
    Hat / Outfit / Accessory tabs with item chips. Choose **Hat → Cap**: the preview (the 3D
    cream rabbit in a floral dress, on a rug) gains a blue cap at once. Swipe back to Pets: the large
