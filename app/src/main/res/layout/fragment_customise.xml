@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Customise page: a live pet preview above the slot tabs and item chips. -->
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="16dp"
+    tools:context=".ui.customise.CustomiseFragment">
+
+    <TextView
+        android:id="@+id/customise_header"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="@string/customise_title"
+        android:textAppearance="?attr/textAppearanceHeadline6"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- Pet preview: owned entirely by ManiengineAssetRenderer. Add no children here. -->
+    <FrameLayout
+        android:id="@+id/pet_viewport"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/bg_pet_viewport"
+        android:contentDescription="@string/pet_viewport_description"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHeight_percent="0.4"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/customise_header" />
+
+    <com.google.android.material.tabs.TabLayout
+        android:id="@+id/slot_tabs"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/pet_viewport"
+        app:tabGravity="start"
+        app:tabMode="scrollable" />
+
+    <ScrollView
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/slot_tabs">
+
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/item_chips"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="12dp"
+            android:paddingBottom="12dp"
+            app:selectionRequired="true"
+            app:singleLine="false"
+            app:singleSelection="true" />
+    </ScrollView>
+</androidx.constraintlayout.widget.ConstraintLayout>

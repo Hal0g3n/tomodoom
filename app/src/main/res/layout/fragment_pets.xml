@@ -1,190 +1,161 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Pets page. The DrawerLayout holds the main content plus the right-side (END) customisation
-     panel, which only opens from customise_fab (see PetsFragment). The id lets DrawerLayout save
-     and restore the panel's open state. -->
-<androidx.drawerlayout.widget.DrawerLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- Pets page: HP header, Usage Access prompt, the pet viewport and (debug builds) a debug row.
+     Customisation is its own page (fragment_customise.xml). -->
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
-    android:id="@+id/pets_drawer"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:padding="16dp"
     tools:context=".ui.pets.PetsFragment">
 
-    <!-- Main content (must be the DrawerLayout's first child) -->
-    <androidx.constraintlayout.widget.ConstraintLayout
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:padding="16dp">
+    <!-- HP header -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/hp_card"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        app:cardCornerRadius="16dp"
+        app:cardElevation="0dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:strokeColor="@color/eggshell"
+        app:strokeWidth="1dp">
 
-        <!-- HP header -->
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/hp_card"
-            android:layout_width="0dp"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            app:cardCornerRadius="16dp"
-            app:cardElevation="0dp"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:strokeColor="@color/eggshell"
-            app:strokeWidth="1dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="16dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:id="@+id/pet_name"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:textAppearance="?attr/textAppearanceHeadline6"
-                        tools:text="Tomo" />
-
-                    <TextView
-                        android:id="@+id/pet_status"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:textAppearance="?attr/textAppearanceSubtitle2"
-                        android:textColor="@color/slate_grey"
-                        tools:text="@string/pet_status_okay" />
-                </LinearLayout>
-
-                <ProgressBar
-                    android:id="@+id/hp_progress"
-                    style="?android:attr/progressBarStyleHorizontal"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:max="100"
-                    tools:progress="50" />
-
-                <TextView
-                    android:id="@+id/hp_text"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:textAppearance="?attr/textAppearanceBody2"
-                    tools:text="HP 50 / 100" />
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <!-- Usage Access prompt (Doom Scroll Agent); PetsFragment hides it once access is granted -->
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/usage_access_card"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            app:cardCornerRadius="16dp"
-            app:cardElevation="0dp"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/hp_card"
-            app:strokeColor="@color/eggshell"
-            app:strokeWidth="1dp">
+            android:orientation="vertical"
+            android:padding="16dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:padding="12dp">
+                android:orientation="horizontal">
 
                 <TextView
-                    android:id="@+id/usage_access_message"
+                    android:id="@+id/pet_name"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:paddingStart="8dp"
-                    android:paddingEnd="8dp"
-                    android:text="@string/usage_access_explanation"
-                    android:textAppearance="?attr/textAppearanceBody2" />
+                    android:textAppearance="?attr/textAppearanceHeadline6"
+                    tools:text="Tomo" />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/usage_access_button"
-                    style="?attr/materialButtonOutlinedStyle"
+                <TextView
+                    android:id="@+id/pet_status"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/usage_access_open_settings"
-                    app:strokeColor="@color/eggshell" />
+                    android:textAppearance="?attr/textAppearanceSubtitle2"
+                    android:textColor="@color/slate_grey"
+                    tools:text="@string/pet_status_okay" />
             </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
 
-        <!-- Pet viewport: owned entirely by ManiengineAssetRenderer. Add no children here. -->
-        <FrameLayout
-            android:id="@+id/pet_viewport"
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:layout_marginTop="16dp"
-            android:layout_marginBottom="8dp"
-            android:background="@drawable/bg_pet_viewport"
-            android:contentDescription="@string/pet_viewport_description"
-            app:layout_constraintBottom_toTopOf="@id/debug_panel"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/usage_access_card"
-            app:layout_goneMarginBottom="0dp"
-            app:layout_goneMarginTop="16dp" />
-
-        <!-- Debug-only controls (shown when BuildConfig.DEBUG) -->
-        <LinearLayout
-            android:id="@+id/debug_panel"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:visibility="gone"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            tools:visibility="visible">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/debug_doom_scroll"
-                style="?attr/materialButtonOutlinedStyle"
-                app:strokeColor="@color/eggshell"
-                android:layout_width="0dp"
+            <ProgressBar
+                android:id="@+id/hp_progress"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                tools:text="@string/debug_simulate_doom_scroll" />
+                android:layout_marginTop="8dp"
+                android:max="100"
+                tools:progress="50" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/debug_reset"
-                style="?attr/materialButtonOutlinedStyle"
-                app:strokeColor="@color/eggshell"
-                android:layout_width="0dp"
+            <TextView
+                android:id="@+id/hp_text"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:layout_weight="1"
-                android:text="@string/debug_reset_pet" />
+                android:layout_marginTop="4dp"
+                android:textAppearance="?attr/textAppearanceBody2"
+                tools:text="HP 50 / 100" />
         </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
 
-        <!-- Opens the customisation panel. Sibling (not child) of pet_viewport, floating over its
-             top-right corner 12dp in from its edges. Declared last so it draws on top. -->
-        <com.google.android.material.floatingactionbutton.FloatingActionButton
-            android:id="@+id/customise_fab"
-            android:layout_width="wrap_content"
+    <!-- Usage Access prompt (Doom Scroll Agent); PetsFragment hides it once access is granted -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/usage_access_card"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        app:cardCornerRadius="16dp"
+        app:cardElevation="0dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/hp_card"
+        app:strokeColor="@color/eggshell"
+        app:strokeWidth="1dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:layout_marginEnd="12dp"
-            android:contentDescription="@string/customise_open"
-            app:layout_constraintEnd_toEndOf="@id/pet_viewport"
-            app:layout_constraintTop_toTopOf="@id/pet_viewport"
-            app:srcCompat="@drawable/ic_hanger_24dp" />
-    </androidx.constraintlayout.widget.ConstraintLayout>
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="12dp">
 
-    <!-- Right-side customisation panel (END drawer) -->
-    <include
-        android:id="@+id/customise_panel"
-        layout="@layout/panel_customise"
-        android:layout_width="280dp"
-        android:layout_height="match_parent"
-        android:layout_gravity="end" />
-</androidx.drawerlayout.widget.DrawerLayout>
+            <TextView
+                android:id="@+id/usage_access_message"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:text="@string/usage_access_explanation"
+                android:textAppearance="?attr/textAppearanceBody2" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/usage_access_button"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/usage_access_open_settings"
+                app:strokeColor="@color/eggshell" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- Pet viewport: owned entirely by ManiengineAssetRenderer. Add no children here. -->
+    <FrameLayout
+        android:id="@+id/pet_viewport"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginBottom="8dp"
+        android:background="@drawable/bg_pet_viewport"
+        android:contentDescription="@string/pet_viewport_description"
+        app:layout_constraintBottom_toTopOf="@id/debug_panel"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/usage_access_card"
+        app:layout_goneMarginBottom="0dp"
+        app:layout_goneMarginTop="16dp" />
+
+    <!-- Debug-only controls (shown when BuildConfig.DEBUG) -->
+    <LinearLayout
+        android:id="@+id/debug_panel"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        tools:visibility="visible">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/debug_doom_scroll"
+            style="?attr/materialButtonOutlinedStyle"
+            app:strokeColor="@color/eggshell"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            tools:text="@string/debug_simulate_doom_scroll" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/debug_reset"
+            style="?attr/materialButtonOutlinedStyle"
+            app:strokeColor="@color/eggshell"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:text="@string/debug_reset_pet" />
+    </LinearLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

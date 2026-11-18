@@ -3,25 +3,24 @@ package com.example.tomodoom;
 import android.os.Bundle;
 
 import androidx.activity.OnBackPressedCallback;
-import androidx.annotation.MainThread;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.viewpager2.widget.ViewPager2;
 
 import com.example.tomodoom.databinding.ActivityMainBinding;
 import com.example.tomodoom.ui.MainPagerAdapter;
-import com.example.tomodoom.ui.PageSwipeHost;
 
 /**
- * Single activity hosting the two top-level pages (Pets and Chat) in a swipeable
+ * Single activity hosting the three top-level pages (Customise, Pets, Chat) in a swipeable
  * {@link ViewPager2}, kept in sync with a
  * {@link com.google.android.material.bottomnavigation.BottomNavigationView}.
  *
- * <p>Swiping and tapping a bottom-nav item both change the page. Back on any page other than Pets
+ * <p>Pets is the default page. Swiping and tapping a bottom-nav item both change the page. Back on
+ * any page other than Pets
  * returns to Pets; Back on Pets leaves the app. There is no action bar (the theme is
  * {@code NoActionBar}): each page supplies its own header.</p>
  */
-public class MainActivity extends AppCompatActivity implements PageSwipeHost {
+public class MainActivity extends AppCompatActivity {
 
     private ActivityMainBinding binding;
 
@@ -59,6 +58,11 @@ public class MainActivity extends AppCompatActivity implements PageSwipeHost {
             return true;
         });
         getOnBackPressedDispatcher().addCallback(this, backToPets);
+        if (savedInstanceState == null) {
+            // Fresh launch: start on Pets (the middle page). A restore keeps the saved page.
+            pager.setCurrentItem(MainPagerAdapter.PAGE_PETS, false);
+            syncWithPage(MainPagerAdapter.PAGE_PETS);
+        }
     }
 
     @Override
@@ -71,13 +75,5 @@ public class MainActivity extends AppCompatActivity implements PageSwipeHost {
     private void syncWithPage(int position) {
         binding.navView.setSelectedItemId(MainPagerAdapter.menuItemIdAt(position));
         backToPets.setEnabled(position != MainPagerAdapter.PAGE_PETS);
-    }
-
-    @MainThread
-    @Override
-    public void setPageSwipeEnabled(boolean enabled) {
-        if (binding != null) {
-            binding.mainPager.setUserInputEnabled(enabled);
-        }
     }
 }

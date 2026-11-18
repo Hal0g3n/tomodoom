@@ -89,9 +89,9 @@ virtual pet whose **HP** reflects your digital habits:
 | You pass a quiz from the TruFar chatbot | Pet **gains** HP (applied via an MCP tool) | TruFar chat + MCP bridge |
 | You equip clothes or accessories | The pet's look changes | Maniengine renderer |
 
-The app has two bottom-navigation tabs: **Pets** (HP, pet viewport, and a customisation side panel
-opened from a hanger FAB) and **Chat**
-(TruFar chatbot + quizzes). There is no action bar on either tab.
+The app has three bottom-navigation tabs, left to right: **Customise** (live pet preview + slot tabs
+and item chips), **Pets** (HP and the pet viewport; the default page on launch) and **Chat**
+(TruFar chatbot + quizzes). There is no action bar on any tab.
 
 ### Tech stack (fixed — don't change it without updating this file)
 
@@ -116,8 +116,8 @@ Root package: `com.example.tomodoom`. Source root: `app/src/main/java/com/exampl
 ```
 com.example.tomodoom
 ├── TomodoomApplication.java      Application subclass; owns the AppContainer; starts the monitor
-├── MainActivity.java             Single activity; swipeable ViewPager2 (Pets | Chat) ↔ BottomNavigationView;
-│                                 Back off Pets → Pets; no action bar (NoActionBar theme); implements PageSwipeHost
+├── MainActivity.java             Single activity; swipeable ViewPager2 (Customise | Pets | Chat) ↔ BottomNavigationView;
+│                                 starts on Pets; Back off Pets → Pets; no action bar (NoActionBar theme)
 │
 ├── model/                        Immutable, pure-Java value objects (no android.* imports)
 │   ├── PetState                  name, currentHp, maxHp, equipped items (slot → itemId)
@@ -169,23 +169,24 @@ com.example.tomodoom
 │   └── ViewModelFactory          constructor injection for ViewModels
 │
 ├── viewmodel/
-│   ├── PetsViewModel             exposes PetState, selected slot, equip/debug actions
+│   ├── PetsViewModel             exposes PetState + debug actions
+│   ├── CustomiseViewModel        exposes PetState, selected slot, catalog items, equip action
 │   └── ChatViewModel             exposes transcript + active quiz, sends messages
 │
 └── ui/
-    ├── MainPagerAdapter          FragmentStateAdapter: page index ↔ bottom-nav item id (Pets=0, Chat=1)
-    ├── PageSwipeHost             lets a page suspend page swipes (Pets, while its panel is open)
-    ├── pets/PetsFragment         HP header, pet viewport (FrameLayout), customise FAB → right-side
-    │                             DrawerLayout panel (END drawer) holding the customisation controls
+    ├── MainPagerAdapter          FragmentStateAdapter: page index ↔ bottom-nav item id
+    │                             (Customise=0, Pets=1 = default, Chat=2)
+    ├── customise/CustomiseFragment   pet preview viewport (own renderer instance) + slot tabs + item chips
+    ├── pets/PetsFragment         HP header, Usage Access card, pet viewport (FrameLayout), debug row
     └── chat/ChatFragment, ChatAdapter   RecyclerView (3 view types) + input bar
 ```
 
 Resources: `res/values/colors.xml` + `res/values/themes.xml` (palette and theme, §6.3; no
-`values-night/`), `res/layout/fragment_pets.xml` (root `DrawerLayout` `pets_drawer`: a `ConstraintLayout` with
-`hp_card`, `usage_access_card` (Usage Access prompt, §5.3), `pet_viewport`, `debug_panel` and `customise_fab`, plus an `<include>` of
-`panel_customise.xml` as the END drawer), `panel_customise.xml` (header + close button, `slot_tabs`,
-`item_chips`), `fragment_chat.xml`, `item_chat_{user,bot,system}.xml`, `item_accessory_chip.xml`,
-`res/drawable/ic_hanger_24dp.xml` (customise FAB) and `ic_close_24dp.xml` (panel close),
+`values-night/`), `res/layout/fragment_pets.xml` (a `ConstraintLayout` with `hp_card`,
+`usage_access_card` (Usage Access prompt, §5.3), `pet_viewport` and `debug_panel`),
+`fragment_customise.xml` (`customise_header`, `pet_viewport` at 40% of the page height, `slot_tabs`,
+`item_chips` in a ScrollView), `fragment_chat.xml`, `item_chat_{user,bot,system}.xml`,
+`item_accessory_chip.xml`, `res/drawable/ic_hanger_24dp.xml` (Customise tab icon),
 `activity_main.xml` (`main_pager` ViewPager2 + `nav_view`), `res/menu/bottom_nav_menu.xml`.
 `res/values/dimens.xml` (`pet_viewport_stroke`).
 Assets: `assets/trufar/kafka_agent.json` (the Kafka TruFar agent export, icon stripped; §5.2),
@@ -426,10 +427,11 @@ How the page is hosted (`HtmlManiengineRenderer`):
   won't take drags that *start* on the viewport, but swiping still works from the HP card and below.
 - The page talks only one way (app → page). If it ever needs to call back (e.g. "item tapped"),
   extend `ManiengineProtocol` and this section together.
-- **Layout note:** the customise FAB (`customise_fab`, ~56dp, a sibling of the viewport) is constrained to
-  the viewport's top-right corner, 12dp in from its edges, so keep essential art clear of it. The
-  customisation controls are in the right-side panel (`panel_customise.xml`), not under the viewport.
-- **Acceptance:** equipping/unequipping on the Pets tab updates the viewport immediately. Rotating
+- **Layout note:** the page is shown in **two** viewports, each with its own renderer instance
+  (`createAssetRenderer()` is a factory): the large one on Pets and a preview at 40% of the page
+  height on Customise, above the slot tabs and item chips. Nothing overlays either viewport. Both
+  WebViews can be alive at once; the hidden one is paused, so keep the page usable at small sizes.
+- **Acceptance:** equipping/unequipping on the Customise tab updates the viewport immediately. Rotating
   or switching tabs doesn't leak views (`release` cleans up). Nothing happens off the main thread
   in `render`. The export loads offline from `assets/maniengine/` and reacts to `tomodoom:petstate`.
 
@@ -607,37 +609,30 @@ process. This limits battery work but means detection is not guaranteed while th
   The app is **light only**: don't add `values-night/` resources. Colours follow §6.3.
 - **No action bar:** the theme is `NoActionBar`, so `getSupportActionBar()` returns `null`; don't
   rely on it. Each page draws its own header
-  (the HP card on Pets); content starts right under the status bar.
+  (the HP card on Pets, a title on Customise); content starts right under the status bar.
 - **Top-level pages (`ViewPager2`):** there is no Jetpack Navigation. `MainActivity` hosts the pages
   in `main_pager` and keeps it in sync with `nav_view` both ways. `viewpager2` (1.1.0-beta02) comes
   in transitively from Material, like drawerlayout, so don't pin it. Rules:
   - A new top-level tab means a menu item in `bottom_nav_menu.xml` **and** an entry in
     `MainPagerAdapter` (`MENU_ITEM_IDS` + `createFragment`), in the same order.
-  - `FragmentStateAdapter` creates pages lazily (Chat is created the first time you swipe or tap
-    to it) and only the current page is `RESUMED`; the other is capped at `STARTED`. Use
+  - Page order is Customise (0), Pets (1), Chat (2). Pets is the default: `MainActivity` calls
+    `setCurrentItem(PAGE_PETS, false)` only when `savedInstanceState == null`, so a restore keeps
+    the saved page. Don't assume page 0 is the start page.
+  - `FragmentStateAdapter` creates pages lazily (a page is created the first time you swipe or tap
+    to it, or prefetched next to the current one) and only the current page is `RESUMED`; the
+    others are capped at `STARTED`. Use
     `onResume`/`onPause` for "page became visible/hidden".
   - ViewPager2 restores its page **without** calling `onPageSelected`, so `MainActivity` re-syncs
     the bottom nav and Back callback in `onRestoreInstanceState`.
-  - A child that needs horizontal drags must either call `PageSwipeHost.setPageSwipeEnabled(false)`
-    (and re-enable in `onPause`), or call `getParent().requestDisallowInterceptTouchEvent(true)` on
-    `ACTION_DOWN` for a smaller area.
+  - A child that needs horizontal drags calls `getParent().requestDisallowInterceptTouchEvent(true)`
+    on `ACTION_DOWN` (as the Maniengine WebView does for `tomodoom-touch` capture). If a whole page
+    ever needs to suspend swiping, add a host callback calling `ViewPager2.setUserInputEnabled`
+    (the old `PageSwipeHost` did this for the removed customisation drawer).
 - **Dependencies** must be compatible with compileSdk 34 / AGP 8.1.1. Many current AndroidX
   releases need compileSdk 35+, so check before you bump anything. Pin exact versions.
-- **Pets customisation panel (`DrawerLayout`):** `androidx.drawerlayout` (1.1.1) and
-  `androidx.activity` come in transitively as compile-scope dependencies of Material. Don't pin
-  drawerlayout 1.1.1 in `build.gradle.kts`: that adds a `GradleDependency` lint warning. Rules:
-  - Drawer content must be clickable or taps on empty panel space fall through to the views beneath.
-    `PetsFragment` sets it in Java, because XML `clickable` triggers `KeyboardInaccessibleWidget`.
-  - When DrawerLayout restores an open drawer it fires **no** `DrawerListener` callback, so
-    `PetsFragment` re-syncs the lock mode and Back callback in `onViewStateRestored`.
-  - Back closes the panel through a view-lifecycle `OnBackPressedCallback` that is only enabled
-    while the panel is open.
-  - The drawer is `LOCK_MODE_LOCKED_CLOSED` while closed (no edge swipe; it opens only from the
-    FAB) and unlocked while open.
-  - While the panel is open and Pets is resumed, page swipes are disabled through `PageSwipeHost`
-    so swipe-to-close doesn't flip the page. `onPause` re-enables them.
-  - Lint flags `Overdraw` on an included drawer root that has a background. It's a false positive
-    and is suppressed with `tools:ignore`.
+- **`androidx.activity` / `drawerlayout` / `viewpager2`** come in transitively as compile-scope
+  dependencies of Material. Don't pin them in `build.gradle.kts`: that adds `GradleDependency`
+  lint warnings.
 - **LLM-graded HP is persuadable:** a user can talk Kafka into emitting `[[CORRECT]]`. Each award
   is bounded by `OpenAiCompatibleChatService.CORRECT_ANSWER_HP` (10) and the per-award cap, but
   there's no rate limit. Add one in the handler if it gets abused.
@@ -663,7 +658,7 @@ The app uses one fixed, light-only palette, defined as tokens in `res/values/col
 |---|---|---|---|
 | `floral_white` | `#FBF7EF` | Background and surfaces; text/icons on dark fills | `android:windowBackground`, `android:colorBackground`, `colorSurface`, `colorOnPrimary`, `colorOnSecondary` |
 | `eggshell` | `#F7F0DE` | Borders, dividers, subtle fills (bot bubble, system notice) | none (use directly or through a semantic alias) |
-| `charcoal` | `#585B5E` | Primary: customise FAB, user bubble, buttons, selected chip/tab, progress, input underline | `colorPrimary`, `colorSecondary` |
+| `charcoal` | `#585B5E` | Primary: user bubble, buttons, selected chip/tab, progress, input underline | `colorPrimary`, `colorSecondary` |
 | `jet` | `#383A3D` | Primary text, status bar, darker accents | `colorPrimaryVariant`, `colorSecondaryVariant`, `colorOnBackground`, `colorOnSurface`, `android:textColorPrimary` |
 | `slate_grey` | `#8C8F92` | Secondary text, hints, de-emphasised labels (e.g. pet status) | `android:textColorSecondary`, `android:textColorHint` |
 
@@ -770,18 +765,15 @@ Debug helpers available in the debug build:
 
 1. Launch the app. The **Pets** tab has **no action bar** (the HP card sits right under the status
    bar) and shows `Tomo`, **HP 50 / 100** and status "Okay". Until Usage Access is granted, a Usage Access card with an **Enable** button
-   sits under the HP card (it disappears once access is granted). A hanger FAB sits at the top-right of the viewport.
-2. Tap the **hanger FAB** (right side, just below the HP card). The **Customise pet** panel slides in
-   from the right over a dimmed scrim. Choose **Hat → Cap**, then close the panel (✕, tap the scrim,
-   Back, or swipe it right). The placeholder Maniengine page (a grey blob) gains a hat, and its
-   caption reads `hat: Cap`. Also check:
-   - a right-edge swipe does *not* open the panel;
-   - the panel stays open across rotation and across a Pets → Chat → Pets round trip;
-   - the bottom nav still switches tabs while the panel is open;
-   - while the panel is open, swiping left/right does *not* change page (swiping right closes it);
-   - with the panel closed, Back leaves the app as before.
-   - **Swiping:** with the panel closed, swipe left on Pets to reach Chat and right to return. The
-     bottom nav selection follows. Back on Chat returns to Pets.
+   sits under the HP card (it disappears once access is granted). The bottom nav reads **Customise · Pets · Chat** with Pets selected.
+2. Swipe right (or tap **Customise**). The Customise page shows "Customise pet", a pet preview and
+   Hat / Outfit / Accessory tabs with item chips. Choose **Hat → Cap**: the preview (the placeholder
+   grey blob) gains a hat at once and its caption reads `hat: Cap`. Swipe back to Pets: the large
+   pet has the hat too. Also check:
+   - the selected slot tab and the current page survive rotation;
+   - Back on Customise or Chat returns to Pets; Back on Pets leaves the app;
+   - **Swiping:** from Pets, swipe left to Chat and right to Customise. The bottom nav selection
+     follows.
    - Swiping over the placeholder pet also changes page (it doesn't declare `tomodoom-touch`).
      Simulate doom-scroll or a quiz: the page's HP caption updates without reloading.
 3. Open **Chat**. There is no action bar; the transcript starts right under the status bar. The mock bot greets you. Type `quiz`, and the bot asks a question (e.g. "What is 2 + 2?").
@@ -808,7 +800,8 @@ Update this table in the same commit when your task changes a subsystem's status
 |---|---|---|
 | Pet state + persistence | ✅ Done | `PetStateRepository` |
 | MCP tool bridge | ✅ Production-capable default | `DefaultMcpPetActionHandler` |
-| Pets UI (HP header, FAB-triggered customisation side panel, debug row) | ✅ Skeleton done | `PetsFragment` / `PetsViewModel` |
+| Pets UI (HP header, pet viewport, debug row) | ✅ Skeleton done | `PetsFragment` / `PetsViewModel` |
+| Customise UI (pet preview, slot tabs, item chips) | ✅ Skeleton done | `CustomiseFragment` / `CustomiseViewModel` |
 | Chat UI | ✅ Skeleton done | `ChatFragment` / `ChatViewModel` / `ChatRepository` |
 | Pet rendering | ✅ HTML/WebView pipeline; ⏳ placeholder page until the Maniengine export lands in `assets/maniengine/` | `HtmlManiengineRenderer` |
 | Item catalog | ⏳ Placeholder (9 hard-coded items) | `AccessoryCatalog` → Maniengine Agent |
@@ -824,6 +817,5 @@ Known gaps and TODOs (not assigned to anyone yet):
 - Non-UI user-facing text (MCP results, chat notices, mock bot) is inline English, not in `strings.xml`.
 - Nothing happens yet when HP reaches 0 beyond the "Fainted" status label. No notifications.
 - No instrumented/UI tests yet. JVM tests only (`model`, `doomscroll`, `trufar`, `maniengine`).
-- On phones, the open customisation panel (280dp) covers most of the pet viewport, so equip changes
-  re-render live but are only fully visible once the panel closes. A narrower panel or a bottom
-  sheet would fix that if live preview matters.
+- Customise and Pets each host a WebView renderer, so two can be alive at once (the hidden one is
+  paused). If memory becomes a problem, share one renderer or release it in `onPause`.

@@ -2,6 +2,7 @@
     <string name="app_name">tomodoom</string>
 
     <!-- Navigation -->
+    <string name="title_customise">Customise</string>
     <string name="title_pets">Pets</string>
     <string name="title_chat">Chat</string>
 
@@ -13,8 +14,6 @@
     <string name="pet_status_fainted">Fainted</string>
     <string name="pet_viewport_description">Your pet</string>
     <string name="customise_title">Customise pet</string>
-    <string name="customise_open">Open pet customisation</string>
-    <string name="customise_close">Close pet customisation</string>
     <string name="slot_hat">Hat</string>
     <string name="slot_outfit">Outfit</string>
     <string name="slot_accessory">Accessory</string>

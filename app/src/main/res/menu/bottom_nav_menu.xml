@@ -2,6 +2,11 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
 
     <item
+        android:id="@+id/navigation_customise"
+        android:icon="@drawable/ic_hanger_24dp"
+        android:title="@string/title_customise" />
+
+    <item
         android:id="@+id/navigation_pets"
         android:icon="@drawable/ic_pets_24dp"
         android:title="@string/title_pets" />

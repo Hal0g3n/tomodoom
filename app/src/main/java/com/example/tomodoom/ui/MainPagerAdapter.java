@@ -8,6 +8,7 @@ import androidx.viewpager2.adapter.FragmentStateAdapter;
 
 import com.example.tomodoom.R;
 import com.example.tomodoom.ui.chat.ChatFragment;
+import com.example.tomodoom.ui.customise.CustomiseFragment;
 import com.example.tomodoom.ui.pets.PetsFragment;
 
 /**
@@ -19,10 +20,13 @@ import com.example.tomodoom.ui.pets.PetsFragment;
  */
 public final class MainPagerAdapter extends FragmentStateAdapter {
 
-    public static final int PAGE_PETS = 0;
-    public static final int PAGE_CHAT = 1;
+    public static final int PAGE_CUSTOMISE = 0;
+    /** The default page, shown on a fresh launch. */
+    public static final int PAGE_PETS = 1;
+    public static final int PAGE_CHAT = 2;
 
-    private static final int[] MENU_ITEM_IDS = {R.id.navigation_pets, R.id.navigation_chat};
+    private static final int[] MENU_ITEM_IDS = {
+            R.id.navigation_customise, R.id.navigation_pets, R.id.navigation_chat};
 
     public MainPagerAdapter(@NonNull FragmentActivity activity) {
         super(activity);
@@ -31,10 +35,15 @@ public final class MainPagerAdapter extends FragmentStateAdapter {
     @NonNull
     @Override
     public Fragment createFragment(int position) {
-        if (position == PAGE_CHAT) {
-            return new ChatFragment();
+        switch (position) {
+            case PAGE_CUSTOMISE:
+                return new CustomiseFragment();
+            case PAGE_CHAT:
+                return new ChatFragment();
+            case PAGE_PETS:
+            default:
+                return new PetsFragment();
         }
-        return new PetsFragment();
     }
 
     @Override
