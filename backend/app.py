@@ -20,6 +20,7 @@ from typing import Optional
 from flask import Flask, jsonify, request
 
 import markers
+import mcp_server
 from config import Config
 from store import RelayBusy, SessionNotFound, Store, create_store
 from trufar_client import TruFarAuthError, TruFarClient, TruFarError
@@ -150,6 +151,41 @@ def create_app(config: Optional[Config] = None, store: Optional[Store] = None,
     def close_session(session_id: str):
         relay.store.close_session(session_id)
         return "", 204
+
+    # --- MCP endpoint for Kafka (TruFar is the MCP client) --------------------------------
+
+    def mcp_key_ok() -> bool:
+        # TruFar's MCP settings may only allow a URL, so the key can also be a query param.
+        supplied = request.headers.get("X-MCP-Key") or request.args.get("key") or ""
+        bearer = request.headers.get("Authorization", "")
+        if not supplied and bearer.startswith("Bearer "):
+            supplied = bearer[len("Bearer "):]
+        return hmac.compare_digest(supplied.encode(), config.mcp_key.encode())
+
+    def award(amount: int, reason: str):
+        if relay.store.add_award(amount, reason) is None:
+            return False, ("No user message is being answered right now, so no HP was "
+                           "awarded. Only call award_hp while replying to a correct answer.")
+        return True, "Awarded %d HP. Now tell the user they got it right." % amount
+
+    @app.post("/mcp")
+    def mcp_post():
+        if relay is None:
+            return _error(503, "Relay backend not configured")
+        if not mcp_key_ok():
+            return _error(401, "Bad or missing MCP key")
+        payload = request.get_json(silent=True)
+        if payload is None:
+            return jsonify(mcp_server.parse_error()), 400
+        status, body = mcp_server.handle(payload, award)
+        if body is None:
+            return "", status
+        return jsonify(body), status
+
+    @app.route("/mcp", methods=["GET", "DELETE"])
+    def mcp_other():
+        # No server-initiated SSE stream and no MCP sessions (stateless server).
+        return "", 405, {"Allow": "POST"}
 
     return app
 
