@@ -15,12 +15,11 @@ import java.util.List;
 public final class AccessorySlot {
 
     public static final String HAT = "hat";
-    public static final String OUTFIT = "outfit";
     public static final String ACCESSORY = "accessory";
 
     /** All slots, in UI display order. */
     public static final List<String> ALL =
-            Collections.unmodifiableList(Arrays.asList(HAT, OUTFIT, ACCESSORY));
+            Collections.unmodifiableList(Arrays.asList(HAT, ACCESSORY));
 
     private AccessorySlot() {
     }

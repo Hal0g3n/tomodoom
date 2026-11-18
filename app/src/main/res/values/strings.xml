@@ -15,7 +15,6 @@
     <string name="pet_viewport_description">Your pet</string>
     <string name="customise_title">Customise pet</string>
     <string name="slot_hat">Hat</string>
-    <string name="slot_outfit">Outfit</string>
     <string name="slot_accessory">Accessory</string>
     <string name="item_none">None</string>
     <string name="debug_simulate_doom_scroll">Simulate doom-scroll (−%1$d HP)</string>

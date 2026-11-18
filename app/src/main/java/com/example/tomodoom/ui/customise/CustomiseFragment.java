@@ -166,8 +166,6 @@ public class CustomiseFragment extends Fragment {
         switch (slot) {
             case AccessorySlot.HAT:
                 return R.string.slot_hat;
-            case AccessorySlot.OUTFIT:
-                return R.string.slot_outfit;
             case AccessorySlot.ACCESSORY:
                 return R.string.slot_accessory;
             default:

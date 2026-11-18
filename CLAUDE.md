@@ -124,7 +124,7 @@ com.example.tomodoom
 │   ├── PetState                  name, currentHp, maxHp, equipped items (slot → itemId)
 │   ├── PetNames                  pet-name validation: trim, collapse whitespace, 1–20 chars
 │   ├── PetMood                   THRIVING/OKAY/STRUGGLING/FAINTED from HP (the only HP thresholds)
-│   ├── AccessorySlot             slot IDs: HAT="hat", OUTFIT="outfit", ACCESSORY="accessory"
+│   ├── AccessorySlot             slot IDs: HAT="hat", ACCESSORY="accessory"
 │   ├── AccessoryItem             id, slot, displayName
 │   ├── AccessoryCatalog          placeholder item list per slot (Maniengine agent may replace it)
 │   ├── ChatMessage               id, type (USER | BOT | SYSTEM), text, timestamp
@@ -448,7 +448,7 @@ How the page is hosted (`HtmlManiengineRenderer`):
 - `state` is
   `{ name, hp, maxHp, hpFraction, mood, fainted, equipped: { <slotId>: { id, name } } }`.
   `mood` is a `PetMood` id (`thriving` | `okay` | `struggling` | `fainted`). `equipped` lists only
-  filled slots (`hat`, `outfit`, `accessory`), with the catalog display name.
+  filled slots (`hat`, `accessory`), with the catalog display name.
 - **Touch:** by default, horizontal drags on the pet swipe between tabs. A page that needs drags
   (orbit/rotate controls) adds `<meta name="tomodoom-touch" content="capture">`. The pager then
   won't take drags that *start* on the viewport, but swiping still works from the HP card and below.
@@ -815,7 +815,7 @@ Debug helpers available in the debug build:
    bar) and shows `Tomo`, **HP 50 / 100** and status "Okay". Until Usage Access is granted, a Usage Access card with an **Enable** button
    sits under the HP card (it disappears once access is granted). The bottom bar shows three icons (Customise, Pets, Chat). Pets is open: its tile is wider, its icon is larger and only it shows a label.
 2. Swipe right (or tap **Customise**). The Customise page shows "Customise pet", a pet preview and
-   Hat / Outfit / Accessory tabs with item chips. Choose **Hat → Cap**: the preview (the 3D
+   Hat / Accessory tabs with item chips. Choose **Hat → Cap**: the preview (the 3D
    cream rabbit in a floral dress, on a rug) gains a blue cap at once. Swipe back to Pets: the large
    pet has the hat too. The pet moves between the pages without reloading (no blank flash or
    restart of the hop animation), and only one pet exists: in a debug build `chrome://inspect`
@@ -826,7 +826,7 @@ Debug helpers available in the debug build:
      follows.
    - Swiping over the pet also changes page (it doesn't declare `tomodoom-touch`).
    - Mood: HP ≥ the thriving threshold makes the rabbit hop, struggling droops its head and
-     desaturates, and 0 HP (Simulate doom-scroll repeatedly) tips it over in grey. Outfits retint the dress.
+     desaturates, and 0 HP (Simulate doom-scroll repeatedly) tips it over in grey.
 3. Open **Chat**. There is no action bar; the transcript starts right under the status bar. The mock bot greets you. Type `quiz`, and the bot asks a question (e.g. "What is 2 + 2?").
 4. Answer correctly (`4`). The bot confirms, and a SYSTEM message shows **"+10 HP awarded via MCP! (60/100 HP)"**.
 5. Switch to **Pets**: **HP 60 / 100**.
@@ -856,7 +856,7 @@ Update this table in the same commit when your task changes a subsystem's status
 | Onboarding (name the pet) | ✅ Done | `OnboardingActivity` / `OnboardingViewModel` |
 | Chat UI | ✅ Skeleton done | `ChatFragment` / `ChatViewModel` / `ChatRepository` |
 | Pet rendering | ✅ scene-3 rabbit (three.js, offline) via the HTML/WebView pipeline; add-ons are primitive placeholders | `HtmlManiengineRenderer` + `assets/maniengine/` |
-| Item catalog | ⏳ Placeholder (9 hard-coded items) | `AccessoryCatalog` → Maniengine Agent |
+| Item catalog | ⏳ Placeholder (6 hard-coded items: hats and accessories) | `AccessoryCatalog` → Maniengine Agent |
 | TruFar backend | ✅ Kafka agent via OpenAI-compatible client (mock when unconfigured) | `OpenAiCompatibleChatService` (`TRUFAR_LLM_URL`) / `HttpTruFarChatService` / `MockTruFarChatService` |
 | Doom-scroll detection | ✅ Usage Access polling | `UsageStatsDoomScrollMonitor` |
 

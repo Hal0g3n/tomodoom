@@ -35,7 +35,7 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 
-const { dress } = buildModel(THREE, scene, renderer);
+buildModel(THREE, scene, renderer);
 scene.traverse(o => { if (o.isDirectionalLight) o.shadow.mapSize.set(1024, 1024); });  // phone-sized
 
 // Editor overrides (the export's live-edit table): top-level objects by unique name, else child index.
@@ -93,7 +93,6 @@ const ADDONS = {
   acc_backpack: addOn(rabbit,
     mesh(new THREE.BoxGeometry(.5, .55, .22), mat(0x8ca17a, { roughness: .9 }), 0, (body.min.y + body.max.y) / 2, body.min.z - .02)),
 };
-const OUTFIT_TINT = { outfit_hoodie: 0xb8c4d6, outfit_raincoat: 0xf2d35b, outfit_tuxedo: 0x4a4a52 };
 
 // --- App contract: tomodoom:petstate ---
 let mood = 'okay';
@@ -102,8 +101,6 @@ function applyState(s) {
   mood = s.fainted ? 'fainted' : s.mood;
   const ids = Object.values(s.equipped || {}).map(item => item.id);
   for (const id in ADDONS) ADDONS[id].visible = ids.includes(id);
-  const outfit = ids.find(id => id in OUTFIT_TINT);
-  dress.material.color.setHex(outfit ? OUTFIT_TINT[outfit] : 0xffffff);
   renderer.domElement.style.filter = { struggling: 'saturate(.55)', fainted: 'grayscale(.85)' }[mood] || '';
 }
 addEventListener('tomodoom:petstate', e => applyState(e.detail));

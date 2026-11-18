@@ -22,9 +22,6 @@ public final class AccessoryCatalog {
             new AccessoryItem("hat_cap", AccessorySlot.HAT, "Cap"),
             new AccessoryItem("hat_beanie", AccessorySlot.HAT, "Beanie"),
             new AccessoryItem("hat_crown", AccessorySlot.HAT, "Crown"),
-            new AccessoryItem("outfit_hoodie", AccessorySlot.OUTFIT, "Hoodie"),
-            new AccessoryItem("outfit_raincoat", AccessorySlot.OUTFIT, "Raincoat"),
-            new AccessoryItem("outfit_tuxedo", AccessorySlot.OUTFIT, "Tuxedo"),
             new AccessoryItem("acc_glasses", AccessorySlot.ACCESSORY, "Glasses"),
             new AccessoryItem("acc_scarf", AccessorySlot.ACCESSORY, "Scarf"),
             new AccessoryItem("acc_backpack", AccessorySlot.ACCESSORY, "Backpack")

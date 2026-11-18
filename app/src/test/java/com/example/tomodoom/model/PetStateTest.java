@@ -46,7 +46,7 @@ public class PetStateTest {
     public void constructor_clampsAndSanitises() {
         Map<String, String> equipped = new HashMap<>();
         equipped.put(AccessorySlot.HAT, "hat_cap");
-        equipped.put(AccessorySlot.OUTFIT, "");
+        equipped.put(AccessorySlot.ACCESSORY, "");
         equipped.put("", "x");
         PetState s = new PetState("Rex", 500, 0, equipped);
         assertEquals(1, s.getMaxHp());
@@ -59,13 +59,13 @@ public class PetStateTest {
     public void withEquippedItem_equipsAndUnequips() {
         PetState s = PetState.createDefault()
                 .withEquippedItem(AccessorySlot.HAT, "hat_cap")
-                .withEquippedItem(AccessorySlot.OUTFIT, "outfit_hoodie");
+                .withEquippedItem(AccessorySlot.ACCESSORY, "acc_scarf");
         assertEquals("hat_cap", s.getEquippedItem(AccessorySlot.HAT));
-        assertEquals("outfit_hoodie", s.getEquippedItem(AccessorySlot.OUTFIT));
+        assertEquals("acc_scarf", s.getEquippedItem(AccessorySlot.ACCESSORY));
 
         PetState cleared = s.withEquippedItem(AccessorySlot.HAT, null);
         assertNull(cleared.getEquippedItem(AccessorySlot.HAT));
-        assertEquals("outfit_hoodie", cleared.getEquippedItem(AccessorySlot.OUTFIT));
+        assertEquals("acc_scarf", cleared.getEquippedItem(AccessorySlot.ACCESSORY));
     }
 
     @Test

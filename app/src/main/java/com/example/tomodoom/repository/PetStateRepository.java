@@ -10,6 +10,7 @@ import androidx.annotation.Nullable;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 
+import com.example.tomodoom.model.AccessorySlot;
 import com.example.tomodoom.model.PetState;
 
 import java.util.HashMap;
@@ -242,12 +243,19 @@ public final class PetStateRepository {
         int maxHp = prefs.getInt(KEY_MAX_HP, PetState.DEFAULT_MAX_HP);
         int hp = prefs.getInt(KEY_CURRENT_HP, PetState.DEFAULT_START_HP);
         Map<String, String> equipped = new HashMap<>();
+        SharedPreferences.Editor staleSlots = prefs.edit();
         for (Map.Entry<String, ?> e : prefs.getAll().entrySet()) {
             String key = e.getKey();
             if (key.startsWith(KEY_EQUIPPED_PREFIX) && e.getValue() instanceof String) {
-                equipped.put(key.substring(KEY_EQUIPPED_PREFIX.length()), (String) e.getValue());
+                String slot = key.substring(KEY_EQUIPPED_PREFIX.length());
+                if (AccessorySlot.isValid(slot)) {
+                    equipped.put(slot, (String) e.getValue());
+                } else {
+                    staleSlots.remove(key); // a slot that no longer exists
+                }
             }
         }
+        staleSlots.apply();
         return new PetState(name != null ? name : PetState.DEFAULT_PET_NAME, hp, maxHp, equipped);
     }
 

@@ -27,13 +27,12 @@ public class ManiengineProtocolTest {
     public void stateJson_equippedItemsCarryIdAndCatalogName() throws Exception {
         PetState state = PetState.createDefault()
                 .withEquippedItem(AccessorySlot.HAT, "hat_cap")
-                .withEquippedItem(AccessorySlot.OUTFIT, "not_in_catalog");
+                .withEquippedItem(AccessorySlot.ACCESSORY, "not_in_catalog");
         JSONObject equipped = new JSONObject(ManiengineProtocol.stateJson(state))
                 .getJSONObject("equipped");
         assertEquals("hat_cap", equipped.getJSONObject("hat").getString("id"));
         assertEquals("Cap", equipped.getJSONObject("hat").getString("name"));
-        assertEquals("not_in_catalog", equipped.getJSONObject("outfit").getString("name"));
-        assertFalse(equipped.has(AccessorySlot.ACCESSORY));
+        assertEquals("not_in_catalog", equipped.getJSONObject("accessory").getString("name"));
     }
 
     @Test
