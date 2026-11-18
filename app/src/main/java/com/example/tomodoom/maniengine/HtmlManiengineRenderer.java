@@ -155,7 +155,7 @@ public final class HtmlManiengineRenderer implements ManiengineAssetRenderer {
         view.setWebViewClient(new Client(context.getAssets()));
 
         container.setClipToOutline(true);
-        container.addView(view, webViewParams(context));
+        container.addView(view, webViewParams(container));
 
         webView = view;
         pageReady = false;
@@ -178,13 +178,17 @@ public final class HtmlManiengineRenderer implements ManiengineAssetRenderer {
         container.removeAllViews();
         messageView = null;
         container.setClipToOutline(true);
-        container.addView(view, webViewParams(container.getContext()));
+        container.addView(view, webViewParams(container));
     }
 
-    /** Keeps the viewport's 2dp border visible; the viewport clips the page to its rounded corners. */
+    /**
+     * Fills the viewport. A viewport with a border (a background) keeps it visible and clips the
+     * page to its rounded corners; a borderless one is filled edge to edge.
+     */
     @NonNull
-    private static FrameLayout.LayoutParams webViewParams(@NonNull Context context) {
-        int inset = context.getResources().getDimensionPixelSize(R.dimen.pet_viewport_stroke);
+    private static FrameLayout.LayoutParams webViewParams(@NonNull ViewGroup container) {
+        int inset = container.getBackground() == null ? 0
+                : container.getResources().getDimensionPixelSize(R.dimen.pet_viewport_stroke);
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
         params.setMargins(inset, inset, inset, inset);
@@ -268,8 +272,8 @@ public final class HtmlManiengineRenderer implements ManiengineAssetRenderer {
     // ---------------------------------------------------------------------------------------
 
     /**
-     * WebView that, when the page asked to capture touch, stops ancestors (the tab pager) from
-     * intercepting drags that start on it.
+     * WebView that stops ancestors (the tab pager) from intercepting a multi-touch gesture, so the
+     * page can pinch-zoom, and any drag that starts on it when the page asked to capture touch.
      */
     private static final class PetWebView extends WebView {
 
@@ -286,7 +290,9 @@ public final class HtmlManiengineRenderer implements ManiengineAssetRenderer {
 
         @Override
         public boolean dispatchTouchEvent(@NonNull MotionEvent event) {
-            if (capturesTouch && event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+            int action = event.getActionMasked();
+            if (action == MotionEvent.ACTION_POINTER_DOWN
+                    || (capturesTouch && action == MotionEvent.ACTION_DOWN)) {
                 ViewParent parent = getParent();
                 if (parent != null) {
                     parent.requestDisallowInterceptTouchEvent(true);

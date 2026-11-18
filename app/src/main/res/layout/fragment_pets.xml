@@ -1,26 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Pets page: HP header, Usage Access prompt, the pet viewport and (debug builds) a debug row.
+<!-- Pets page: the pet fills the page; the HP header, Usage Access prompt and (debug builds) debug
+     row float over it on transparent cards.
      Customisation is its own page (fragment_customise.xml). -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:padding="16dp"
     tools:context=".ui.pets.PetsFragment">
+
+    <!-- Pet viewport: fills the page behind the cards. Owned entirely by ManiengineAssetRenderer.
+         Add no children here. -->
+    <FrameLayout
+        android:id="@+id/pet_viewport"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:contentDescription="@string/pet_viewport_description"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
 
     <!-- HP header -->
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/hp_card"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        app:cardBackgroundColor="@android:color/transparent"
         app:cardCornerRadius="16dp"
         app:cardElevation="0dp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        app:strokeColor="@color/eggshell"
-        app:strokeWidth="1dp">
+        app:strokeWidth="0dp">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -76,13 +91,15 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        app:cardBackgroundColor="@android:color/transparent"
         app:cardCornerRadius="16dp"
         app:cardElevation="0dp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/hp_card"
-        app:strokeColor="@color/eggshell"
-        app:strokeWidth="1dp">
+        app:strokeWidth="0dp">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -111,27 +128,14 @@
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
-    <!-- Pet viewport: owned entirely by ManiengineAssetRenderer. Add no children here. -->
-    <FrameLayout
-        android:id="@+id/pet_viewport"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:layout_marginTop="16dp"
-        android:layout_marginBottom="8dp"
-        android:background="@drawable/bg_pet_viewport"
-        android:contentDescription="@string/pet_viewport_description"
-        app:layout_constraintBottom_toTopOf="@id/debug_panel"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/usage_access_card"
-        app:layout_goneMarginBottom="0dp"
-        app:layout_goneMarginTop="16dp" />
-
     <!-- Debug-only controls (shown when BuildConfig.DEBUG) -->
     <LinearLayout
         android:id="@+id/debug_panel"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="8dp"
         android:orientation="horizontal"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"
