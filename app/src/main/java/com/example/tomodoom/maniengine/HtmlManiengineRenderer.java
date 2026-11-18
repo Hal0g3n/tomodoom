@@ -83,11 +83,13 @@ public final class HtmlManiengineRenderer implements ManiengineAssetRenderer {
             showMessage(container, failureMessage);
             return;
         }
-        if (webView == null || webView.getParent() != container) {
+        if (webView == null) {
             createWebView(container);
             if (webView == null) {
                 return;
             }
+        } else if (webView.getParent() != container) {
+            moveWebView(webView, container); // shared renderer: keep the loaded page, no reload
         }
         deliverIfReady();
     }
@@ -152,13 +154,8 @@ public final class HtmlManiengineRenderer implements ManiengineAssetRenderer {
         view.setBackgroundColor(Color.TRANSPARENT); // the viewport background shows while loading
         view.setWebViewClient(new Client(context.getAssets()));
 
-        // Keep the viewport's 2dp border visible and clip the page to its rounded corners.
-        int inset = context.getResources().getDimensionPixelSize(R.dimen.pet_viewport_stroke);
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
-        params.setMargins(inset, inset, inset, inset);
         container.setClipToOutline(true);
-        container.addView(view, params);
+        container.addView(view, webViewParams(context));
 
         webView = view;
         pageReady = false;
@@ -167,6 +164,31 @@ public final class HtmlManiengineRenderer implements ManiengineAssetRenderer {
             view.onPause();
         }
         view.loadUrl(ManiengineAssets.ENTRY_URL);
+    }
+
+    /** Moves the live WebView (and its loaded page) from its current viewport into {@code container}. */
+    @MainThread
+    private void moveWebView(@NonNull WebView view, @NonNull ViewGroup container) {
+        ViewParent oldParent = view.getParent();
+        if (oldParent instanceof ViewGroup) {
+            ViewGroup old = (ViewGroup) oldParent;
+            old.removeView(view);
+            old.setClipToOutline(false);
+        }
+        container.removeAllViews();
+        messageView = null;
+        container.setClipToOutline(true);
+        container.addView(view, webViewParams(container.getContext()));
+    }
+
+    /** Keeps the viewport's 2dp border visible; the viewport clips the page to its rounded corners. */
+    @NonNull
+    private static FrameLayout.LayoutParams webViewParams(@NonNull Context context) {
+        int inset = context.getResources().getDimensionPixelSize(R.dimen.pet_viewport_stroke);
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+        params.setMargins(inset, inset, inset, inset);
+        return params;
     }
 
     @MainThread
@@ -229,6 +251,9 @@ public final class HtmlManiengineRenderer implements ManiengineAssetRenderer {
     private void showMessage(@NonNull ViewGroup container, @StringRes int message) {
         if (messageView != null && messageView.getParent() == container) {
             return;
+        }
+        if (messageView != null && messageView.getParent() instanceof ViewGroup) {
+            ((ViewGroup) messageView.getParent()).removeView(messageView); // left in another viewport
         }
         container.removeAllViews();
         TextView view = new TextView(container.getContext());

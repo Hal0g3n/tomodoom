@@ -180,7 +180,8 @@ com.example.tomodoom
     │                             otherwise forwards straight to MainActivity and finishes
     ├── MainPagerAdapter          FragmentStateAdapter: page index ↔ bottom-nav item id
     │                             (Customise=0, Pets=1 = default, Chat=2)
-    ├── customise/CustomiseFragment   pet preview viewport (own renderer instance) + slot tabs + item chips
+    ├── PetStage                  MainActivity's ONE pet renderer, lent to the resumed page's viewport
+    ├── customise/CustomiseFragment   pet preview viewport (via PetStage) + slot tabs + item chips
     ├── pets/PetsFragment         HP header, Usage Access card, pet viewport (FrameLayout), debug row
     └── chat/ChatFragment, ChatAdapter   RecyclerView (3 view types) + input bar
 ```
@@ -290,7 +291,7 @@ ui  ──►  viewmodel  ──►  repository  ──►  contracts  ◄──
 
 | Interface | Implementation (stub in `stubs`) | Owner agent | Where it's wired |
 |---|---|---|---|
-| `ManiengineAssetRenderer` | `maniengine.HtmlManiengineRenderer` (stub: `PlaceholderManiengineRenderer`) | **Maniengine Agent** | `AppContainer.createAssetRenderer()` (factory: new instance per Pets view) |
+| `ManiengineAssetRenderer` | `maniengine.HtmlManiengineRenderer` (stub: `PlaceholderManiengineRenderer`) | **Maniengine Agent** | `AppContainer.createAssetRenderer()` (factory: one instance per `MainActivity`, held by `ui.PetStage`) |
 | `TruFarChatService` | `MockTruFarChatService` | **TruFar/MCP Agent** | `AppContainer` constructor, `// SWAP POINT (TruFar/MCP Agent)` |
 | `McpPetActionHandler` | `DefaultMcpPetActionHandler` (production-capable) | **TruFar/MCP Agent** | `AppContainer` constructor, `// SWAP POINT (TruFar/MCP Agent)` |
 | `DoomScrollMonitor` (+ `DoomScrollListener`) | `StubDoomScrollMonitor` | **Doom Scroll Agent** | `AppContainer` constructor, `// SWAP POINT (Doom Scroll Agent)` |
@@ -301,17 +302,25 @@ The full Javadoc on each interface is normative. What follows is a summary.
 ```java
 @MainThread void render(@NonNull ViewGroup container, @NonNull PetState state);
 @MainThread void release(@NonNull ViewGroup container);
-@MainThread default void pause(@NonNull ViewGroup container) {}    // PetsFragment.onPause()
-@MainThread default void resume(@NonNull ViewGroup container) {}   // PetsFragment.onResume()
+@MainThread default void pause(@NonNull ViewGroup container) {}    // page onPause() via PetStage
+@MainThread default void resume(@NonNull ViewGroup container) {}   // page onResume() via PetStage
 ```
-- `container` is the `FrameLayout` `R.id.pet_viewport` in `fragment_pets.xml`. The renderer owns
-  all of its children. Nothing else adds views to it.
+- **One renderer per `MainActivity`**, so only one pet is rendered at a time. `ui.PetStage` owns it
+  and lends it to whichever page is resumed (Customise or Pets): the page calls
+  `attach(viewport, state)` in `onResume`, `detach(viewport)` in `onPause`/`onDestroyView`, and
+  `render(viewport, state)` on each emission (ignored unless that page owns the pet).
+- `container` is the visible page's `FrameLayout` `R.id.pet_viewport` (`fragment_pets.xml` or
+  `fragment_customise.xml`). The renderer owns all of its children. Nothing else adds views to it.
+- **The container changes between calls.** `render` with a new container must *move* the existing
+  views there (remove from the old parent, keep loaded state); it must not rebuild or reload. A
+  hidden page's viewport may keep the paused view until another page takes it.
 - `render` is called on **every** `PetState` emission (HP changes as well as equip changes), so it
   must be idempotent and cheap: diff against what's already displayed and update in place.
-- `release` is called from `PetsFragment.onDestroyView()`. Remove the child views, cancel animations
-  and free bitmaps. The instance is discarded afterwards (a new view gets a new instance).
-- `pause`/`resume` bracket the time the Pets page is visible (it stays alive, `STARTED`, while
-  Chat is shown). Stop per-frame work while paused. Both are optional default no-ops.
+- `release` is called once from `MainActivity.onDestroy()` (rotation included) with the last
+  container. Remove the child views, cancel animations and free bitmaps. The instance is discarded
+  afterwards (the new activity gets a new instance).
+- `pause`/`resume` bracket the time the current container's page is visible (pages stay alive,
+  `STARTED`, while hidden). Stop per-frame work while paused. Both are optional default no-ops.
 - The asset format is **HTML**: Maniengine exports a 3D scene as a web page, which
   `HtmlManiengineRenderer` shows (§5.1). Nothing outside the renderer may depend on that.
 
@@ -444,10 +453,11 @@ How the page is hosted (`HtmlManiengineRenderer`):
   won't take drags that *start* on the viewport, but swiping still works from the HP card and below.
 - The page talks only one way (app → page). If it ever needs to call back (e.g. "item tapped"),
   extend `ManiengineProtocol` and this section together.
-- **Layout note:** the page is shown in **two** viewports, each with its own renderer instance
-  (`createAssetRenderer()` is a factory): the large one on Pets and a preview at 40% of the page
-  height on Customise, above the slot tabs and item chips. Nothing overlays either viewport. Both
-  WebViews can be alive at once; the hidden one is paused, so keep the page usable at small sizes.
+- **Layout note:** there is **one** WebView, moved (not reloaded) between two viewports: the large
+  one on Pets and a preview at 40% of the page height on Customise, above the slot tabs and item
+  chips. Nothing overlays either viewport. The page gets a `resize` each move, so it must refit to
+  any size (`index.html` does, in `fit()`). The page that isn't shown has an empty viewport, and
+  while you drag between pages the incoming viewport stays empty until the swipe settles.
 - **Acceptance:** equipping/unequipping on the Customise tab updates the viewport immediately. Rotating
   or switching tabs doesn't leak views (`release` cleans up). Nothing happens off the main thread
   in `render`. The export loads offline from `assets/maniengine/` and reacts to `tomodoom:petstate`.
@@ -656,6 +666,9 @@ process. This limits battery work but means detection is not guaranteed while th
 - **org.json in JVM tests:** android.jar only has throwing stubs, so `org.json:json` is a
   `testImplementation` dependency. Tests can then call `AgentProfileLoader.parse(JSONObject)` on the
   real asset (unit tests run with `app/` as the working directory).
+- **Shared pet WebView:** `PetStage` reparents one WebView between page viewports. It's created
+  with the viewport's (activity) context, so `PetStage` lives in `MainActivity` and is released
+  in its `onDestroy`. Never hold it in a ViewModel or `AppContainer`: that would leak the activity.
 - **WebView (Maniengine):** an `OnTouchListener` on a WebView triggers lint
   `ClickableViewAccessibility`, so `HtmlManiengineRenderer` uses a private `WebView` subclass that
   overrides `dispatchTouchEvent`. `SetJavaScriptEnabled` is suppressed on purpose: the page is a
@@ -800,7 +813,9 @@ Debug helpers available in the debug build:
 2. Swipe right (or tap **Customise**). The Customise page shows "Customise pet", a pet preview and
    Hat / Outfit / Accessory tabs with item chips. Choose **Hat → Cap**: the preview (the 3D
    cream rabbit in a floral dress, on a rug) gains a blue cap at once. Swipe back to Pets: the large
-   pet has the hat too. Also check:
+   pet has the hat too. The pet moves between the pages without reloading (no blank flash or
+   restart of the hop animation), and only one pet exists: in a debug build `chrome://inspect`
+   lists a single page target. Also check:
    - the selected slot tab and the current page survive rotation;
    - Back on Customise or Chat returns to Pets; Back on Pets leaves the app;
    - **Swiping:** from Pets, swipe left to Chat and right to Customise. The bottom nav selection
@@ -850,5 +865,3 @@ Known gaps and TODOs (not assigned to anyone yet):
 - Non-UI user-facing text (MCP results, chat notices, mock bot) is inline English, not in `strings.xml`.
 - Nothing happens yet when HP reaches 0 beyond the "Fainted" status label. No notifications.
 - No instrumented/UI tests yet. JVM tests only (`model`, `doomscroll`, `trufar`, `maniengine`).
-- Customise and Pets each host a WebView renderer, so two can be alive at once (the hidden one is
-  paused). If memory becomes a problem, share one renderer or release it in `onPause`.

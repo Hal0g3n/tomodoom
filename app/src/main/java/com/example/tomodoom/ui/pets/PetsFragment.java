@@ -16,18 +16,19 @@ import androidx.lifecycle.ViewModelProvider;
 import com.example.tomodoom.BuildConfig;
 import com.example.tomodoom.R;
 import com.example.tomodoom.contracts.DoomScrollMonitor;
-import com.example.tomodoom.contracts.ManiengineAssetRenderer;
 import com.example.tomodoom.databinding.FragmentPetsBinding;
 import com.example.tomodoom.di.AppContainer;
 import com.example.tomodoom.di.ViewModelFactory;
 import com.example.tomodoom.model.DoomScrollEvent;
 import com.example.tomodoom.model.PetMood;
 import com.example.tomodoom.model.PetState;
+import com.example.tomodoom.ui.PetStage;
 import com.example.tomodoom.viewmodel.PetsViewModel;
 
 /**
  * Pets page (the default tab): HP header, the Usage Access prompt, the pet viewport (drawn
- * entirely by {@link ManiengineAssetRenderer}) and, in debug builds, a debug row. Customisation
+ * by the activity's shared pet renderer, {@link PetStage}, while this page is resumed) and, in
+ * debug builds, a debug row. Customisation
  * is its own page ({@code ui.customise.CustomiseFragment}).
  */
 public class PetsFragment extends Fragment {
@@ -36,8 +37,6 @@ public class PetsFragment extends Fragment {
     private PetsViewModel viewModel;
     @Nullable
     private DoomScrollMonitor doomScrollMonitor;
-    @Nullable
-    private ManiengineAssetRenderer renderer;
 
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater,
@@ -52,7 +51,6 @@ public class PetsFragment extends Fragment {
         super.onViewCreated(view, savedInstanceState);
         viewModel = new ViewModelProvider(this, ViewModelFactory.from(requireContext()))
                 .get(PetsViewModel.class);
-        renderer = AppContainer.from(requireContext()).createAssetRenderer();
         doomScrollMonitor = AppContainer.from(requireContext()).getDoomScrollMonitor();
 
         setUpDebugPanel();
@@ -65,10 +63,7 @@ public class PetsFragment extends Fragment {
 
     @Override
     public void onDestroyView() {
-        if (renderer != null) {
-            renderer.release(binding.petViewport);
-            renderer = null;
-        }
+        stage().detach(binding.petViewport);
         doomScrollMonitor = null;
         super.onDestroyView();
         binding = null;
@@ -78,16 +73,12 @@ public class PetsFragment extends Fragment {
     public void onResume() {
         super.onResume();
         updateUsageAccessCard();
-        if (renderer != null) {
-            renderer.resume(binding.petViewport);
-        }
+        stage().attach(binding.petViewport, viewModel.getPetState().getValue());
     }
 
     @Override
     public void onPause() {
-        if (renderer != null) {
-            renderer.pause(binding.petViewport);
-        }
+        stage().detach(binding.petViewport);
         super.onPause();
     }
 
@@ -102,9 +93,7 @@ public class PetsFragment extends Fragment {
         binding.hpProgress.setProgress(state.getCurrentHp());
         binding.hpText.setText(getString(R.string.hp_format, state.getCurrentHp(), state.getMaxHp()));
 
-        if (renderer != null) {
-            renderer.render(binding.petViewport, state);
-        }
+        stage().render(binding.petViewport, state);
     }
 
     @StringRes
@@ -143,5 +132,11 @@ public class PetsFragment extends Fragment {
         if (permissionGranted) {
             doomScrollMonitor.startMonitoring();
         }
+    }
+
+    /** The activity's shared pet renderer; this page shows the pet only while it is resumed. */
+    @NonNull
+    private PetStage stage() {
+        return ((PetStage.Host) requireActivity()).getPetStage();
     }
 }

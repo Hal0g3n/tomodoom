@@ -4,6 +4,7 @@ import android.content.Context;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.widget.TextView;
 
 import androidx.annotation.MainThread;
@@ -33,7 +34,17 @@ public final class PlaceholderManiengineRenderer implements ManiengineAssetRende
     @MainThread
     @Override
     public void render(@NonNull ViewGroup container, @NonNull PetState state) {
-        if (placeholderView == null || placeholderView.getParent() != container) {
+        if (placeholderView != null && placeholderView.getParent() != container) {
+            // Shared renderer moved to another page's viewport: move the view, don't rebuild it.
+            ViewParent oldParent = placeholderView.getParent();
+            if (oldParent instanceof ViewGroup) {
+                ((ViewGroup) oldParent).removeView(placeholderView);
+            }
+            container.removeAllViews();
+            container.addView(placeholderView, new ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        }
+        if (placeholderView == null) {
             container.removeAllViews();
             placeholderView = createPlaceholderView(container.getContext());
             container.addView(placeholderView, new ViewGroup.LayoutParams(

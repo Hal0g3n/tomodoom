@@ -9,6 +9,7 @@ import androidx.viewpager2.widget.ViewPager2;
 
 import com.example.tomodoom.databinding.ActivityMainBinding;
 import com.example.tomodoom.ui.MainPagerAdapter;
+import com.example.tomodoom.ui.PetStage;
 
 /**
  * Single activity hosting the three top-level pages (Customise, Pets, Chat) in a swipeable
@@ -19,10 +20,14 @@ import com.example.tomodoom.ui.MainPagerAdapter;
  * any page other than Pets
  * returns to Pets; Back on Pets leaves the app. There is no action bar (the theme is
  * {@code NoActionBar}): each page supplies its own header.</p>
+ *
+ * <p>The activity owns the one {@link PetStage}: a single pet renderer that moves between the
+ * Customise and Pets viewports, so only one pet is rendered at a time.</p>
  */
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements PetStage.Host {
 
     private ActivityMainBinding binding;
+    private PetStage petStage;
 
     /** Back from a non-start page goes to Pets; enabled only off the Pets page. */
     private final OnBackPressedCallback backToPets = new OnBackPressedCallback(false) {
@@ -34,6 +39,7 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        petStage = new PetStage(this); // before super: restored pages may ask for it
         super.onCreate(savedInstanceState);
 
         binding = ActivityMainBinding.inflate(getLayoutInflater());
@@ -70,6 +76,19 @@ public class MainActivity extends AppCompatActivity {
         super.onRestoreInstanceState(savedInstanceState);
         // ViewPager2 restores its page without calling onPageSelected.
         syncWithPage(binding.mainPager.getCurrentItem());
+    }
+
+    @Override
+    protected void onDestroy() {
+        // The pages' views are gone or going; free the WebView with this activity (rotation too).
+        petStage.release();
+        super.onDestroy();
+    }
+
+    @NonNull
+    @Override
+    public PetStage getPetStage() {
+        return petStage;
     }
 
     private void syncWithPage(int position) {

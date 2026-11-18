@@ -9,18 +9,24 @@ import com.example.tomodoom.model.PetState;
 
 /**
  * Contract for the <b>Maniengine Agent</b>: renders the virtual pet and its clothing/accessory
- * layers into the Pets page viewport.
+ * layers into a page's pet viewport (Customise or Pets).
  *
  * <h3>Ownership &amp; lifecycle</h3>
  * <ul>
- *     <li>One renderer instance is created per Pets view lifecycle via
- *     {@code AppContainer#createAssetRenderer()}, so implementations may keep per-viewport
+ *     <li>One renderer instance is created per {@code MainActivity} via
+ *     {@code AppContainer#createAssetRenderer()} and shared by the pages that show the pet
+ *     ({@code ui.PetStage}), so only one pet is rendered at a time. Implementations may keep
  *     resources (child views, bitmaps, animators) in fields.</li>
- *     <li>{@code container} is the {@code FrameLayout} {@code R.id.pet_viewport}. The renderer owns
- *     <em>all</em> of its children. Nothing else adds or removes views in it.</li>
- *     <li>{@link #render} is called for every {@link PetState} emission, then {@link #release} once
- *     from {@code PetsFragment#onDestroyView()}. The instance is discarded afterwards.
- *     {@link #pause}/{@link #resume} bracket the time the page is visible.</li>
+ *     <li>{@code container} is the visible page's {@code FrameLayout} {@code R.id.pet_viewport}.
+ *     The renderer owns <em>all</em> of its children. Nothing else adds or removes views in it.</li>
+ *     <li><b>The container can change.</b> When another page becomes visible, {@link #render} is
+ *     called with that page's viewport. Implementations must <em>move</em> their existing views
+ *     there (remove them from the old parent, keep loaded state) rather than rebuild or reload.
+ *     Views may stay in a hidden page's viewport until then.</li>
+ *     <li>{@link #render} is called for every {@link PetState} emission while a pet page is
+ *     visible, then {@link #release} once from {@code MainActivity#onDestroy()} with the last
+ *     container used. The instance is discarded afterwards. {@link #pause}/{@link #resume}
+ *     bracket the time the current container is visible.</li>
  * </ul>
  *
  * <h3>Threading</h3>
@@ -59,7 +65,8 @@ public interface ManiengineAssetRenderer {
     /**
      * Releases everything this renderer added to {@code container}: removes child views,
      * cancels animations and background loads, and frees bitmaps. Called exactly once from
-     * {@code PetsFragment#onDestroyView()}. After this, the instance is never used again.
+     * {@code MainActivity#onDestroy()} (via {@code ui.PetStage}). After this, the instance is never
+     * used again.
      *
      * @param container the same viewport previously passed to {@link #render}.
      */
@@ -67,9 +74,10 @@ public interface ManiengineAssetRenderer {
     void release(@NonNull ViewGroup container);
 
     /**
-     * The viewport stopped being visible (the Pets page was paused: another tab, or the app went
-     * to the background). Stop animations and other per-frame work until {@link #resume}. Called
-     * from {@code PetsFragment#onPause()}, possibly before the first {@link #render}.
+     * The viewport stopped being visible (its page was paused: another tab, or the app went to
+     * the background). Stop animations and other per-frame work until {@link #resume}. Called
+     * from the page's {@code onPause()} via {@code ui.PetStage}, possibly before the first
+     * {@link #render}.
      * Optional: the default does nothing.
      */
     @MainThread
@@ -77,8 +85,8 @@ public interface ManiengineAssetRenderer {
     }
 
     /**
-     * The viewport is visible again after {@link #pause}. Called from
-     * {@code PetsFragment#onResume()}, including the first resume. Optional: the default does
+     * The viewport is visible again after {@link #pause}. Called from the page's
+     * {@code onResume()} via {@code ui.PetStage}, including the first resume. Optional: the default does
      * nothing.
      */
     @MainThread

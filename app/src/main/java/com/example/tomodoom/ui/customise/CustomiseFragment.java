@@ -12,28 +12,26 @@ import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 
 import com.example.tomodoom.R;
-import com.example.tomodoom.contracts.ManiengineAssetRenderer;
 import com.example.tomodoom.databinding.FragmentCustomiseBinding;
-import com.example.tomodoom.di.AppContainer;
 import com.example.tomodoom.di.ViewModelFactory;
 import com.example.tomodoom.model.AccessoryItem;
 import com.example.tomodoom.model.AccessorySlot;
 import com.example.tomodoom.model.PetState;
+import com.example.tomodoom.ui.PetStage;
 import com.example.tomodoom.viewmodel.CustomiseViewModel;
 import com.google.android.material.chip.Chip;
 import com.google.android.material.tabs.TabLayout;
 
 /**
- * Customise page (leftmost tab): a live pet preview (its own {@link ManiengineAssetRenderer}
- * instance) above the slot tabs and item chips. Equipping goes through {@link CustomiseViewModel}
- * to {@code PetStateRepository}, so the Pets page updates too.
+ * Customise page (leftmost tab): a live pet preview above the slot tabs and item chips. The
+ * preview is the activity's single shared pet ({@link PetStage}), shown here while this page is
+ * resumed. Equipping goes through {@link CustomiseViewModel} to {@code PetStateRepository}, so the
+ * Pets page updates too.
  */
 public class CustomiseFragment extends Fragment {
 
     private FragmentCustomiseBinding binding;
     private CustomiseViewModel viewModel;
-    @Nullable
-    private ManiengineAssetRenderer renderer;
     /** Slot whose chips are currently shown. */
     @Nullable
     private String chipSlot;
@@ -51,7 +49,6 @@ public class CustomiseFragment extends Fragment {
         super.onViewCreated(view, savedInstanceState);
         viewModel = new ViewModelProvider(this, ViewModelFactory.from(requireContext()))
                 .get(CustomiseViewModel.class);
-        renderer = AppContainer.from(requireContext()).createAssetRenderer();
 
         setUpSlotTabs();
         viewModel.getSelectedSlot().observe(getViewLifecycleOwner(), this::showSlot);
@@ -61,34 +58,25 @@ public class CustomiseFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
-        if (renderer != null) {
-            renderer.resume(binding.petViewport);
-        }
+        stage().attach(binding.petViewport, viewModel.getPetState().getValue());
     }
 
     @Override
     public void onPause() {
-        if (renderer != null) {
-            renderer.pause(binding.petViewport);
-        }
+        stage().detach(binding.petViewport);
         super.onPause();
     }
 
     @Override
     public void onDestroyView() {
-        if (renderer != null) {
-            renderer.release(binding.petViewport);
-            renderer = null;
-        }
+        stage().detach(binding.petViewport);
         chipSlot = null;
         super.onDestroyView();
         binding = null;
     }
 
     private void renderState(@NonNull PetState state) {
-        if (renderer != null) {
-            renderer.render(binding.petViewport, state);
-        }
+        stage().render(binding.petViewport, state);
         syncChipSelection(state);
     }
 
@@ -185,5 +173,11 @@ public class CustomiseFragment extends Fragment {
             default:
                 throw new IllegalArgumentException("No label for slot " + slot);
         }
+    }
+
+    /** The activity's shared pet renderer; this page shows the pet only while it is resumed. */
+    @NonNull
+    private PetStage stage() {
+        return ((PetStage.Host) requireActivity()).getPetStage();
     }
 }

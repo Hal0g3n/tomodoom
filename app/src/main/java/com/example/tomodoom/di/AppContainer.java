@@ -89,7 +89,8 @@ public final class AppContainer {
     }
 
     /**
-     * Factory: a <b>new</b> renderer for each Pets view lifecycle (see
+     * Factory: a <b>new</b> renderer for each MainActivity, shared by its pet pages via
+     * {@code ui.PetStage} (see
      * {@link ManiengineAssetRenderer} for the ownership rules).
      */
     @MainThread
