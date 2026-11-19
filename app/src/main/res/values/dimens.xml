@@ -9,6 +9,9 @@
     <!-- Side inset of the pet's rotate area where there is no health bar to line up with. Matches
          the health bar card's margin on the Pets page. -->
     <dimen name="pet_model_box_inset">16dp</dimen>
+    <!-- Pets health bar (hp_progress): a thick rounded pill. -->
+    <dimen name="hp_bar_thickness">14dp</dimen>
+    <dimen name="hp_bar_corner_radius">7dp</dimen>
     <!-- How far the open bottom bar tab's enlarged icon rises (MainActivity). -->
     <dimen name="nav_icon_lift">4dp</dimen>
     <!-- Chat bubble text (also the LaTeX size, ChatMarkdown) -->
