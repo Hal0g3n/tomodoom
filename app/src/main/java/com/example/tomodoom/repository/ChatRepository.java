@@ -28,7 +28,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * {@link McpPetActionHandler}.
  *
  * <p>Because it is app-scoped, the transcript and quiz state survive tab switches and
- * configuration changes. It does <b>not</b> survive process death.</p>
+ * configuration changes. It does <b>not</b> survive process death, and after
+ * {@link #INACTIVITY_RESET_MILLIS} in the background the conversation starts over
+ * ({@link #onAppForegrounded}).</p>
  *
  * <h3>Threading</h3>
  * Service callbacks arrive on any thread. All mutable state is guarded by {@link #lock}, and
@@ -40,6 +42,8 @@ public final class ChatRepository {
     private static final String TAG = "ChatRepository";
     /** Oldest messages are dropped beyond this size to bound memory. */
     static final int MAX_TRANSCRIPT_SIZE = 500;
+    /** Time in the background after which the next foregrounding starts a new conversation. */
+    public static final long INACTIVITY_RESET_MILLIS = 10 * 60 * 1000L;
 
     @NonNull
     private final ChatService chatService;
@@ -54,6 +58,7 @@ public final class ChatRepository {
             new MutableLiveData<>(Collections.<ChatMessage>emptyList());
     private final MutableLiveData<QuizPrompt> activeQuizLiveData = new MutableLiveData<>(null);
     private final AtomicBoolean started = new AtomicBoolean(false);
+    private final BackgroundTimer backgroundTimer = new BackgroundTimer();
 
     public ChatRepository(@NonNull ChatService chatService, @NonNull McpPetActionHandler mcpHandler) {
         this.chatService = chatService;
@@ -67,6 +72,46 @@ public final class ChatRepository {
         if (started.compareAndSet(false, true)) {
             chatService.connect();
         }
+    }
+
+    /**
+     * The app went to the background (no activity started).
+     *
+     * @param nowMs monotonic time, e.g. {@code SystemClock.elapsedRealtime()}.
+     */
+    @AnyThread
+    public void onAppBackgrounded(long nowMs) {
+        backgroundTimer.onBackground(nowMs);
+    }
+
+    /**
+     * The app came back to the foreground. If it was away for at least
+     * {@link #INACTIVITY_RESET_MILLIS} and the chat had been opened, starts a new conversation.
+     *
+     * @param nowMs monotonic time on the same clock as {@link #onAppBackgrounded}.
+     */
+    @AnyThread
+    public void onAppForegrounded(long nowMs) {
+        if (backgroundTimer.onForeground(nowMs, INACTIVITY_RESET_MILLIS) && started.get()) {
+            startNewConversation();
+        }
+    }
+
+    /**
+     * Clears the transcript and any active quiz and opens a fresh session, which greets the user
+     * again. The service is disconnected first, so replies still on their way for the old
+     * conversation are dropped rather than landing in the new one.
+     */
+    @AnyThread
+    public void startNewConversation() {
+        Log.i(TAG, "starting a new conversation");
+        chatService.disconnect();
+        synchronized (lock) {
+            transcript.clear();
+            setActiveQuizLocked(null);
+            messagesLiveData.postValue(Collections.<ChatMessage>emptyList());
+        }
+        chatService.connect();
     }
 
     /** Immutable snapshots of the transcript, oldest first. */

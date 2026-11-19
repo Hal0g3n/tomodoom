@@ -116,7 +116,8 @@ Root package: `com.example.tomodoom`. Source root: `app/src/main/java/com/exampl
 
 ```
 com.example.tomodoom
-├── TomodoomApplication.java      Application subclass; owns the AppContainer; starts the monitor
+├── TomodoomApplication.java      Application subclass; owns the AppContainer; starts the monitor;
+│                                 counts started activities → ChatRepository background/foreground
 ├── MainActivity.java             Main activity (not exported); swipeable ViewPager2 (Customise | Pets | Chat) ↔ BottomNavigationView;
 │                                 starts on Pets; Back off Pets → Pets; no action bar (NoActionBar theme)
 │
@@ -142,7 +143,9 @@ com.example.tomodoom
 │
 ├── repository/                   Reactive state holders and domain glue
 │   ├── PetStateRepository        SINGLE SOURCE OF TRUTH for pet state (SharedPreferences + LiveData)
-│   ├── ChatRepository            app-scoped chat transcript; routes chat events → MCP handler
+│   ├── ChatRepository            app-scoped chat transcript; routes chat events → MCP handler;
+│   │                             new conversation after 10 min in the background
+│   ├── BackgroundTimer           pure Java: how long the app was in the background
 │   └── DoomScrollHpBridge        DoomScrollListener → PetStateRepository.decreaseHp(...)
 │
 ├── stubs/                        Stubs and default implementations of the contracts
@@ -297,6 +300,20 @@ ui  ──►  viewmodel  ──►  repository  ──►  contracts  ◄──
 
 - `ChatRepository` keeps the chat transcript **in memory only** (it survives tab switches and
   rotation, but not process death). Persisting it is up to the Chat/MCP agent, if needed.
+- **New conversation after inactivity:** `TomodoomApplication` counts started activities. When
+  the count goes 1 → 0 it calls `ChatRepository.onAppBackgrounded`, and 0 → 1 calls
+  `onAppForegrounded`, both with `SystemClock.elapsedRealtime()`. If the app was away for
+  `ChatRepository.INACTIVITY_RESET_MILLIS` (10 minutes) or more and the chat had been opened,
+  `startNewConversation()` runs:
+  1. `ChatService.disconnect()`;
+  2. clear the transcript and the active quiz;
+  3. `connect()`, which sends a new greeting.
+
+  Rotation and switching between activities don't count. The doom-scroll foreground service
+  isn't an activity, so it doesn't keep the chat alive.
+- `GeminiChatService` saves the persona in use in its own prefs file **`tomodoom_chat`**, key
+  `persona` (`low_hp` | `high_hp`), so a new conversation or a cold start keeps the personality.
+  This is separate from `tomodoom_pet_state`, which only `PetStateRepository` touches.
 - ViewModels hold only UI state (e.g. the selected customisation tab). Domain state lives in
   repositories.
 
@@ -356,8 +373,10 @@ interface Listener {                                   // callbacks: ANY thread
 }
 ```
 - All methods return immediately. Results arrive asynchronously through the `Listener`.
-- `ChatRepository` is the only listener. It calls `connect()` once, the first time the Chat tab
-  opens. While a quiz is active, the user's next message goes to `submitQuizAnswer` instead of
+- `ChatRepository` is the only listener. It calls `connect()` the first time the Chat tab
+  opens, and `disconnect()` + `connect()` to start a new conversation after 10 minutes in the
+  background (§3.3). A new session starts fresh, and events still pending for the old one are
+  dropped. While a quiz is active, the user's next message goes to `submitQuizAnswer` instead of
   `sendMessage`.
 - `onToolCallRequested` is how the backend (acting as the MCP client) invokes the app's pet tools.
   It runs the tool **synchronously** on the calling thread and returns the result, which the
@@ -587,8 +606,15 @@ How `GeminiChatService` behaves:
 - `connect()` loads both assets on the worker thread. It then sends the hidden user turn
   `__START__`, which the current persona's prompt answers with its greeting. `__START__` never appears in the transcript.
   Only an asset-load failure leaves the service disconnected. If the greeting request fails, the
-  error is shown, but the session stays open (`ChatRepository` calls `connect()` only once), so
-  the user's next message starts the conversation.
+  error is shown, but the session stays open, so the user's next message starts the
+  conversation.
+- **New conversation** (`disconnect()` then `connect()`, §3.3):
+  - memory, session ID and quiz counter start fresh, and the greeting comes from the persona
+    `PersonaSelector` picks from the **saved** persona (`tomodoom_chat`/`persona`). So the
+    personality carries over unless HP crossed 40/60 meanwhile.
+  - A greeting never carries the mood-shift note.
+  - `disconnect()` bumps a generation counter at once. Queued or in-flight requests from the old
+    conversation drop their reply and errors, so nothing old lands in the new transcript.
 - Each request is `{model, temperature, stream:false, messages:[system, …last 5 turns, user]}`. A
   turn is remembered only if its request succeeds. Read timeout is 90 s.
 - **Retries and fallbacks (`ModelFallback`):** each turn tries the primary model twice, then each
@@ -740,6 +766,9 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
     503s are retried within seconds.
   - Changing any `GEMINI_*` property needs a rebuild and reinstall, because they're compiled
     into `BuildConfig`.
+  - The properties used to be called `TRUFAR_LLM_URL` / `TRUFAR_LLM_API_KEY` /
+    `TRUFAR_LLM_MODEL`. The old names are ignored now, so a build with only the old names
+    silently falls back to the mock bot.
 - **LLM-graded HP is persuadable:** a user can talk either persona into emitting `[[CORRECT]]`. Each award
   is bounded by `GeminiChatService.CORRECT_ANSWER_HP` (10) and the per-award cap, but
   there's no rate limit. Add one in the handler if it gets abused.
@@ -939,15 +968,20 @@ Debug helpers available in the debug build:
 12. Doom-scroll until HP < 40, then send a message. The reply opens with one line showing a soured
     mood, then continues the same topic in Kafka's sarcastic tone, still as Mochi. Between 40 and
     59 HP the persona doesn't change. Earn HP back to ≥ 60: the next reply brightens, then Charon.
+13. With a conversation open, send the app to the background (Home) for under 10 minutes and
+    return: the transcript is still there. Leave it for over 10 minutes and return: the
+    transcript is cleared and a new greeting arrives from the **same** persona as before (unless
+    HP crossed 40/60 meanwhile, e.g. through doom-scrolling). Rotating never resets the chat, and
+    killing and relaunching the app keeps the persona.
 
 **Doom-scroll detection (real device, watched app installed):**
 
-13. Grant Usage Access and allow notifications. A low-priority "Tomodoom is watching over your pet" notification appears.
-14. Scroll Instagram or YouTube Shorts in portrait. HP drops by 1 each minute.
-15. Keep going to 10 and 20 minutes. A "Time to look up" notification appears each time.
-16. Play a fullscreen landscape YouTube video. HP stops dropping, then resumes when you return to portrait.
-17. Leave watched apps for over a minute, then return. The next warning comes 10 minutes into the new session.
-18. Revoke Usage Access. Monitoring stops and its notification disappears.
+14. Grant Usage Access and allow notifications. A low-priority "Tomodoom is watching over your pet" notification appears.
+15. Scroll Instagram or YouTube Shorts in portrait. HP drops by 1 each minute.
+16. Keep going to 10 and 20 minutes. A "Time to look up" notification appears each time.
+17. Play a fullscreen landscape YouTube video. HP stops dropping, then resumes when you return to portrait.
+18. Leave watched apps for over a minute, then return. The next warning comes 10 minutes into the new session.
+19. Revoke Usage Access. Monitoring stops and its notification disappears.
 
 ---
 
@@ -965,11 +999,11 @@ Update this table in the same commit when your task changes a subsystem's status
 | Chat UI | ✅ Skeleton done | `ChatFragment` / `ChatViewModel` / `ChatRepository` |
 | Pet rendering | ✅ scene-3 rabbit (three.js, offline) via the HTML/WebView pipeline; add-ons are primitive placeholders | `HtmlManiengineRenderer` + `assets/maniengine/` |
 | Item catalog | ⏳ Placeholder (6 hard-coded items: hats and accessories) | `AccessoryCatalog` → Maniengine Agent |
-| Chatbot (Gemini) | ✅ Kafka (low HP) / Charon (high HP) personas, 40/60 hysteresis, speaking as the pet's name, on Google's free Gemini API (`gemini-3.1-flash-lite` with fallbacks, retries on 503/429/timeouts) via the in-app OpenAI-compatible client. It's verified from a PC; on a device, the first build hit a 503, and the fix is not yet re-tested there. Mock when unconfigured | `GeminiChatService` (`GEMINI_API_URL`) / `MockChatService` |
+| Chatbot (Gemini) | ✅ Kafka (low HP) / Charon (high HP) personas, 40/60 hysteresis, speaking as the pet's name, new conversation after 10 min in the background, on Google's free Gemini API (`gemini-3.1-flash-lite` with fallbacks, retries on 503/429/timeouts) via the in-app OpenAI-compatible client. It's verified from a PC; on a device, the first build hit a 503, and the fix is not yet re-tested there. Mock when unconfigured | `GeminiChatService` (`GEMINI_API_URL`) / `MockChatService` |
 | Doom-scroll detection | ✅ Usage Access polling in a foreground service; portrait only, 1 HP per minute, warnings every 10 minutes (not yet tested on a device) | `UsageStatsDoomScrollMonitor` |
 
 Known gaps and TODOs (not assigned to anyone yet):
-- The chat transcript isn't persisted, and quiz replay protection only lasts for the process
+- The chat transcript isn't persisted (only the persona is), and quiz replay protection only lasts for the process
   lifetime. Quiz IDs include a random session UUID, so they stay unique across sessions.
 - Non-UI user-facing text (MCP results, chat notices, mock bot) is inline English, not in `strings.xml`.
 - Nothing happens yet when HP reaches 0 beyond the "Fainted" status label.

@@ -31,7 +31,10 @@ import java.util.Map;
  *
  * <h3>Session flow</h3>
  * <ol>
- *     <li>{@code ChatRepository} sets itself as listener, then calls {@link #connect()} once.</li>
+ *     <li>{@code ChatRepository} sets itself as listener, then calls {@link #connect()} once.
+ *     To start a new conversation (after a long time in the background) it calls
+ *     {@link #disconnect()} then {@link #connect()}: the new session must start fresh, and
+ *     events still pending for the old one should be dropped.</li>
  *     <li>The user's messages go to {@link #sendMessage(String)}, except while a
  *     {@link QuizPrompt} is active, when the next message goes to
  *     {@link #submitQuizAnswer(String, String)}.</li>

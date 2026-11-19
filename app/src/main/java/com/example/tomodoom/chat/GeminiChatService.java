@@ -1,6 +1,7 @@
 package com.example.tomodoom.chat;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.util.Log;
 
 import androidx.annotation.AnyThread;
@@ -24,6 +25,7 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
 /**
@@ -38,7 +40,15 @@ import java.util.function.Supplier;
  * ({@link AgentProfile#withPetName}). Both share one conversation memory, and the first reply
  * after a switch carries a hidden {@link PersonaPrompts#moodShiftNote}, so the change reads as
  * the pet's mood shifting rather than a new bot. The state is only read, never written: HP still
- * changes only through {@code McpPetActionHandler}.
+ * changes only through {@code McpPetActionHandler}. The persona in use is saved in the
+ * {@value #PREFS_FILE} prefs file, so a new conversation (or a cold start) keeps the old
+ * conversation's personality unless HP has crossed a threshold since.
+ *
+ * <h3>New conversations</h3>
+ * {@link #disconnect()} followed by {@link #connect()} starts a fresh conversation (new memory,
+ * session and quiz IDs, and a new greeting). Work queued or in flight for the old conversation
+ * is dropped: each request carries the conversation generation it was made in, and its result
+ * is discarded if {@link #disconnect()} has happened since.
  *
  * <h3>Quizzes and HP</h3>
  * The agent quizzes the user in free text, so no {@code QuizPrompt}s are emitted. Instead,
@@ -59,6 +69,11 @@ public final class GeminiChatService implements ChatService {
     /** LLM completions (especially reasoning models) can take a while. */
     private static final int READ_TIMEOUT_MILLIS = 90_000;
     private static final String COMPLETIONS_PATH = "/chat/completions";
+
+    /** Chat-owned prefs file (not the pet-state file, which only PetStateRepository touches). */
+    static final String PREFS_FILE = "tomodoom_chat";
+    /** {@link Persona#getId()} of the persona last in use. */
+    static final String KEY_PERSONA = "persona";
 
     /** HP requested for each answer the agent marks as correct. */
     public static final int CORRECT_ANSWER_HP = 10;
@@ -96,6 +111,9 @@ public final class GeminiChatService implements ChatService {
     });
     @NonNull
     private final AtomicBoolean connectRequested = new AtomicBoolean(false);
+    /** Bumped by every {@link #disconnect()}; results from an older generation are dropped. */
+    @NonNull
+    private final AtomicInteger generation = new AtomicInteger();
     @Nullable
     private volatile Listener listener;
     private volatile boolean connected;
@@ -105,8 +123,9 @@ public final class GeminiChatService implements ChatService {
     private AgentProfile lowHpProfile;
     @Nullable
     private AgentProfile highHpProfile;
-    @NonNull
-    private final PersonaSelector personaSelector = new PersonaSelector(null);
+    /** Created with the profiles, from the saved persona. */
+    @Nullable
+    private PersonaSelector personaSelector;
     @Nullable
     private ChatHistoryWindow history;
     @Nullable
@@ -118,19 +137,19 @@ public final class GeminiChatService implements ChatService {
      * @param lowHpAgentAsset  agent export inside {@code assets/} used while HP is low.
      * @param highHpAgentAsset agent export inside {@code assets/} used while HP is high.
      * @param petState         current pet snapshot; called on the worker thread.
-     * @param baseUrl        HTTPS base URL; {@value #COMPLETIONS_PATH} is appended.
-     * @param apiKey         bearer token; may be empty for gateways without auth.
-     * @param modelOverride  model to use instead of the export's, or a comma-separated list
-     *                       (primary first, then fallbacks for when it is overloaded); empty keeps
-     *                       the export's model.
+     * @param baseUrl          HTTPS base URL; {@value #COMPLETIONS_PATH} is appended.
+     * @param apiKey           bearer token; may be empty for gateways without auth.
+     * @param modelOverride    model to use instead of the export's, or a comma-separated list
+     *                         (primary first, then fallbacks for when it is overloaded); empty
+     *                         keeps the export's model.
      */
     public GeminiChatService(@NonNull Context context,
-                                       @NonNull String lowHpAgentAsset,
-                                       @NonNull String highHpAgentAsset,
-                                       @NonNull Supplier<PetState> petState,
-                                       @NonNull String baseUrl,
-                                       @NonNull String apiKey,
-                                       @NonNull String modelOverride) {
+                             @NonNull String lowHpAgentAsset,
+                             @NonNull String highHpAgentAsset,
+                             @NonNull Supplier<PetState> petState,
+                             @NonNull String baseUrl,
+                             @NonNull String apiKey,
+                             @NonNull String modelOverride) {
         this.appContext = context.getApplicationContext();
         this.lowHpAgentAsset = lowHpAgentAsset;
         this.highHpAgentAsset = highHpAgentAsset;
@@ -152,7 +171,7 @@ public final class GeminiChatService implements ChatService {
      * Loads both agents, starts a fresh conversation and sends the hidden greeting trigger. Only a
      * failure to load the agents leaves the service disconnected: if just the greeting request
      * fails (e.g. the provider is overloaded), the error is reported but the session stays open,
-     * so the user's next message starts the conversation ({@code ChatRepository} connects once).
+     * so the user's next message starts the conversation.
      */
     @AnyThread
     @Override
@@ -160,20 +179,27 @@ public final class GeminiChatService implements ChatService {
         if (!connectRequested.compareAndSet(false, true)) {
             return;
         }
+        final int gen = generation.get();
         worker.execute(() -> {
+            if (isStale(gen)) {
+                return;
+            }
             try {
-                if (lowHpProfile == null || highHpProfile == null) {
+                if (lowHpProfile == null || highHpProfile == null || personaSelector == null) {
                     lowHpProfile = AgentProfileLoader.load(appContext, lowHpAgentAsset)
                             .withModelOverride(modelOverride);
                     highHpProfile = AgentProfileLoader.load(appContext, highHpAgentAsset)
                             .withModelOverride(modelOverride);
+                    personaSelector = new PersonaSelector(
+                            Persona.fromId(prefs().getString(KEY_PERSONA, null)));
                     Log.i(TAG, "loaded " + lowHpProfile + " and " + highHpProfile
-                            + ", fallbacks " + fallbackModels);
+                            + ", fallbacks " + fallbackModels
+                            + ", saved persona " + personaSelector.getCurrent());
                 }
             } catch (IOException exception) {
                 connected = false;
                 connectRequested.set(false);
-                reportError(exception);
+                reportError(exception, gen);
                 return;
             }
             history = new ChatHistoryWindow(Math.max(lowHpProfile.getMemoryWindowTurns(),
@@ -182,9 +208,9 @@ public final class GeminiChatService implements ChatService {
             gradedAnswerCount = 0;
             connected = true;
             try {
-                exchange(AgentProfile.GREETING_TRIGGER, true);
+                exchange(AgentProfile.GREETING_TRIGGER, true, gen);
             } catch (IOException exception) {
-                reportError(exception);
+                reportError(exception, gen);
             }
         });
     }
@@ -192,6 +218,7 @@ public final class GeminiChatService implements ChatService {
     @AnyThread
     @Override
     public void disconnect() {
+        generation.incrementAndGet();
         connectRequested.set(false);
         connected = false;
         worker.execute(() -> {
@@ -216,15 +243,19 @@ public final class GeminiChatService implements ChatService {
             reportNotConnected();
             return;
         }
+        final int gen = generation.get();
         worker.execute(() -> {
+            if (isStale(gen)) {
+                return;
+            }
             if (!connected) {
-                reportError(new IllegalStateException("Gemini chat is not connected"));
+                reportError(new IllegalStateException("Gemini chat is not connected"), gen);
                 return;
             }
             try {
-                exchange(text, false);
+                exchange(text, false, gen);
             } catch (IOException exception) {
-                reportError(exception);
+                reportError(exception, gen);
             }
         });
     }
@@ -242,19 +273,22 @@ public final class GeminiChatService implements ChatService {
     /**
      * One user turn; the turn is remembered only if it succeeds. Temporary failures (overload,
      * rate limit, timeout) are retried with backoff, first on the primary model and then on the
-     * fallbacks ({@link ModelFallback}); only the last failure is reported.
+     * fallbacks ({@link ModelFallback}); only the last failure is reported. A reply that arrives
+     * after the conversation was replaced ({@code gen} is stale) is dropped.
      */
     @WorkerThread
-    private void exchange(@NonNull String userText, boolean isGreeting) throws IOException {
+    private void exchange(@NonNull String userText, boolean isGreeting, int gen)
+            throws IOException {
         AgentProfile low = lowHpProfile;
         AgentProfile high = highHpProfile;
+        PersonaSelector selector = personaSelector;
         ChatHistoryWindow currentHistory = history;
-        if (low == null || high == null || currentHistory == null) {
+        if (low == null || high == null || selector == null || currentHistory == null) {
             throw new IOException("Gemini chat is not connected");
         }
         PetState pet = petState.get();
-        Persona previous = personaSelector.getCurrent();
-        Persona persona = personaSelector.select(pet.getCurrentHp());
+        Persona previous = selector.getCurrent();
+        Persona persona = selector.select(pet.getCurrentHp());
         AgentProfile currentProfile = (persona == Persona.HIGH_HP ? high : low)
                 .withPetName(pet.getPetName());
         // A new conversation simply opens in the current mood; only mid-chat switches get a note.
@@ -285,13 +319,28 @@ public final class GeminiChatService implements ChatService {
                 attempt = next;
             }
         }
+        if (isStale(gen)) {
+            Log.i(TAG, "dropped a reply from a replaced conversation");
+            return;
+        }
         currentHistory.addTurn(userText, reply);
         if (previous != persona) {
             Log.i(TAG, "persona " + previous + " -> " + persona + " at " + pet.getCurrentHp()
                     + "/" + pet.getMaxHp() + " HP");
+            prefs().edit().putString(KEY_PERSONA, persona.getId()).apply();
         }
-        personaSelector.commit(persona);
+        selector.commit(persona);
         deliver(QuizMarkerParser.parse(reply), isGreeting);
+    }
+
+    @AnyThread
+    private boolean isStale(int gen) {
+        return gen != generation.get();
+    }
+
+    @NonNull
+    private SharedPreferences prefs() {
+        return appContext.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE);
     }
 
     @WorkerThread
@@ -384,6 +433,15 @@ public final class GeminiChatService implements ChatService {
     @AnyThread
     private void reportNotConnected() {
         worker.execute(() -> reportError(new IllegalStateException("Gemini chat is not connected")));
+    }
+
+    /** Reports {@code error} unless it belongs to a conversation that has been replaced. */
+    @AnyThread
+    private void reportError(@NonNull Throwable error, int gen) {
+        if (isStale(gen)) {
+            return;
+        }
+        reportError(error);
     }
 
     @AnyThread
