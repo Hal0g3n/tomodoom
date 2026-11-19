@@ -9,6 +9,7 @@ import android.widget.TextView;
 import androidx.annotation.MainThread;
 import androidx.annotation.NonNull;
 import androidx.core.content.ContextCompat;
+import androidx.core.content.res.ResourcesCompat;
 
 import com.example.tomodoom.R;
 
@@ -44,6 +45,9 @@ final class ChatMarkdown {
         int inlineCodeBackground = ContextCompat.getColor(context, R.color.chat_inline_code_background);
         int codeBlockBackground = ContextCompat.getColor(context, R.color.chat_code_block_background);
         int codeBlockText = ContextCompat.getColor(context, R.color.chat_code_block_text);
+        // Fira Code Retina, as in the fenced code blocks (bundled, so loading it is synchronous).
+        Typeface loaded = ResourcesCompat.getFont(context, R.font.fira_code_retina);
+        Typeface codeTypeface = loaded != null ? loaded : Typeface.MONOSPACE;
         markwon = Markwon.builder(context)
                 .usePlugin(MarkwonInlineParserPlugin.create())
                 .usePlugin(JLatexMathPlugin.create(textSize, builder -> {
@@ -53,7 +57,7 @@ final class ChatMarkdown {
                 .usePlugin(new AbstractMarkwonPlugin() {
                     @Override
                     public void configureTheme(@NonNull MarkwonTheme.Builder theme) {
-                        theme.codeTypeface(Typeface.MONOSPACE)
+                        theme.codeTypeface(codeTypeface)
                                 .codeBackgroundColor(inlineCodeBackground)
                                 // Indented (non-fenced) code blocks stay in the text; match
                                 // the fenced blocks' colours.

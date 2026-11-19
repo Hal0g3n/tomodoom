@@ -90,10 +90,13 @@
         <item name="android:textStyle">bold</item>
     </style>
 
-    <!-- Code inside a chat code block: monospace (a view style, so it outranks the theme font). -->
+    <!-- Code inside a chat code block: Fira Code Retina with its programming ligatures (a view
+         style, so it outranks the theme font). Ligatures need zero letter spacing. -->
     <style name="Widget.Tomodoom.ChatCode" parent="">
-        <item name="fontFamily">monospace</item>
-        <item name="android:fontFamily">monospace</item>
+        <item name="fontFamily">@font/fira_code_retina</item>
+        <item name="android:fontFamily">@font/fira_code_retina</item>
+        <item name="android:fontFeatureSettings">\"calt\" 1, \"liga\" 1</item>
+        <item name="android:letterSpacing">0</item>
         <item name="android:textSize">@dimen/chat_code_text_size</item>
         <item name="android:textColor">@color/chat_code_block_text</item>
     </style>

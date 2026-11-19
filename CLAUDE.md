@@ -270,8 +270,8 @@ small icon, used by both doom-scroll notifications),
 `usage_row`/`notifications_row` (the current one drawn selected), `permission_button`, `permission_skip_button`), `res/menu/bottom_nav_menu.xml`,
 `fragment_debug_panel.xml` + `values/strings_debug.xml` + `values/styles_debug.xml` (debug panel).
 `res/values/dimens.xml` (`pet_viewport_stroke`, `pet_viewport_corner_radius`).
-`res/font/` + `res/font-v26/` (`playpen_sans`, `unkempt` families and their static TTFs; §6.3), with
-the font licences in `assets/licenses/`.
+`res/font/` + `res/font-v26/` (`playpen_sans`, `unkempt` families and their static TTFs; §6.3) and
+`res/font/fira_code_retina.ttf` (code), with the font licences in `assets/licenses/`.
 Assets: `assets/agents/kafka_agent.json` and `charon_agent.json` (the two persona exports from the TruFar editor, icons stripped; §5.2),
 `assets/maniengine/index.html` (the pet page, §5.1), `pet-scene.js` (model setup + add-ons, shared with the
 thumbnail tool; `PETS` profiles per model), `models/rabbit.js` and `models/cat.js` (GENERATED from the scene-3
@@ -1060,8 +1060,15 @@ Rules:
 **Typography.** All UI text is **Playpen Sans**; user and bot chat bubbles use **Unkempt**
 (`Widget.Tomodoom.ChatBubble`, applied with `style=`: Unkempt Bold, `@dimen/chat_bubble_text_size` (17sp) from its
 text appearance; LaTeX uses the same size). SYSTEM chat notices stay in Playpen Sans. Code in bot bubbles is
-monospace (`Widget.Tomodoom.ChatCode`, `@dimen/chat_code_text_size`, 14sp).
-- Both are bundled static Regular/Bold TTFs (Playpen Sans: OFL, from TypeTogether's repo, since
+**Fira Code Retina** with its programming ligatures (`=>`, `!=`, `>=` … drawn as one glyph):
+fenced blocks through `Widget.Tomodoom.ChatCode` (`@dimen/chat_code_text_size`, 14sp,
+`fontFeatureSettings` `"calt" 1, "liga" 1`, `letterSpacing` 0), inline and indented code through
+Markwon's `codeTypeface` in `ChatMarkdown` (falls back to `Typeface.MONOSPACE`).
+- Fira Code Retina (OFL, the official 6.2 release; licence `assets/licenses/FiraCode-OFL.txt`) is
+  a single static weight (450), so it's a bare TTF resource with no family XML.
+- Android drops optional ligatures when `letterSpacing` isn't 0. Fira Code's ligatures are `calt`,
+  which survive it (inline code in the 0.01-spaced prose still gets them), but keep code styles at 0.
+- Playpen Sans and Unkempt are bundled static Regular/Bold TTFs (Playpen Sans: OFL, from TypeTogether's repo, since
   Google Fonts ships only the variable font; Unkempt: Apache 2.0). Licences are in
   `assets/licenses/`.
 - Each family XML exists twice: `res/font/` with `app:` attrs (AppCompat, API 24–25) and
