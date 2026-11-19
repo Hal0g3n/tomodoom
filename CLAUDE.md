@@ -1027,7 +1027,7 @@ Rules:
   update the table above in the same commit.
 - **Chat is translucent** so the pet shows through: `bubble_user_background` (charcoal),
   `bubble_bot_background` / `system_notice_background` (eggshell) and `chat_input_background`
-  (floral_white) are the palette hex at 60% alpha (`#99…`). This is the one place aliases carry a
+  (floral_white) are the palette hex at 80% alpha (`#CC…`). This is the one place aliases carry a
   hex value: keep it the token's RGB with an alpha prefix. Put the alpha on backgrounds only, never
   `android:alpha` on a view, which would fade the text too.
 - **Chat code and maths are opaque:** code blocks in bot bubbles use `chat_code_block_background`

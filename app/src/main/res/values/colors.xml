@@ -7,11 +7,11 @@
     <color name="jet">#FF383A3D</color>          <!-- primary text, primary variant -->
     <color name="slate_grey">#FF8C8F92</color>   <!-- secondary text, hints -->
 
-    <!-- Chat: palette tokens at 60% opacity (#99), so the pet shows through; text stays opaque -->
-    <color name="bubble_user_background">#99585B5E</color>   <!-- charcoal -->
-    <color name="bubble_bot_background">#99F7F0DE</color>    <!-- eggshell -->
-    <color name="system_notice_background">#99F7F0DE</color> <!-- eggshell -->
-    <color name="chat_input_background">#99FBF7EF</color>    <!-- floral_white -->
+    <!-- Chat: palette tokens at 80% opacity (#CC), so the pet shows through; text stays opaque -->
+    <color name="bubble_user_background">#CC585B5E</color>   <!-- charcoal -->
+    <color name="bubble_bot_background">#CCF7F0DE</color>    <!-- eggshell -->
+    <color name="system_notice_background">#CCF7F0DE</color> <!-- eggshell -->
+    <color name="chat_input_background">#CCFBF7EF</color>    <!-- floral_white -->
     <!-- Chat Markdown: code blocks are opaque so code stays readable over the pet -->
     <color name="chat_code_block_background">@color/jet</color>
     <color name="chat_code_block_text">@color/floral_white</color>
