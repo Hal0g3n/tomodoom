@@ -76,6 +76,9 @@ public final class HtmlManiengineRenderer implements ManiengineAssetRenderer {
     private String latestJson;
     @Nullable
     private String deliveredJson;
+    /** The {@code PetSpecies} the WebView's page was loaded with. */
+    @Nullable
+    private String loadedSpecies;
     /** Last model box script sent to the loaded page. */
     @Nullable
     private String deliveredTouchBox;
@@ -89,12 +92,15 @@ public final class HtmlManiengineRenderer implements ManiengineAssetRenderer {
             return;
         }
         if (webView == null) {
-            createWebView(container);
+            createWebView(container, state.getPetSpecies());
             if (webView == null) {
                 return;
             }
         } else if (webView.getParent() != container) {
             moveWebView(webView, container); // shared renderer: keep the loaded page, no reload
+        }
+        if (!state.getPetSpecies().equals(loadedSpecies)) {
+            loadPage(webView, state.getPetSpecies()); // another pet: the page picks it at load
         }
         deliverIfReady();
     }
@@ -133,7 +139,7 @@ public final class HtmlManiengineRenderer implements ManiengineAssetRenderer {
 
     @SuppressLint("SetJavaScriptEnabled") // the page is a bundled asset; no JS interface is added
     @MainThread
-    private void createWebView(@NonNull ViewGroup container) {
+    private void createWebView(@NonNull ViewGroup container, @NonNull String species) {
         destroyWebView(container);
         container.removeAllViews();
         messageView = null;
@@ -165,13 +171,20 @@ public final class HtmlManiengineRenderer implements ManiengineAssetRenderer {
         container.addView(view, webViewParams(container));
 
         webView = view;
-        pageReady = false;
-        deliveredJson = null;
-        deliveredTouchBox = null;
         if (paused) {
             view.onPause();
         }
-        view.loadUrl(ManiengineAssets.ENTRY_URL);
+        loadPage(view, species);
+    }
+
+    /** (Re)loads the entry page for {@code species}; state is re-sent once it has loaded. */
+    @MainThread
+    private void loadPage(@NonNull WebView view, @NonNull String species) {
+        pageReady = false;
+        deliveredJson = null;
+        deliveredTouchBox = null;
+        loadedSpecies = species;
+        view.loadUrl(ManiengineAssets.entryUrl(species));
     }
 
     /** Moves the live WebView (and its loaded page) from its current viewport into {@code container}. */
@@ -210,6 +223,7 @@ public final class HtmlManiengineRenderer implements ManiengineAssetRenderer {
         pageReady = false;
         deliveredJson = null;
         deliveredTouchBox = null;
+        loadedSpecies = null;
         if (view == null) {
             return;
         }

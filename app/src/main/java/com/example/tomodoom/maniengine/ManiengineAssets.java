@@ -3,6 +3,8 @@ package com.example.tomodoom.maniengine;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.example.tomodoom.model.PetSpecies;
+
 import java.util.Locale;
 
 /**
@@ -28,6 +30,15 @@ public final class ManiengineAssets {
     public static final String ENTRY_URL = "https://" + HOST + PATH_PREFIX + ROOT_DIR + ENTRY_FILE;
 
     private ManiengineAssets() {
+    }
+
+    /**
+     * @param species a {@link PetSpecies} ID; an unknown one becomes {@link PetSpecies#DEFAULT}.
+     * @return the entry URL showing that pet ({@code index.html?pet=<id>}).
+     */
+    @NonNull
+    public static String entryUrl(@Nullable String species) {
+        return ENTRY_URL + "?pet=" + PetSpecies.orDefault(species);
     }
 
     /** @return true if a URL with this scheme and host belongs to the virtual origin. */

@@ -21,6 +21,14 @@ public class ManiengineAssetsTest {
     }
 
     @Test
+    public void entryUrlForSpecies_passesTheChosenPet() {
+        assertEquals(ManiengineAssets.ENTRY_URL + "?pet=cat", ManiengineAssets.entryUrl("cat"));
+        assertEquals(ManiengineAssets.ENTRY_URL + "?pet=rabbit", ManiengineAssets.entryUrl(null));
+        assertEquals(ManiengineAssets.ENTRY_URL + "?pet=rabbit",
+                ManiengineAssets.entryUrl("../evil"));
+    }
+
+    @Test
     public void nestedFilesAndDirectoryIndex() {
         assertEquals("maniengine/models/pet.glb", resolve("/assets/maniengine/models/pet.glb"));
         assertEquals("maniengine/index.html", resolve("/assets/maniengine/"));

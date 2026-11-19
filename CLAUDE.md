@@ -469,9 +469,10 @@ unknown id falls back to `DEFAULT_PET` = `rabbit`); `buildPetScene(THREE, scene,
 builds it, applies `OVERRIDES`, drops the hidden room meshes plus `sky`/`ground`, and builds primitive
 add-ons for the `AccessoryCatalog` IDs. Mesh names differ per export, so each pet has a **`PETS`
 profile** (head, eyes, body, rug pattern, head-part pattern): a new pet needs a model file **and** a
-profile. `assets/maniengine/index.html` (also hand-written) picks the pet from its `?pet=<id>` query
-parameter (the app loads it without one, so it shows the rabbit), frames the camera on it, animates
-by `mood` and toggles the add-ons. Choosing the pet in the app isn't built yet (§9). The item
+profile, plus a `model.PetSpecies` constant and an onboarding portrait (below). `assets/maniengine/index.html`
+(also hand-written) picks the pet from its `?pet=<id>` query parameter, frames the camera on it, animates
+by `mood` and toggles the add-ons. `HtmlManiengineRenderer` loads `ManiengineAssets.entryUrl(state.getPetSpecies())`
+and reloads the page if a later state has another species (the user picks it during onboarding). The item
 thumbnails are always drawn on the default pet. Other asset types (`.glb`, textures, `.wasm`) can
 still sit beside it with relative URLs.
 

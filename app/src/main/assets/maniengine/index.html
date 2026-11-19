@@ -2,7 +2,8 @@
 <!--
   Tomodoom pet page (CLAUDE.md §5.1). Each pet comes from a Maniengine export: models/<pet>.js is
   GENERATED from it by tools/maniengine/extract_model.py (don't edit it by hand). ?pet=<id> picks the
-  pet (a PETS id in pet-scene.js); without it the page shows DEFAULT_PET (the rabbit).
+  pet (a PETS id in pet-scene.js; the app passes the PetSpecies chosen at onboarding); without it
+  the page shows DEFAULT_PET (the rabbit).
   This page owns the camera, lighting loop and the app contract:
     - reads window.tomodoomPetState at startup and listens for "tomodoom:petstate";
     - mood drives the idle animation, equipped items toggle the add-ons below.
