@@ -25,13 +25,10 @@ import com.example.tomodoom.model.PetState;
  * {@code onDestroyView} (the renderer is paused; its view stays put until another page takes it).
  * {@link #render} from a page that isn't the owner is ignored. Main thread only.</p>
  *
- * <p><b>Page transitions.</b> While the pager scrolls between Customise and Pets, or Pets and Chat,
- * and the renderer {@linkplain ManiengineAssetRenderer#supportsFramedTransition supports it}, the
- * pet is moved into one of the activity's transition layers (the same size as the pager) and drawn
- * into a frame that slides and shrinks from one page's viewport to the other's, following the
- * scroll. Customise ↔ Pets uses the layer over the pager, so the pet can shrink into the opaque
- * preview card; Pets ↔ Chat uses the layer behind it (the pages are transparent there), so the
- * chat bubbles and Pets cards slide over the pet as they do when it sits in a viewport. When the
+ * <p><b>Page transition.</b> While the pager scrolls between Customise and Pets, and the renderer
+ * {@linkplain ManiengineAssetRenderer#supportsFramedTransition supports it}, the pet is moved
+ * into the activity's transition layer (over the pager, the same size) and drawn into a frame
+ * that slides and shrinks from one page's viewport to the other's, following the scroll. When the
  * pager goes idle the pet is handed to the settled page's viewport, where it looks the same.</p>
  */
 @MainThread
@@ -58,17 +55,10 @@ public final class PetStage {
 
     /** Each pet page's viewport while its view exists, by page index. */
     private final SparseArray<ViewGroup> viewports = new SparseArray<>();
-    /** Over the pager: Customise ↔ Pets. */
     @Nullable
-    private ViewGroup frontLayer;
-    /** Behind the pager: Pets ↔ Chat. */
-    @Nullable
-    private ViewGroup backLayer;
-    /** The layer holding the pet while {@link #transitioning}. */
-    @Nullable
-    private ViewGroup activeLayer;
+    private ViewGroup transitionLayer;
     private int scrollState = ViewPager2.SCROLL_STATE_IDLE;
-    /** True while the pet is in {@link #activeLayer}. */
+    /** True while the pet is in {@link #transitionLayer}. */
     private boolean transitioning;
     private final int[] layerLocation = new int[2];
     private final int[] viewportLocation = new int[2];
@@ -105,8 +95,8 @@ public final class PetStage {
         if (renderer == null) {
             return;
         }
-        if (transitioning && activeLayer != null) {
-            renderer.render(activeLayer, state); // the pet stays in the layer until idle
+        if (transitioning && transitionLayer != null) {
+            renderer.render(transitionLayer, state); // the pet stays in the layer until idle
         } else if (owner == container) {
             renderer.render(container, state);
             lastContainer = container;
@@ -131,9 +121,7 @@ public final class PetStage {
         lastContainer = null;
         lastState = null;
         transitioning = false;
-        frontLayer = null;
-        backLayer = null;
-        activeLayer = null;
+        transitionLayer = null;
         viewports.clear();
     }
 
@@ -141,13 +129,9 @@ public final class PetStage {
     // Page transition
     // ---------------------------------------------------------------------------------------
 
-    /**
-     * The layers that hold the pet during a transition (set by the host): {@code front} over the
-     * pager (Customise ↔ Pets), {@code back} behind it (Pets ↔ Chat). Both the pager's size.
-     */
-    public void setTransitionLayers(@Nullable ViewGroup front, @Nullable ViewGroup back) {
-        frontLayer = front;
-        backLayer = back;
+    /** The layer over the pager that holds the pet during a transition (set by the host). */
+    public void setTransitionLayer(@Nullable ViewGroup layer) {
+        transitionLayer = layer;
     }
 
     /** Page {@code page}'s pet viewport exists (call from {@code onViewCreated}). */
@@ -177,23 +161,19 @@ public final class PetStage {
 
     /** Forwarded from {@code ViewPager2.OnPageChangeCallback#onPageScrolled}. */
     public void onPagerScrolled(int position, float offset) {
-        if (!PetTransitionMath.showsOnlyPetPages(position, offset)) {
+        if (!PetTransitionMath.showsOnlyCustomiseAndPets(position, offset)) {
             if (transitioning) {
-                endTransition(MainPagerAdapter.PAGE_CHAT); // Stats is coming in: Chat keeps the pet
+                endTransition(MainPagerAdapter.PAGE_PETS); // Chat is coming in: Pets keeps the pet
             }
             return;
         }
-        ViewGroup layer = layerFor(PetTransitionMath.layerFor(position, offset));
-        if (transitioning && layer != activeLayer) {
-            // Crossing Pets from one pair to the other (e.g. a Customise → Chat tab tap): the pet
-            // lands on Pets, where both pairs meet, then starts again in the other layer.
-            endTransition(MainPagerAdapter.PAGE_PETS);
-        }
         ManiengineAssetRenderer r = renderer;
+        ViewGroup layer = transitionLayer;
         if (r == null || layer == null) {
             return;
         }
-        PetTransitionMath.Frame f = currentFrame(layer, position, offset);
+        PetTransitionMath.Frame f =
+                currentFrame(layer, PetTransitionMath.towardsCustomise(position, offset));
         if (f == null) {
             return; // a viewport isn't laid out yet; try again on the next scroll
         }
@@ -212,21 +192,8 @@ public final class PetStage {
         r.setFrame(layer, frame, f.radius);
         r.render(layer, lastState);
         lastContainer = layer;
-        r.resume(layer); // the pet may be paused (e.g. coming from Stats)
-        activeLayer = layer;
+        r.resume(layer); // the pet may be paused (e.g. coming from Chat)
         transitioning = true;
-    }
-
-    /** @return the layer for a {@code PetTransitionMath.LAYER_*} choice ({@code KEEP}: the current one). */
-    @Nullable
-    private ViewGroup layerFor(int choice) {
-        if (choice == PetTransitionMath.LAYER_FRONT) {
-            return frontLayer;
-        }
-        if (choice == PetTransitionMath.LAYER_BACK) {
-            return backLayer;
-        }
-        return transitioning ? activeLayer : null; // resting on Pets: nothing to start
     }
 
     /**
@@ -251,35 +218,28 @@ public final class PetStage {
 
     private void clearTransition() {
         transitioning = false;
-        if (renderer != null && activeLayer != null) {
-            renderer.setFrame(activeLayer, null, 0f);
+        if (renderer != null && transitionLayer != null) {
+            renderer.setFrame(transitionLayer, null, 0f);
         }
-        activeLayer = null;
     }
 
     /**
-     * @return the pet's rect in {@code layer}'s coordinates, {@code offset} of the way from page
-     * {@code position}'s viewport to page {@code position + 1}'s, or null if one isn't laid out.
+     * @return the pet's rect in {@code layer}'s coordinates, {@code towardsCustomise} of the way
+     * from the Pets viewport to the Customise one, or null if either isn't laid out.
      */
     @Nullable
-    private PetTransitionMath.Frame currentFrame(@NonNull ViewGroup layer, int position,
-                                                 float offset) {
+    private PetTransitionMath.Frame currentFrame(@NonNull ViewGroup layer, float towardsCustomise) {
         if (layer.getWidth() == 0) {
             return null;
         }
         layer.getLocationInWindow(layerLocation);
-        PetTransitionMath.Frame from = viewportFrame(viewports.get(position));
-        if (from == null) {
+        PetTransitionMath.Frame pets = viewportFrame(viewports.get(MainPagerAdapter.PAGE_PETS));
+        PetTransitionMath.Frame customise =
+                viewportFrame(viewports.get(MainPagerAdapter.PAGE_CUSTOMISE));
+        if (pets == null || customise == null) {
             return null;
         }
-        if (offset == 0f) {
-            return from.isEmpty() ? null : from;
-        }
-        PetTransitionMath.Frame to = viewportFrame(viewports.get(position + 1));
-        if (to == null) {
-            return null;
-        }
-        PetTransitionMath.Frame f = PetTransitionMath.between(from, to, offset);
+        PetTransitionMath.Frame f = PetTransitionMath.between(pets, customise, towardsCustomise);
         return f.isEmpty() ? null : f;
     }
 

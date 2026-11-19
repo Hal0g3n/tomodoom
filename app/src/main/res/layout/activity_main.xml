@@ -5,17 +5,6 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <!-- Holds the pet while PetStage animates it between the Pets and Chat viewports. Behind the
-         pager (those pages are transparent), so the chat and the Pets cards slide over it. -->
-    <com.example.tomodoom.ui.PassThroughFrameLayout
-        android:id="@+id/pet_transition_layer_back"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        app:layout_constraintBottom_toBottomOf="@id/main_pager"
-        app:layout_constraintEnd_toEndOf="@id/main_pager"
-        app:layout_constraintStart_toStartOf="@id/main_pager"
-        app:layout_constraintTop_toTopOf="@id/main_pager" />
-
     <!-- Swipeable top-level pages (MainPagerAdapter), in bottom-nav order. The id lets ViewPager2
          save and restore the current page. -->
     <androidx.viewpager2.widget.ViewPager2
@@ -28,8 +17,7 @@
         app:layout_constraintTop_toTopOf="parent" />
 
     <!-- Holds the pet while PetStage animates it between the Pets and Customise viewports. Over the
-         pager (the pet shrinks into the opaque preview card), the same size; it only draws, so
-         every touch reaches the pager below. -->
+         pager, the same size; it only draws, so every touch reaches the pager below. -->
     <com.example.tomodoom.ui.PassThroughFrameLayout
         android:id="@+id/pet_transition_layer"
         android:layout_width="0dp"
