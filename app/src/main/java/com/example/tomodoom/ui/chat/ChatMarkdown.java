@@ -39,8 +39,12 @@ final class ChatMarkdown {
     @NonNull
     private final LruCache<String, Spanned> cache = new LruCache<>(CACHE_SIZE);
 
-    ChatMarkdown(@NonNull Context context) {
-        float textSize = context.getResources().getDimension(R.dimen.chat_bubble_text_size);
+    /**
+     * @param scale the chat text size as a multiple of the default (Settings); formulas are
+     *              typeset at that size, fixed for this instance.
+     */
+    ChatMarkdown(@NonNull Context context, float scale) {
+        float textSize = context.getResources().getDimension(R.dimen.chat_bubble_text_size) * scale;
         int mathColor = ContextCompat.getColor(context, R.color.chat_math_text);
         int inlineCodeBackground = ContextCompat.getColor(context, R.color.chat_inline_code_background);
         int codeBlockBackground = ContextCompat.getColor(context, R.color.chat_code_block_background);

@@ -51,6 +51,11 @@ public class ChatFragment extends Fragment {
         binding.chatList.setLayoutManager(layoutManager);
         binding.chatList.setAdapter(adapter);
 
+        viewModel.getChatTextScale().observe(getViewLifecycleOwner(), scale -> {
+            if (scale != null) {
+                adapter.setTextScale(scale);
+            }
+        });
         viewModel.getMessages().observe(getViewLifecycleOwner(), this::showMessages);
         viewModel.getActiveQuiz().observe(getViewLifecycleOwner(), quiz ->
                 binding.messageInput.setHint(quiz != null

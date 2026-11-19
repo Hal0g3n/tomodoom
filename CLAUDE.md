@@ -1006,6 +1006,10 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
   because they are compile-time constants. Keep new constants `static final` literals.
 - **Fonts:** the theme's Playpen Sans overrides the font of any `textAppearance`. Use a view
   style for a different font (§6.3).
+- **Chat text size (Settings):** `ChatAdapter.setTextScale` sets user bubbles, bot prose and code
+  blocks to their dimen × the `SettingsRepository` scale in code, overriding the styles' sizes;
+  SYSTEM notices keep theirs. JLatexMath's size is fixed when its plugin is built, so a new scale
+  rebuilds `ChatMarkdown` (and its cache) and rebinds every row.
 - **Chat Markdown / LaTeX (Markwon 4.6.2):** bot replies only; user and SYSTEM text stays plain.
   `ChatAdapter` first splits off fenced code (`MarkdownSegments`) into its own monospace block
   (horizontal scroll, no wrapping, a **Copy** button; Android 13+ shows its own clipboard toast, so

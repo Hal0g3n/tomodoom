@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel;
 import com.example.tomodoom.model.ChatMessage;
 import com.example.tomodoom.model.QuizPrompt;
 import com.example.tomodoom.repository.ChatRepository;
+import com.example.tomodoom.repository.SettingsRepository;
 
 import java.util.List;
 
@@ -18,9 +19,13 @@ public class ChatViewModel extends ViewModel {
 
     @NonNull
     private final ChatRepository chatRepository;
+    @NonNull
+    private final SettingsRepository settingsRepository;
 
-    public ChatViewModel(@NonNull ChatRepository chatRepository) {
+    public ChatViewModel(@NonNull ChatRepository chatRepository,
+                         @NonNull SettingsRepository settingsRepository) {
         this.chatRepository = chatRepository;
+        this.settingsRepository = settingsRepository;
         chatRepository.start(); // idempotent; connects the chat session the first time
     }
 
@@ -33,6 +38,12 @@ public class ChatViewModel extends ViewModel {
     @NonNull
     public LiveData<QuizPrompt> getActiveQuiz() {
         return chatRepository.getActiveQuiz();
+    }
+
+    /** The chat text size chosen in Settings, as a multiple of the default. */
+    @NonNull
+    public LiveData<Float> getChatTextScale() {
+        return settingsRepository.getChatTextScale();
     }
 
     public void sendMessage(@NonNull String text) {
