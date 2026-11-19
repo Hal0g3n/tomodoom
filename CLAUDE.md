@@ -207,6 +207,8 @@ floating over it; both cards are transparent),
 `activity_main.xml` (`main_pager` ViewPager2 + `nav_view`), `activity_onboarding.xml` (title,
 `pet_name_layout`/`pet_name_input`, `start_button`), `res/menu/bottom_nav_menu.xml`.
 `res/values/dimens.xml` (`pet_viewport_stroke`).
+`res/font/` + `res/font-v26/` (`playpen_sans`, `unkempt` families and their static TTFs; §6.3), with
+the font licences in `assets/licenses/`.
 Assets: `assets/trufar/kafka_agent.json` (the Kafka TruFar agent export, icon stripped; §5.2),
 `assets/maniengine/index.html` (the pet page, §5.1), `pet-scene.js` (model setup + add-ons, shared with the
 thumbnail tool; `PETS` profiles per model), `models/rabbit.js` and `models/cat.js` (GENERATED from the scene-3
@@ -945,6 +947,19 @@ Rules:
 - Renderers (Maniengine) may use their own art colours inside the viewport, but the chrome around
   it follows this palette.
 - Launcher icon colours (`ic_launcher_*`) are still the template defaults and are outside the palette.
+
+**Typography.** All UI text is **Playpen Sans**; user and bot chat bubbles use **Unkempt**
+(`TextAppearance.Tomodoom.ChatBubble`, 17sp). SYSTEM chat notices stay in Playpen Sans.
+- Both are bundled static Regular/Bold TTFs (Playpen Sans: OFL, from TypeTogether's repo, since
+  Google Fonts ships only the variable font; Unkempt: Apache 2.0). Licences are in
+  `assets/licenses/`.
+- Each family XML exists twice: `res/font/` with `app:` attrs (AppCompat, API 24–25) and
+  `res/font-v26/` with `android:` attrs. Putting both sets in one file adds lint
+  `UnusedAttribute` warnings.
+- `Theme.Tomodoom` sets `fontFamily`/`android:fontFamily` and maps every Material
+  `textAppearance*` the app uses to a `TextAppearance.Tomodoom.*` style, because the Material
+  defaults hard-code `sans-serif`. A layout using a new `textAppearance*` attribute needs a new
+  override. Don't set `fontFamily` in layouts; use a text appearance.
 
 ## 7. Build & verification commands
 

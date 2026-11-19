@@ -1,6 +1,6 @@
 <resources>
     <!-- Base application theme. Light only: the app does not follow system dark mode. No action
-         bar: each page draws what it needs (a title on Customise). -->
+         bar: each page draws what it needs (e.g. the health bar on Pets). -->
     <style name="Theme.Tomodoom" parent="Theme.MaterialComponents.Light.NoActionBar">
         <!-- Primary brand color. -->
         <item name="colorPrimary">@color/charcoal</item>
@@ -22,10 +22,66 @@
         <item name="android:textColorHint">@color/slate_grey</item>
         <!-- Status bar color. -->
         <item name="android:statusBarColor">?attr/colorPrimaryVariant</item>
+        <!-- Typography (§6.3): Playpen Sans everywhere. The Material text appearances hard-code
+             sans-serif, so each one the app uses is overridden below. -->
+        <item name="fontFamily">@font/playpen_sans</item>
+        <item name="android:fontFamily">@font/playpen_sans</item>
+        <item name="textAppearanceHeadline5">@style/TextAppearance.Tomodoom.Headline5</item>
+        <item name="textAppearanceHeadline6">@style/TextAppearance.Tomodoom.Headline6</item>
+        <item name="textAppearanceSubtitle1">@style/TextAppearance.Tomodoom.Subtitle1</item>
+        <item name="textAppearanceSubtitle2">@style/TextAppearance.Tomodoom.Subtitle2</item>
+        <item name="textAppearanceBody1">@style/TextAppearance.Tomodoom.Body1</item>
+        <item name="textAppearanceBody2">@style/TextAppearance.Tomodoom.Body2</item>
+        <item name="textAppearanceButton">@style/TextAppearance.Tomodoom.Button</item>
+        <item name="textAppearanceCaption">@style/TextAppearance.Tomodoom.Caption</item>
+    </style>
+
+    <style name="TextAppearance.Tomodoom.Headline5" parent="TextAppearance.MaterialComponents.Headline5">
+        <item name="fontFamily">@font/playpen_sans</item>
+        <item name="android:fontFamily">@font/playpen_sans</item>
+    </style>
+    <style name="TextAppearance.Tomodoom.Headline6" parent="TextAppearance.MaterialComponents.Headline6">
+        <item name="fontFamily">@font/playpen_sans</item>
+        <item name="android:fontFamily">@font/playpen_sans</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+    <style name="TextAppearance.Tomodoom.Subtitle1" parent="TextAppearance.MaterialComponents.Subtitle1">
+        <item name="fontFamily">@font/playpen_sans</item>
+        <item name="android:fontFamily">@font/playpen_sans</item>
+    </style>
+    <style name="TextAppearance.Tomodoom.Subtitle2" parent="TextAppearance.MaterialComponents.Subtitle2">
+        <item name="fontFamily">@font/playpen_sans</item>
+        <item name="android:fontFamily">@font/playpen_sans</item>
+    </style>
+    <style name="TextAppearance.Tomodoom.Body1" parent="TextAppearance.MaterialComponents.Body1">
+        <item name="fontFamily">@font/playpen_sans</item>
+        <item name="android:fontFamily">@font/playpen_sans</item>
+    </style>
+    <style name="TextAppearance.Tomodoom.Body2" parent="TextAppearance.MaterialComponents.Body2">
+        <item name="fontFamily">@font/playpen_sans</item>
+        <item name="android:fontFamily">@font/playpen_sans</item>
+    </style>
+    <!-- Also used by MaterialButton and the Wardrobe slot tabs. -->
+    <style name="TextAppearance.Tomodoom.Button" parent="TextAppearance.MaterialComponents.Button">
+        <item name="fontFamily">@font/playpen_sans</item>
+        <item name="android:fontFamily">@font/playpen_sans</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+    <style name="TextAppearance.Tomodoom.Caption" parent="TextAppearance.MaterialComponents.Caption">
+        <item name="fontFamily">@font/playpen_sans</item>
+        <item name="android:fontFamily">@font/playpen_sans</item>
+    </style>
+
+    <!-- User and bot chat bubbles: Unkempt sets the conversation apart from the app chrome. -->
+    <style name="TextAppearance.Tomodoom.ChatBubble" parent="TextAppearance.MaterialComponents.Body1">
+        <item name="fontFamily">@font/unkempt</item>
+        <item name="android:fontFamily">@font/unkempt</item>
+        <item name="android:textSize">17sp</item>
+        <item name="android:letterSpacing">0.01</item>
     </style>
 
     <!-- Label of the open bottom bar tab (the other tabs show only their icon). -->
-    <style name="TextAppearance.Tomodoom.NavLabel" parent="TextAppearance.MaterialComponents.Caption">
+    <style name="TextAppearance.Tomodoom.NavLabel" parent="TextAppearance.Tomodoom.Caption">
         <item name="android:textSize">13sp</item>
         <item name="android:textStyle">bold</item>
     </style>

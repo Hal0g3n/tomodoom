@@ -19,6 +19,6 @@
         android:paddingBottom="8dp"
         android:textColor="?attr/colorOnPrimary"
         android:textIsSelectable="true"
-        android:textSize="15sp"
+        android:textAppearance="@style/TextAppearance.Tomodoom.ChatBubble"
         tools:text="quiz" />
 </FrameLayout>
