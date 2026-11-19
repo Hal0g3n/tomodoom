@@ -6,7 +6,10 @@
   the page shows DEFAULT_PET (the rabbit).
   This page owns the camera, lighting loop and the app contract:
     - reads window.tomodoomPetState at startup and listens for "tomodoom:petstate";
-    - mood drives the idle animation, equipped items toggle the add-ons below.
+    - mood drives the idle animation, equipped items toggle the add-ons below;
+    - reads window.tomodoomFrame and listens for "tomodoom:frame": while the host animates the pet
+      between pages it gives a rect (CSS px) to draw the pet into; the rest of the canvas stays
+      transparent. A frame only applies while the page's size equals its hostW x hostH.
   tomodoom-touch "centre": one-finger drags starting in the model box (window.tomodoomTouchBox, set by
   the host) turn the pet. Fast flicks and drags starting outside the box swipe between tabs. Two
   fingers pinch-zoom (the host keeps multi-touch gestures away from the tab pager).
@@ -55,25 +58,42 @@ function applyState(s) {
 addEventListener('tomodoom:petstate', e => applyState(e.detail));
 applyState(window.tomodoomPetState);
 
-// --- Camera: frame the pet (+ the near rug) for whatever aspect the viewport has ---
-const TALL_ASPECT = .8, TALL_LIFT = .08, MIN_ZOOM = .75, MAX_ZOOM = 3;
+// --- Camera: frame the pet (+ the near rug) for whatever aspect the viewport (or frame) has ---
+const TALL_ASPECT = .8, TALL_BLEND = .15, TALL_LIFT = .08, MIN_ZOOM = .75, MAX_ZOOM = 3;
+// Host frame for page transitions: { x, y, w, h, r, hostW, hostH } in CSS px, or null.
+let hostFrame = window.tomodoomFrame || null;
+const activeFrame = (w, h) => {
+  const f = hostFrame;
+  return f && Math.abs(f.hostW - w) <= 1 && Math.abs(f.hostH - h) <= 1 && f.w > 0 && f.h > 0 ? f : null;
+};
+const drawSize = new THREE.Vector2();
 function fit() {
   const w = document.documentElement.clientWidth, h = document.documentElement.clientHeight;
   if (!w || !h) return;  // detached while moving between pages: keep the last good framing
+  const f = activeFrame(w, h), fx = f ? f.x : 0, fy = f ? f.y : 0, fw = f ? f.w : w, fh = f ? f.h : h;
   const size = petBox.getSize(new THREE.Vector3()), centre = petBox.getCenter(new THREE.Vector3());
-  camera.aspect = w / h;
+  camera.aspect = fw / fh;
   const vFov = THREE.MathUtils.degToRad(camera.fov) / 2;
   const fitH = (size.y * .75) / Math.tan(vFov), fitW = (size.x * 1.1) / (Math.tan(vFov) * camera.aspect);
   const dist = Math.max(fitH, fitW, 2.5);
   camera.position.set(0, centre.y + dist * .18, centre.z + dist);
   camera.lookAt(0, centre.y - size.y * .08, centre.z);
   // Tall (full-page) viewports: sit the pet higher, clear of the health bar floating below it.
-  if (camera.aspect < TALL_ASPECT) camera.setViewOffset(w, h, 0, h * TALL_LIFT, w, h);
+  // Blended over a band of aspects, so a frame shrinking from tall to wide never jumps.
+  const lift = TALL_LIFT * (1 - THREE.MathUtils.smoothstep(camera.aspect, TALL_ASPECT - TALL_BLEND, TALL_ASPECT));
+  if (lift > 0) camera.setViewOffset(fw, fh, 0, fh * lift, fw, fh);
   else camera.clearViewOffset();
   camera.updateProjectionMatrix();
-  renderer.setSize(w, h);
+  // Resizing reallocates the drawing buffer, so only do it when the size really changed.
+  if (renderer.getSize(drawSize).x !== w || drawSize.y !== h) renderer.setSize(w, h);
+  renderer.setViewport(fx, h - fy - fh, fw, fh);  // WebGL counts y from the bottom
+  renderer.setScissor(fx, h - fy - fh, fw, fh);
+  renderer.setScissorTest(!!f);
+  renderer.domElement.style.clipPath = f
+    ? `inset(${fy}px ${w - fx - fw}px ${h - fy - fh}px ${fx}px round ${f.r || 0}px)` : '';
   renderer.render(scene, camera);  // same frame as the resize, so no frame shows the old aspect
 }
+addEventListener('tomodoom:frame', e => { hostFrame = e.detail || null; fit(); });
 new ResizeObserver(fit).observe(document.documentElement);
 fit();
 

@@ -549,6 +549,14 @@ How the page is hosted (`HtmlManiengineRenderer`):
   speed over the last 100 ms, so slow drags are precise, fast ones turn further and the release speed
   sets how far it coasts. The rug stays still. A second finger always keeps the gesture in the page (`PetWebView` blocks the pager on
   `ACTION_POINTER_DOWN`), which is how `index.html` pinch-zooms (`camera.zoom`, 0.75x to 3x).
+- **Transition frame:** while the host animates the pet between pages, it sets
+  `window.tomodoomFrame = { x, y, w, h, r, hostW, hostH }` (CSS px) and dispatches **`tomodoom:frame`**
+  (`ManiengineProtocol.frameScript`; `CLEAR_FRAME_SCRIPT` sends `null`). The page draws the pet only
+  inside that rect, with corner radius `r` (`setViewport`/`setScissor` plus a CSS `clip-path`), framed
+  exactly as `fit()` frames a viewport of that size; the rest of the canvas stays transparent. A frame
+  applies **only while the page's size is `hostW` x `hostH`** (±1px), so a frame sent just before or after
+  a resize is harmless. `fit()` blends `TALL_LIFT` over aspects `TALL_ASPECT - TALL_BLEND`…`TALL_ASPECT`
+  so a frame narrowing from tall to wide never jumps, and resizes the drawing buffer only when the size changes.
 - The page talks only one way (app → page). If it ever needs to call back (e.g. "item tapped"),
   extend `ManiengineProtocol` and this section together.
 - **Layout note:** there is **one** WebView, moved (not reloaded) between two viewports: the large
