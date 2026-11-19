@@ -80,6 +80,16 @@
         <item name="android:letterSpacing">0.01</item>
     </style>
 
+    <!-- Applied with style= on the bubble TextViews: the theme-level fontFamily outranks a
+         textAppearance, so the font has to come from the view style. -->
+    <style name="Widget.Tomodoom.ChatBubble" parent="">
+        <item name="android:textAppearance">@style/TextAppearance.Tomodoom.ChatBubble</item>
+        <item name="fontFamily">@font/unkempt</item>
+        <item name="android:fontFamily">@font/unkempt</item>
+        <!-- Unkempt Regular is thin at bubble size; the bundled Bold reads better. -->
+        <item name="android:textStyle">bold</item>
+    </style>
+
     <!-- Label of the open bottom bar tab (the other tabs show only their icon). -->
     <style name="TextAppearance.Tomodoom.NavLabel" parent="TextAppearance.Tomodoom.Caption">
         <item name="android:textSize">13sp</item>

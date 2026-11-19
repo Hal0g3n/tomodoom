@@ -54,6 +54,18 @@
     <string name="onboarding_name_hint">Pet name</string>
     <string name="onboarding_start">Start</string>
     <string name="onboarding_name_error">Enter a name (maximum length: %1$d)</string>
+    <string name="onboarding_permissions_title">Help %1$s look after you</string>
+    <string name="onboarding_permissions_subtitle">Two quick permissions so your pet can notice doomscrolling.</string>
+    <string name="onboarding_permission_usage_title">Track app usage</string>
+    <string name="onboarding_permission_usage_text">Usage Access lets Tomodoom notice portrait scrolling in social and video apps. Your pet loses 1 HP for every minute of scrolling.</string>
+    <string name="onboarding_permission_notifications_title">Notifications</string>
+    <string name="onboarding_permission_notifications_text">Get a nudge after every 10 minutes of scrolling.</string>
+    <string name="onboarding_permission_allowed">✓ Allowed</string>
+    <string name="onboarding_permission_skipped">Skipped. You can turn it on later.</string>
+    <string name="onboarding_permission_allow_usage">Allow usage tracking</string>
+    <string name="onboarding_permission_allow_notifications">Allow notifications</string>
+    <string name="onboarding_permission_skip">Not now</string>
+    <string name="onboarding_continue">Continue</string>
 
     <!-- Chat page -->
     <string name="chat_input_hint">Message your pet…</string>

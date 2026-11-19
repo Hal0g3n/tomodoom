@@ -32,7 +32,8 @@ import com.example.tomodoom.ui.debug.DebugPanelFragment;
  * {@code NoActionBar}): each page supplies its own header.</p>
  *
  * <p>The activity owns the one {@link PetStage}: a single pet renderer that moves between the
- * Customise and Pets viewports, so only one pet is rendered at a time.</p>
+ * Customise and Pets viewports, so only one pet is rendered at a time. Pager scrolls are forwarded
+ * to it, so the pet shrinks from one viewport into the other as you swipe.</p>
  */
 public class MainActivity extends AppCompatActivity implements PetStage.Host {
 
@@ -60,10 +61,25 @@ public class MainActivity extends AppCompatActivity implements PetStage.Host {
 
         ViewPager2 pager = binding.mainPager;
         pager.setAdapter(new MainPagerAdapter(this));
+        // Keep both neighbours laid out, so the pet's page transition knows where it is heading
+        // from the first frame of a swipe.
+        pager.setOffscreenPageLimit(1);
+        petStage.setTransitionLayer(binding.petTransitionLayer);
         pager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
             @Override
             public void onPageSelected(int position) {
                 syncWithPage(position, true);
+            }
+
+            @Override
+            public void onPageScrolled(int position, float positionOffset,
+                                       int positionOffsetPixels) {
+                petStage.onPagerScrolled(position, positionOffset);
+            }
+
+            @Override
+            public void onPageScrollStateChanged(int state) {
+                petStage.onPagerScrollStateChanged(state, pager.getCurrentItem());
             }
         });
         binding.navView.setOnItemSelectedListener(item -> {

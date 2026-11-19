@@ -209,18 +209,26 @@ com.example.tomodoom
 │   ├── PetsViewModel             exposes PetState + the inactivity-decay notice
 │   ├── DebugViewModel            debug panel actions, each through the feature's real path (§8)
 │   ├── CustomiseViewModel        exposes PetState, selected slot, catalog items, equip action
-│   ├── OnboardingViewModel       onboarding flag, suggested name, species list + selectedSpecies, submitName()
+│   ├── OnboardingViewModel       onboarding flag, suggested name, species list + selectedSpecies, submitName(),
+│   │                             permission-step state (usage skipped, notifications handled)
+│   ├── OnboardingPermissionFlow  pure Java: next permission step (Usage Access → notifications → done)
 │   ├── ChatViewModel             exposes transcript + active quiz, sends messages
 │   ├── StatsViewModel            StatsReport per snapshot / refresh(); selected health-chart range
 │   └── WatchedAppsViewModel      installed apps (loaded once, off the main thread) + watched set, toggles
 │
 └── ui/
-    ├── onboarding/OnboardingActivity   LAUNCHER: picks + names the pet on first launch only,
-    │                             otherwise forwards straight to MainActivity and finishes
+    ├── onboarding/OnboardingActivity   LAUNCHER: picks + names the pet on first launch only, then asks
+    │                             for Usage Access, then notifications; otherwise forwards straight to
+    │                             MainActivity and finishes
+    ├── NotificationPrompt        Android 13+ notification permission; one "asked this launch" flag
+    │                             shared by onboarding and Pets
     ├── onboarding/PetChoiceAdapter, PetPortraits   two-column pet portrait cards; species ID → portrait/name
     ├── MainPagerAdapter          FragmentStateAdapter: page index ↔ bottom-nav item id
     │                             (Customise=0, Pets=1 = default, Chat=2, Stats=3)
-    ├── PetStage                  MainActivity's ONE pet renderer, lent to the resumed page's viewport
+    ├── PetStage                  MainActivity's ONE pet renderer, lent to the resumed page's viewport;
+    │                             drives the Pets ↔ Customise shrink transition from pager scrolls
+    ├── PetTransitionMath         pure Java: which scrolls are Pets ↔ Customise, frame interpolation
+    ├── PassThroughFrameLayout    touch-transparent layer (`pet_transition_layer`) holding the pet mid-transition
     ├── AppReset                  the hidden full reset (confirm dialog + clearApplicationUserData)
     ├── debug/DebugPanelFragment  hidden debug bottom sheet (long-press the Pets tab)
     ├── customise/CustomiseFragment   pet preview viewport (via PetStage) + full-width slot tabs + item grid
@@ -248,11 +256,13 @@ pet portraits, §5.1), `item_pet_choice.xml` + `res/drawable/bg_pet_choice.xml` 
 `fragment_stats.xml` + `item_stats_row.xml` + `values/styles_stats.xml` (Stats page cards),
 launcher icon: `mipmap-anydpi-v26/ic_launcher{,_round}.xml` (adaptive: `@color/launcher_background`
 + GENERATED `drawable/ic_launcher_foreground.xml` / `ic_launcher_monochrome.xml`) and GENERATED legacy
-`mipmap-*/ic_launcher{,_round}.webp` for API 24–25,
-`activity_main.xml` (`main_pager` ViewPager2 + `nav_view`), `activity_onboarding.xml` (title,
-`pet_choices` grid, `pet_name_layout`/`pet_name_input`, `start_button`), `res/menu/bottom_nav_menu.xml`,
+`mipmap-*/ic_launcher{,_round}.webp` for API 24–25, GENERATED `drawable/ic_notification.xml` (notification
+small icon, used by both doom-scroll notifications),
+`activity_main.xml` (`main_pager` ViewPager2, `pet_transition_layer` over it, `nav_view`), `activity_onboarding.xml` (`name_step`: title,
+`pet_choices` grid, `pet_name_layout`/`pet_name_input`, `start_button`; then `permissions_step`:
+`usage_row`/`notifications_row` (the current one drawn selected), `permission_button`, `permission_skip_button`), `res/menu/bottom_nav_menu.xml`,
 `fragment_debug_panel.xml` + `values/strings_debug.xml` + `values/styles_debug.xml` (debug panel).
-`res/values/dimens.xml` (`pet_viewport_stroke`).
+`res/values/dimens.xml` (`pet_viewport_stroke`, `pet_viewport_corner_radius`).
 `res/font/` + `res/font-v26/` (`playpen_sans`, `unkempt` families and their static TTFs; §6.3), with
 the font licences in `assets/licenses/`.
 Assets: `assets/agents/kafka_agent.json` and `charon_agent.json` (the two persona exports from the TruFar editor, icons stripped; §5.2),
@@ -261,7 +271,9 @@ thumbnail tool; `PETS` profiles per model), `models/rabbit.js` and `models/cat.j
 and scene-5 exports) and `vendor/three/` (three.js 0.187.0).
 Tools: `tools/maniengine/extract_model.py` (+ `source/scene-3.html`, `source/scene-5.html`), `make_thumbnails.py` (+ `thumbnails.html`);
 `tools/launcher_icon/make_launcher_icon.py` (+ `logo.svg`, the app logo) regenerates every launcher-icon file
-listed above (needs `rsvg-convert` and Pillow; WSL has both). Edit the logo, then re-run it.
+listed above, plus the GENERATED full-bleed PNGs `app/src/main/ic_launcher-playstore.png` (512px, Play
+Store; outside `res/`, so not packaged) and `tools/launcher_icon/export/ic_launcher-{1024,2048}.png`
+(`EXPORTS`, for stores, splash art and large-icon launchers) (needs `rsvg-convert` and Pillow; WSL has both). Edit the logo, then re-run it.
 
 ### Dependency direction (enforced by convention)
 
@@ -429,6 +441,8 @@ The full Javadoc on each interface is normative. What follows is a summary.
 @MainThread void release(@NonNull ViewGroup container);
 @MainThread default void pause(@NonNull ViewGroup container) {}    // page onPause() via PetStage
 @MainThread default void resume(@NonNull ViewGroup container) {}   // page onResume() via PetStage
+@MainThread default boolean supportsFramedTransition() { return false; }
+@MainThread default void setFrame(@NonNull ViewGroup container, @Nullable RectF frame, float cornerRadiusPx) {}
 ```
 - **One renderer per `MainActivity`**, so only one pet is rendered at a time. `ui.PetStage` owns it
   and lends it to whichever page is resumed (Customise or Pets): the page calls
@@ -446,6 +460,11 @@ The full Javadoc on each interface is normative. What follows is a summary.
   afterwards (the new activity gets a new instance).
 - `pause`/`resume` bracket the time the current container's page is visible (pages stay alive,
   `STARTED`, while hidden). Stop per-frame work while paused. Both are optional default no-ops.
+- `setFrame` (only if `supportsFramedTransition()`): draw the pet only inside `frame` (container px,
+  rounded corners), framed as in a viewport of that size, the rest transparent; `null` = the whole
+  container. `container` may be the one the next `render` will move the pet to (a frame can be sent
+  first). Called every animation frame of a page transition, so keep it cheap.
+  `HtmlManiengineRenderer` forwards it as `ManiengineProtocol.frameScript` (deduplicated).
 - The asset format is **HTML**: Maniengine exports a 3D scene as a web page, which
   `HtmlManiengineRenderer` shows (§5.1). Nothing outside the renderer may depend on that.
 
@@ -614,14 +633,32 @@ How the page is hosted (`HtmlManiengineRenderer`):
   speed over the last 100 ms, so slow drags are precise, fast ones turn further and the release speed
   sets how far it coasts. The rug stays still. A second finger always keeps the gesture in the page (`PetWebView` blocks the pager on
   `ACTION_POINTER_DOWN`), which is how `index.html` pinch-zooms (`camera.zoom`, 0.75x to 3x).
+- **Transition frame:** while the host animates the pet between pages, it sets
+  `window.tomodoomFrame = { x, y, w, h, r, hostW, hostH }` (CSS px) and dispatches **`tomodoom:frame`**
+  (`ManiengineProtocol.frameScript`; `CLEAR_FRAME_SCRIPT` sends `null`). The page draws the pet only
+  inside that rect, with corner radius `r` (`setViewport`/`setScissor` plus a CSS `clip-path`), framed
+  exactly as `fit()` frames a viewport of that size; the rest of the canvas stays transparent. A frame
+  applies **only while the page's size is `hostW` x `hostH`** (±1px), so a frame sent just before or after
+  a resize is harmless. `fit()` blends `TALL_LIFT` over aspects `TALL_ASPECT - TALL_BLEND`…`TALL_ASPECT`
+  so a frame narrowing from tall to wide never jumps, and resizes the drawing buffer only when the size changes.
 - The page talks only one way (app → page). If it ever needs to call back (e.g. "item tapped"),
   extend `ManiengineProtocol` and this section together.
 - **Layout note:** there is **one** WebView, moved (not reloaded) between two viewports: the large
   one on Pets and a preview at 40% of the page height on Customise, above the slot tabs and item
   circles. On Pets the cards float over the pet, so `fit()` sits the pet higher in tall viewports,
   clear of the health bar below it. The page is resized on each move, so it must refit to any size without distorting the
-  model (`index.html` does, with a `ResizeObserver` calling `fit()`). The page that isn't shown has an empty viewport, and
-  while you drag between pages the incoming viewport stays empty until the swipe settles.
+  model (`index.html` does, with a `ResizeObserver` calling `fit()`). The page that isn't shown has an empty viewport.
+- **Pets ↔ Customise transition** (`PetStage`, renderers with `supportsFramedTransition()`): when the
+  pager starts scrolling between pages 0 and 1, the pet moves into `pet_transition_layer` (over the
+  pager, the same size) and every `onPageScrolled` sends `setFrame` with the rect between the two
+  viewports' pet areas (Pets: whole viewport, radius 0; Customise: inside the border, radius
+  `pet_viewport_corner_radius - pet_viewport_stroke`), interpolated by the offset. So the pet shrinks
+  into the preview card (or grows out of it) with the finger, and the health bar slides away with the
+  Pets page. The frame is sent before the move, so growing out of Customise never flashes a full-size pet.
+  The settled page's `attach` (or, for a cancelled swipe, `SCROLL_STATE_IDLE`) clears the frame and
+  moves the pet back into a viewport; the endpoint frames match that viewport's own framing, so nothing
+  jumps. A scroll that brings Chat in ends the transition and leaves the pet in the Pets viewport.
+  `MainActivity` sets `offscreenPageLimit(1)` so both viewports are laid out from the first frame.
 - **Acceptance:** equipping/unequipping on the Customise tab updates the viewport immediately. Rotating
   or switching tabs doesn't leak views (`release` cleans up). Nothing happens off the main thread
   in `render`. The export loads offline from `assets/maniengine/` and reacts to `tomodoom:petstate`.
@@ -757,9 +794,11 @@ How `GeminiChatService` behaves:
 
 #### Current implementation
 
-`doomscroll.UsageStatsDoomScrollMonitor` uses the special Android Usage Access setting; the Pets
-tab provides a button to open that setting and starts the monitor when the user returns with access
-granted.
+`doomscroll.UsageStatsDoomScrollMonitor` uses the special Android Usage Access setting. Onboarding's
+second step asks for it first and then for notifications (Android 13+), each skippable with **Not now**.
+As a fallback the Pets tab has a card with a button to open that setting, starts the monitor when the
+user returns with access granted, and asks for notifications once per launch unless onboarding already
+asked in that launch (`ui.NotificationPrompt`).
 
 **Watched apps are the user's choice.** Only time in a watched app can cost HP; any other app (a
 work or study app) never counts.
@@ -852,7 +891,8 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
     `setCurrentItem(PAGE_PETS, false)` only when `savedInstanceState == null`, so a restore keeps
     the saved page. Don't assume page 0 is the start page.
   - `FragmentStateAdapter` creates pages lazily (a page is created the first time you swipe or tap
-    to it, or prefetched next to the current one) and only the current page is `RESUMED`; the
+    to it, or prefetched next to the current one; `offscreenPageLimit(1)` keeps both neighbours of the
+    current page created) and only the current page is `RESUMED`; the
     others are capped at `STARTED`. Use
     `onResume`/`onPause` for "page became visible/hidden".
   - ViewPager2 restores its page **without** calling `onPageSelected`, so `MainActivity` re-syncs
@@ -891,7 +931,9 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
 - **org.json in JVM tests:** android.jar only has throwing stubs, so `org.json:json` is a
   `testImplementation` dependency. Tests can then call `AgentProfileLoader.parse(JSONObject)` on the
   real asset (unit tests run with `app/` as the working directory).
-- **Shared pet WebView:** `PetStage` reparents one WebView between page viewports. It's created
+- **Shared pet WebView:** `PetStage` reparents one WebView between page viewports, and during a
+  Pets ↔ Customise scroll into the activity's `pet_transition_layer` (which ignores touches, so
+  nothing on the pet responds until the pager is idle). Its touch box isn't meaningful there. It's created
   with the viewport's (activity) context, so `PetStage` lives in `MainActivity` and is released
   in its `onDestroy`. Never hold it in a ViewModel or `AppContainer`: that would leak the activity.
 - **WebView (Maniengine):** an `OnTouchListener` on a WebView triggers lint
@@ -902,6 +944,9 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
   updating, so catch it.
 - **Launcher is `OnboardingActivity`**, not `MainActivity` (which is `exported="false"`). It
   checks `isOnboardingComplete()` before inflating anything and forwards to `MainActivity` if set.
+  **Start** completes onboarding *before* the permission step, so that step exists only while the
+  activity lives: a restore with the saved `permissions_step` flag (rotation) shows it again instead of
+  forwarding, and a relaunch after process death skips it (Pets' card is the fallback).
   Anything that should run on every launch belongs in `TomodoomApplication` or `MainActivity`,
   not in the onboarding screen.
 - **On-device checks are possible on this Windows machine:** the SDK has an AVD
@@ -911,6 +956,10 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
   drive it with `adb shell input tap/text/swipe` plus `adb exec-out screencap -p` (1080×2400; the
   bottom-nav icons sit at y≈2244). After `adb install -r`, the first tap on Send can land before the
   chat connects; wait for the greeting.
+- **Launcher shows the old (robot) icon after an icon change:** the APK is fine, but the phone
+  still has an older install or the launcher cached the icon (`versionCode` stays 1, and Android
+  Studio's *Apply Changes* doesn't reinstall the package). Uninstall the app and reinstall it; if it
+  persists, restart the launcher or phone. Check the APK with `unzip -l` for `mipmap-anydpi-v26/`.
 - **Read-only emulators lose app data:** an emulator started with `-read-only` discards its data
   on shutdown, so the app is a fresh install (with onboarding) after each emulator restart.
 - **Maniengine overrides are applied by the page, not the editor.** `pet-scene.js` matches each
@@ -929,6 +978,8 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
   background), but don't switch it to `elapsedRealtime`, which resets on reboot.
 - **Switch on strings** works with the `AccessorySlot` / `McpPetActionHandler.TOOL_*` constants
   because they are compile-time constants. Keep new constants `static final` literals.
+- **Fonts:** the theme's Playpen Sans overrides the font of any `textAppearance`. Use a view
+  style for a different font (§6.3).
 - **Commit messages from Windows PowerShell 5.1:** `git commit -m @'…'@` with embedded double
   quotes gets split into pathspecs ("did not match any file(s)"). Write the message to a file in
   the scratchpad and use `git commit -F <file>`.
@@ -966,9 +1017,16 @@ Rules:
   colour). On API 26+ the launcher mask stands in for the logo's eggshell emblem square: the adaptive
   background is `launcher_background` (→ `eggshell`) and the foreground is the phone, scaled so the
   emblem fills the 72dp visible area. The monochrome (themed-icon) layer keeps only the `jet` line work.
+  `ic_notification.xml` is that same line work cropped to the phone at 24dp and painted
+  `@android:color/white`: status-bar icons are alpha-only and tinted by the system, so it's the one
+  drawable that uses a framework colour instead of a palette token.
+  The large PNG exports flatten the adaptive icon (eggshell square, phone at the 108dp framing) with no
+  alpha; Play rounds the corners itself. The in-app icons on API 26+ are vectors, so they're sharp at any
+  launcher size; only the API 24–25 webps are fixed-size (up to xxxhdpi, 192px).
 
 **Typography.** All UI text is **Playpen Sans**; user and bot chat bubbles use **Unkempt**
-(`TextAppearance.Tomodoom.ChatBubble`, 17sp). SYSTEM chat notices stay in Playpen Sans.
+(`Widget.Tomodoom.ChatBubble`, applied with `style=`: Unkempt Bold, 17sp from its text appearance). SYSTEM chat
+notices stay in Playpen Sans.
 - Both are bundled static Regular/Bold TTFs (Playpen Sans: OFL, from TypeTogether's repo, since
   Google Fonts ships only the variable font; Unkempt: Apache 2.0). Licences are in
   `assets/licenses/`.
@@ -978,7 +1036,11 @@ Rules:
 - `Theme.Tomodoom` sets `fontFamily`/`android:fontFamily` and maps every Material
   `textAppearance*` the app uses to a `TextAppearance.Tomodoom.*` style, because the Material
   defaults hard-code `sans-serif`. A layout using a new `textAppearance*` attribute needs a new
-  override. Don't set `fontFamily` in layouts; use a text appearance.
+  override. Don't set `fontFamily` in layouts.
+- **A text appearance can't change the font.** The theme-level `fontFamily` counts as a TextView
+  attribute, which outranks `android:textAppearance`. A view that needs another font gets a
+  `Widget.Tomodoom.*` style (`style=`, which outranks the theme) setting `fontFamily` and
+  `android:fontFamily`, as the chat bubbles do.
 
 ## 7. Build & verification commands
 
@@ -1078,8 +1140,13 @@ Debug helpers:
    pet", portrait cards for every pet (Rabbit, Cat) with Rabbit ringed, and the name field prefilled
    with `Tomo`. Tapping Cat moves the ring (rotation keeps it); after **Start** the Pets and Customise
    viewports show the cat, and it stays the cat after a relaunch. Clearing it disables **Start**; the counter caps
-   at 20. Type `Mochi` and tap **Start** (or the keyboard's Done): the Pets tab opens and its
-   health bar shows `Mochi`. Rotation keeps the typed text. Relaunching skips onboarding. (The steps
+   at 20. Type `Mochi` and tap **Start** (or the keyboard's Done): a "Help Mochi look after you" screen
+   lists **Track app usage** (ringed) and **Notifications** (Android 13+ only). **Allow usage tracking**
+   opens the Usage Access settings; grant it and go back: the row shows "✓ Allowed", the ring moves to
+   Notifications and the button reads **Allow notifications**, which shows the system prompt. Then
+   **Continue**: the Pets tab opens with no Usage Access card and no second notification prompt, and its
+   health bar shows `Mochi`. **Not now** skips a step ("Skipped…"); after skipping usage the Pets card is
+   still there. Rotating on the permission screen keeps it. Rotation keeps the typed text. Relaunching skips onboarding. (The steps
    below assume you kept `Tomo` and the Rabbit.)
 1. The home-screen icon is the phone with a pet peeking out of its pocket, on eggshell (with any
    mask shape; on Android 13+ with themed icons on, a tinted line drawing). Launch the app. The **Pets** tab has **no action bar** and no debug buttons. The health bar sits below
@@ -1093,6 +1160,11 @@ Debug helpers:
    pet has the hat too. The pet moves between the pages without reloading (no blank flash or
    restart of the hop animation), and only one pet exists: in a debug build `chrome://inspect`
    lists a single page target. Also check:
+   - **Transition:** swipe slowly from Pets to Customise. The pet stays on screen and shrinks, with
+     the finger, into the preview card, its corners rounding as it goes, while the health bar slides
+     away with Pets. It lands with no jump. Reverse the swipe halfway: it grows back. Tapping the
+     Customise or Pets tab, and Chat → Customise, animate the same way. Pets → Chat is unchanged (the
+     pet slides away with Pets). After any transition, turning and pinching still work on both pages.
    - the selected slot tab and the current page survive rotation;
    - Back on Customise or Chat returns to Pets; Back on Pets leaves the app;
    - **Swiping:** from Pets, swipe left to Chat and right to Customise, either from the 16dp page
@@ -1139,7 +1211,7 @@ Debug helpers:
 
 **Doom-scroll detection (real device, watched app installed):**
 
-14. Grant Usage Access and allow notifications. A low-priority "Tomodoom is watching over your pet" notification appears.
+14. Grant Usage Access and allow notifications. A low-priority "Tomodoom is watching over your pet" notification appears, with the white phone-and-pet logo (not a paw) in the status bar.
 15. Scroll Instagram or YouTube Shorts in portrait. HP drops by 1 each minute.
 16. Keep going to 10 and 20 minutes. A "Time to look up" notification appears each time.
 17. Play a fullscreen landscape YouTube video. HP stops dropping, then resumes when you return to portrait.
@@ -1186,7 +1258,7 @@ Update this table in the same commit when your task changes a subsystem's status
 | MCP tool bridge | ✅ Production-capable default | `DefaultMcpPetActionHandler` |
 | Pets UI (pet viewport, health bar below the pet) | ✅ Skeleton done | `PetsFragment` / `PetsViewModel` |
 | Customise UI (pet preview, slot tabs, item circle grid) | ✅ Skeleton done | `CustomiseFragment` / `CustomiseViewModel` |
-| Onboarding (choose and name the pet) | ✅ Done | `OnboardingActivity` / `OnboardingViewModel` |
+| Onboarding (choose and name the pet, then Usage Access and notifications) | ✅ Done (permission step not yet tested on a device) | `OnboardingActivity` / `OnboardingViewModel` |
 | Chat UI | ✅ Skeleton done | `ChatFragment` / `ChatViewModel` / `ChatRepository` |
 | Pet rendering | ✅ scene-3 rabbit (default) and scene-5 cat (three.js, offline) via the HTML/WebView pipeline; add-ons are primitive placeholders | `HtmlManiengineRenderer` + `assets/maniengine/` |
 | Item catalog | ⏳ Placeholder (6 hard-coded items: hats and accessories) | `AccessoryCatalog` → Maniengine Agent |
@@ -1204,7 +1276,11 @@ Known gaps and TODOs (not assigned to anyone yet):
 - To change HP for manual testing, use the debug panel (long-press the Pets tab). To start over,
   use the hidden reset (long-press the Wardrobe tab, or the panel). Whether it keeps Usage Access and
   the notification permission hasn't been checked on a device.
-- No instrumented/UI tests yet. JVM tests only (`model`, `doomscroll`, `chat`, `maniengine`, `viewmodel`, `repository`, `stats`).
+- The Pets ↔ Customise shrink transition is verified only on the page side (headless Edge) and by
+  unit tests; it hasn't been watched on a device yet. Watch for a blank frame when the WebView grows
+  from the Customise size into the full-size layer, and for the frame trailing the finger
+  (`evaluateJavascript` is asynchronous).
+- No instrumented/UI tests yet. JVM tests only (`model`, `doomscroll`, `chat`, `maniengine`, `viewmodel`, `repository`, `stats`, `ui`).
 - Stats: token counts are those the provider reports (failed attempts aren't counted); there's no
   cost estimate. The clean streak only knows time since install, and a doom-scroll session is
   measured as wall-clock span (landscape pauses inside it count).

@@ -1,9 +1,11 @@
 package com.example.tomodoom.contracts;
 
+import android.graphics.RectF;
 import android.view.ViewGroup;
 
 import androidx.annotation.MainThread;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.example.tomodoom.model.PetState;
 
@@ -91,5 +93,33 @@ public interface ManiengineAssetRenderer {
      */
     @MainThread
     default void resume(@NonNull ViewGroup container) {
+    }
+
+    /**
+     * @return true if this renderer implements {@link #setFrame}, so {@code ui.PetStage} may
+     * animate the pet between two viewports by moving it into a full-size transition layer.
+     * Optional: the default is false, and the pet then just moves when the new page settles.
+     */
+    @MainThread
+    default boolean supportsFramedTransition() {
+        return false;
+    }
+
+    /**
+     * Draws the pet only inside {@code frame}, with rounded corners, framed as it would be in a
+     * viewport of that size; the rest of the container stays transparent. {@code null} goes back to
+     * filling the whole container. Called once per animation frame during a page transition, so
+     * it must be cheap.
+     *
+     * <p>{@code container} is the container the pet is in <em>or is about to be moved to</em> by the
+     * next {@link #render}: a frame may be sent first, so the pet appears in the right place as
+     * soon as it is moved. Optional: the default does nothing.</p>
+     *
+     * @param frame          the rect in {@code container}'s coordinates (px), or null.
+     * @param cornerRadiusPx the rect's corner radius (px).
+     */
+    @MainThread
+    default void setFrame(@NonNull ViewGroup container, @Nullable RectF frame,
+                          float cornerRadiusPx) {
     }
 }

@@ -119,6 +119,28 @@ public class ManiengineProtocolTest {
     }
 
     @Test
+    public void frameScript_publishesAndDispatchesTheFrame() {
+        assertEquals("(function(f){window.tomodoomFrame=f;window.dispatchEvent("
+                        + "new CustomEvent('tomodoom:frame',{detail:f}));})"
+                        + "({x:16.00,y:8.50,w:328.00,h:280.25,r:16.00,hostW:360.00,hostH:700.00});",
+                ManiengineProtocol.frameScript(16f, 8.5f, 328f, 280.25f, 16f, 360f, 700f));
+    }
+
+    @Test
+    public void clearFrameScript_dispatchesANullFrame() {
+        assertEquals("(function(){window.tomodoomFrame=null;window.dispatchEvent("
+                + "new CustomEvent('tomodoom:frame',{detail:null}));})();",
+                ManiengineProtocol.CLEAR_FRAME_SCRIPT);
+    }
+
+    @Test
+    public void bundledEntryPage_drawsIntoTheHostsFrame() throws Exception {
+        String html = bundledEntryPage();
+        assertTrue(html.contains(ManiengineProtocol.FRAME_EVENT));
+        assertTrue(html.contains("window." + ManiengineProtocol.FRAME_GLOBAL));
+    }
+
+    @Test
     public void bundledEntryPage_rotatesInsideTheHostsModelBox() throws Exception {
         String html = bundledEntryPage();
         assertTrue(html.contains("<meta name=\"" + ManiengineProtocol.TOUCH_META_NAME

@@ -1,12 +1,17 @@
 package com.example.tomodoom.ui;
 
 import android.content.Context;
+import android.content.res.Resources;
+import android.graphics.RectF;
+import android.util.SparseArray;
 import android.view.ViewGroup;
 
 import androidx.annotation.MainThread;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.viewpager2.widget.ViewPager2;
 
+import com.example.tomodoom.R;
 import com.example.tomodoom.contracts.ManiengineAssetRenderer;
 import com.example.tomodoom.di.AppContainer;
 import com.example.tomodoom.model.PetState;
@@ -19,6 +24,12 @@ import com.example.tomodoom.model.PetState;
  * there, keeping the loaded page) and {@link #detach}es it in {@code onPause} and
  * {@code onDestroyView} (the renderer is paused; its view stays put until another page takes it).
  * {@link #render} from a page that isn't the owner is ignored. Main thread only.</p>
+ *
+ * <p><b>Page transition.</b> While the pager scrolls between Customise and Pets, and the renderer
+ * {@linkplain ManiengineAssetRenderer#supportsFramedTransition supports it}, the pet is moved
+ * into the activity's transition layer (over the pager, the same size) and drawn into a frame
+ * that slides and shrinks from one page's viewport to the other's, following the scroll. When the
+ * pager goes idle the pet is handed to the settled page's viewport, where it looks the same.</p>
  */
 @MainThread
 public final class PetStage {
@@ -36,11 +47,21 @@ public final class PetStage {
     /** The viewport currently showing the pet, or null while no pet page is resumed. */
     @Nullable
     private ViewGroup owner;
-    /** The last viewport the renderer drew into; its views may still be there. */
+    /** The last container the renderer drew into; its views may still be there. */
     @Nullable
     private ViewGroup lastContainer;
     @Nullable
     private PetState lastState;
+
+    /** Each pet page's viewport while its view exists, by page index. */
+    private final SparseArray<ViewGroup> viewports = new SparseArray<>();
+    @Nullable
+    private ViewGroup transitionLayer;
+    private int scrollState = ViewPager2.SCROLL_STATE_IDLE;
+    /** True while the pet is in {@link #transitionLayer}. */
+    private boolean transitioning;
+    private final int[] layerLocation = new int[2];
+    private final int[] viewportLocation = new int[2];
 
     public PetStage(@NonNull Context context) {
         this.appContext = context.getApplicationContext();
@@ -50,6 +71,9 @@ public final class PetStage {
     public void attach(@NonNull ViewGroup container, @Nullable PetState state) {
         if (renderer == null) {
             renderer = AppContainer.from(appContext).createAssetRenderer();
+        }
+        if (transitioning) {
+            clearTransition(); // the settled page takes the pet; it looks the same there
         }
         if (owner != null && owner != container) {
             renderer.pause(owner);
@@ -68,7 +92,12 @@ public final class PetStage {
     /** Renders {@code state} if {@code container} is the visible pet viewport; otherwise no-op. */
     public void render(@NonNull ViewGroup container, @NonNull PetState state) {
         lastState = state;
-        if (renderer != null && owner == container) {
+        if (renderer == null) {
+            return;
+        }
+        if (transitioning && transitionLayer != null) {
+            renderer.render(transitionLayer, state); // the pet stays in the layer until idle
+        } else if (owner == container) {
             renderer.render(container, state);
             lastContainer = container;
         }
@@ -91,5 +120,146 @@ public final class PetStage {
         owner = null;
         lastContainer = null;
         lastState = null;
+        transitioning = false;
+        transitionLayer = null;
+        viewports.clear();
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Page transition
+    // ---------------------------------------------------------------------------------------
+
+    /** The layer over the pager that holds the pet during a transition (set by the host). */
+    public void setTransitionLayer(@Nullable ViewGroup layer) {
+        transitionLayer = layer;
+    }
+
+    /** Page {@code page}'s pet viewport exists (call from {@code onViewCreated}). */
+    public void registerViewport(int page, @NonNull ViewGroup viewport) {
+        viewports.put(page, viewport);
+    }
+
+    /** {@code viewport}'s view is going away (call from {@code onDestroyView}). */
+    public void unregisterViewport(@NonNull ViewGroup viewport) {
+        int index = viewports.indexOfValue(viewport);
+        if (index >= 0) {
+            viewports.removeAt(index);
+        }
+        if (transitioning) {
+            endTransition(MainPagerAdapter.PAGE_PETS); // can't frame towards a missing page
+        }
+    }
+
+    /** Forwarded from {@code ViewPager2.OnPageChangeCallback#onPageScrollStateChanged}. */
+    public void onPagerScrollStateChanged(int state, int currentPage) {
+        scrollState = state;
+        if (state == ViewPager2.SCROLL_STATE_IDLE && transitioning) {
+            // Still in the layer: the page didn't change (a cancelled swipe), so no onResume.
+            endTransition(currentPage);
+        }
+    }
+
+    /** Forwarded from {@code ViewPager2.OnPageChangeCallback#onPageScrolled}. */
+    public void onPagerScrolled(int position, float offset) {
+        if (!PetTransitionMath.showsOnlyCustomiseAndPets(position, offset)) {
+            if (transitioning) {
+                endTransition(MainPagerAdapter.PAGE_PETS); // Chat is coming in: Pets keeps the pet
+            }
+            return;
+        }
+        ManiengineAssetRenderer r = renderer;
+        ViewGroup layer = transitionLayer;
+        if (r == null || layer == null) {
+            return;
+        }
+        PetTransitionMath.Frame f =
+                currentFrame(layer, PetTransitionMath.towardsCustomise(position, offset));
+        if (f == null) {
+            return; // a viewport isn't laid out yet; try again on the next scroll
+        }
+        RectF frame = new RectF(f.left, f.top, f.right, f.bottom);
+        if (transitioning) {
+            r.setFrame(layer, frame, f.radius);
+            return;
+        }
+        boolean starting = scrollState != ViewPager2.SCROLL_STATE_IDLE && offset > 0f
+                && r.supportsFramedTransition() && lastState != null && lastContainer != null;
+        if (!starting) {
+            return;
+        }
+        // Frame first: the page applies it as soon as it has the layer's size, so it never shows
+        // a full-size pet when it grows from the Customise viewport.
+        r.setFrame(layer, frame, f.radius);
+        r.render(layer, lastState);
+        lastContainer = layer;
+        r.resume(layer); // the pet may be paused (e.g. coming from Chat)
+        transitioning = true;
+    }
+
+    /**
+     * Hands the pet from the layer to {@code page}'s viewport (or the resumed page's, if that one
+     * is gone), paused unless that page is resumed.
+     */
+    private void endTransition(int page) {
+        clearTransition();
+        ViewGroup target = viewports.get(page);
+        if (target == null) {
+            target = owner;
+        }
+        if (renderer == null || target == null || lastState == null) {
+            return;
+        }
+        renderer.render(target, lastState);
+        lastContainer = target;
+        if (target != owner) {
+            renderer.pause(target);
+        }
+    }
+
+    private void clearTransition() {
+        transitioning = false;
+        if (renderer != null && transitionLayer != null) {
+            renderer.setFrame(transitionLayer, null, 0f);
+        }
+    }
+
+    /**
+     * @return the pet's rect in {@code layer}'s coordinates, {@code towardsCustomise} of the way
+     * from the Pets viewport to the Customise one, or null if either isn't laid out.
+     */
+    @Nullable
+    private PetTransitionMath.Frame currentFrame(@NonNull ViewGroup layer, float towardsCustomise) {
+        if (layer.getWidth() == 0) {
+            return null;
+        }
+        layer.getLocationInWindow(layerLocation);
+        PetTransitionMath.Frame pets = viewportFrame(viewports.get(MainPagerAdapter.PAGE_PETS));
+        PetTransitionMath.Frame customise =
+                viewportFrame(viewports.get(MainPagerAdapter.PAGE_CUSTOMISE));
+        if (pets == null || customise == null) {
+            return null;
+        }
+        PetTransitionMath.Frame f = PetTransitionMath.between(pets, customise, towardsCustomise);
+        return f.isEmpty() ? null : f;
+    }
+
+    /** The area the pet fills in {@code viewport} (inside its border), relative to the layer. */
+    @Nullable
+    private PetTransitionMath.Frame viewportFrame(@Nullable ViewGroup viewport) {
+        if (viewport == null || !viewport.isAttachedToWindow() || viewport.getWidth() == 0) {
+            return null;
+        }
+        viewport.getLocationInWindow(viewportLocation);
+        float left = viewportLocation[0] - layerLocation[0];
+        float top = viewportLocation[1] - layerLocation[1];
+        float inset = 0f;
+        float radius = 0f;
+        if (viewport.getBackground() != null) { // bordered: the renderer insets the pet by the stroke
+            Resources res = viewport.getResources();
+            inset = res.getDimension(R.dimen.pet_viewport_stroke);
+            radius = Math.max(0f, res.getDimension(R.dimen.pet_viewport_corner_radius) - inset);
+        }
+        return new PetTransitionMath.Frame(left + inset, top + inset,
+                left + viewport.getWidth() - inset, top + viewport.getHeight() - inset, radius);
     }
 }

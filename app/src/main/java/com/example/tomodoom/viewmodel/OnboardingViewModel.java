@@ -11,8 +11,12 @@ import com.example.tomodoom.model.PetSpecies;
 import com.example.tomodoom.repository.PetStateRepository;
 
 import java.util.List;
+import java.util.function.BooleanSupplier;
 
-/** ViewModel for the first-launch onboarding screen, where the user picks and names their pet. */
+/**
+ * ViewModel for the first-launch onboarding screen: the user picks and names their pet, then is
+ * asked for Usage Access and then notifications ({@link OnboardingPermissionFlow}).
+ */
 public class OnboardingViewModel extends ViewModel {
 
     @NonNull
@@ -20,9 +24,17 @@ public class OnboardingViewModel extends ViewModel {
     /** UI state: the species card currently selected (main thread only). */
     @NonNull
     private final MutableLiveData<String> selectedSpecies;
+    /** Whether Usage Access is granted (the doom-scroll monitor's check). */
+    @NonNull
+    private final BooleanSupplier usageAccessGranted;
+    /** UI state (main thread only): the permission steps the user skipped or answered. */
+    private boolean usageSkipped;
+    private boolean notificationsHandled;
 
-    public OnboardingViewModel(@NonNull PetStateRepository petStateRepository) {
+    public OnboardingViewModel(@NonNull PetStateRepository petStateRepository,
+                               @NonNull BooleanSupplier usageAccessGranted) {
         this.petStateRepository = petStateRepository;
+        this.usageAccessGranted = usageAccessGranted;
         this.selectedSpecies = new MutableLiveData<>(
                 petStateRepository.getCurrentState().getPetSpecies());
     }
@@ -72,5 +84,43 @@ public class OnboardingViewModel extends ViewModel {
         }
         petStateRepository.completeOnboarding(normalized, selectedSpecies.getValue());
         return true;
+    }
+
+    /** @return the pet's name, for the permission step's title. */
+    @NonNull
+    public String getPetName() {
+        return petStateRepository.getCurrentState().getPetName();
+    }
+
+    public boolean isUsageAccessGranted() {
+        return usageAccessGranted.getAsBoolean();
+    }
+
+    public boolean isUsageSkipped() {
+        return usageSkipped;
+    }
+
+    public boolean isNotificationsHandled() {
+        return notificationsHandled;
+    }
+
+    /** The user tapped "Not now" on the Usage Access step. Main thread only. */
+    public void skipUsageAccess() {
+        usageSkipped = true;
+    }
+
+    /** The user answered or skipped the notification prompt. Main thread only. */
+    public void onNotificationsHandled() {
+        notificationsHandled = true;
+    }
+
+    /**
+     * @param notificationsNeeded whether notifications still need a runtime grant
+     * @return the permission step to show now
+     */
+    @NonNull
+    public OnboardingPermissionFlow.Step currentPermissionStep(boolean notificationsNeeded) {
+        return OnboardingPermissionFlow.current(isUsageAccessGranted(), usageSkipped,
+                notificationsNeeded, notificationsHandled);
     }
 }

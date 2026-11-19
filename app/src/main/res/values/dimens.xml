@@ -3,6 +3,9 @@
     <!-- Pet viewport border (bg_pet_viewport). HtmlManiengineRenderer insets its WebView by this
          much so the border stays visible. -->
     <dimen name="pet_viewport_stroke">2dp</dimen>
+    <!-- Corner radius of the bordered pet viewport (bg_pet_viewport). PetStage rounds the pet's
+         transition frame to match it. -->
+    <dimen name="pet_viewport_corner_radius">16dp</dimen>
     <!-- Side inset of the pet's rotate area where there is no health bar to line up with. Matches
          the health bar card's margin on the Pets page. -->
     <dimen name="pet_model_box_inset">16dp</dimen>
