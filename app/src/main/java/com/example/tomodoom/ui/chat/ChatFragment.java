@@ -17,6 +17,7 @@ import com.example.tomodoom.R;
 import com.example.tomodoom.databinding.FragmentChatBinding;
 import com.example.tomodoom.di.ViewModelFactory;
 import com.example.tomodoom.model.ChatMessage;
+import com.example.tomodoom.ui.MainPagerAdapter;
 import com.example.tomodoom.ui.PetStage;
 import com.example.tomodoom.viewmodel.ChatViewModel;
 
@@ -55,6 +56,7 @@ public class ChatFragment extends Fragment {
 
         viewModel.getPetState().observe(getViewLifecycleOwner(),
                 state -> stage().render(binding.petViewport, state));
+        stage().registerViewport(MainPagerAdapter.PAGE_CHAT, binding.petViewport);
         viewModel.getMessages().observe(getViewLifecycleOwner(), this::showMessages);
         viewModel.getActiveQuiz().observe(getViewLifecycleOwner(), quiz ->
                 binding.messageInput.setHint(quiz != null
@@ -90,6 +92,7 @@ public class ChatFragment extends Fragment {
     @Override
     public void onDestroyView() {
         stage().detach(binding.petViewport);
+        stage().unregisterViewport(binding.petViewport);
         super.onDestroyView();
         binding = null;
     }

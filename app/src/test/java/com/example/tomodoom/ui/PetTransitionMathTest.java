@@ -11,19 +11,23 @@ public class PetTransitionMathTest {
     private static final float EPS = 1e-4f;
 
     @Test
-    public void showsOnlyCustomiseAndPets_coversTheFirstPairAndRestingOnPets() {
-        assertTrue(PetTransitionMath.showsOnlyCustomiseAndPets(0, 0f));
-        assertTrue(PetTransitionMath.showsOnlyCustomiseAndPets(0, 0.5f));
-        assertTrue(PetTransitionMath.showsOnlyCustomiseAndPets(1, 0f));
-        assertFalse(PetTransitionMath.showsOnlyCustomiseAndPets(1, 0.01f)); // Chat coming in
-        assertFalse(PetTransitionMath.showsOnlyCustomiseAndPets(2, 0f));
+    public void showsOnlyPetPages_coversCustomisePetsAndChat() {
+        assertTrue(PetTransitionMath.showsOnlyPetPages(0, 0f));
+        assertTrue(PetTransitionMath.showsOnlyPetPages(0, 0.5f));
+        assertTrue(PetTransitionMath.showsOnlyPetPages(1, 0f));
+        assertTrue(PetTransitionMath.showsOnlyPetPages(1, 0.5f)); // Pets <-> Chat
+        assertTrue(PetTransitionMath.showsOnlyPetPages(2, 0f)); // resting on Chat
+        assertFalse(PetTransitionMath.showsOnlyPetPages(2, 0.01f)); // Stats coming in
+        assertFalse(PetTransitionMath.showsOnlyPetPages(3, 0f));
     }
 
     @Test
-    public void towardsCustomise_isOneOnCustomiseAndZeroOnPets() {
-        assertEquals(1f, PetTransitionMath.towardsCustomise(0, 0f), EPS);
-        assertEquals(0.75f, PetTransitionMath.towardsCustomise(0, 0.25f), EPS);
-        assertEquals(0f, PetTransitionMath.towardsCustomise(1, 0f), EPS);
+    public void layerFor_frontForCustomiseBackForChatKeepOnPets() {
+        assertEquals(PetTransitionMath.LAYER_FRONT, PetTransitionMath.layerFor(0, 0f));
+        assertEquals(PetTransitionMath.LAYER_FRONT, PetTransitionMath.layerFor(0, 0.9f));
+        assertEquals(PetTransitionMath.LAYER_KEEP, PetTransitionMath.layerFor(1, 0f));
+        assertEquals(PetTransitionMath.LAYER_BACK, PetTransitionMath.layerFor(1, 0.1f));
+        assertEquals(PetTransitionMath.LAYER_BACK, PetTransitionMath.layerFor(2, 0f));
     }
 
     @Test

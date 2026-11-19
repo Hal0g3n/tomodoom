@@ -64,7 +64,7 @@ public class MainActivity extends AppCompatActivity implements PetStage.Host {
         // Keep both neighbours laid out, so the pet's page transition knows where it is heading
         // from the first frame of a swipe.
         pager.setOffscreenPageLimit(1);
-        petStage.setTransitionLayer(binding.petTransitionLayer);
+        petStage.setTransitionLayers(binding.petTransitionLayer, binding.petTransitionLayerBack);
         pager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
             @Override
             public void onPageSelected(int position) {

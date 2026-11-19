@@ -226,9 +226,9 @@ com.example.tomodoom
     ├── MainPagerAdapter          FragmentStateAdapter: page index ↔ bottom-nav item id
     │                             (Customise=0, Pets=1 = default, Chat=2, Stats=3)
     ├── PetStage                  MainActivity's ONE pet renderer, lent to the resumed page's viewport;
-    │                             drives the Pets ↔ Customise shrink transition from pager scrolls
-    ├── PetTransitionMath         pure Java: which scrolls are Pets ↔ Customise, frame interpolation
-    ├── PassThroughFrameLayout    touch-transparent layer (`pet_transition_layer`) holding the pet mid-transition
+    │                             drives the Customise ↔ Pets ↔ Chat transitions from pager scrolls
+    ├── PetTransitionMath         pure Java: which scrolls are transitions, which layer, frame interpolation
+    ├── PassThroughFrameLayout    touch-transparent layers (`pet_transition_layer{,_back}`) holding the pet mid-transition
     ├── AppReset                  the hidden full reset (confirm dialog + clearApplicationUserData)
     ├── debug/DebugPanelFragment  hidden debug bottom sheet (long-press the Pets tab)
     ├── customise/CustomiseFragment   pet preview viewport (via PetStage) + full-width slot tabs + item grid
@@ -265,7 +265,7 @@ launcher icon: `mipmap-anydpi-v26/ic_launcher{,_round}.xml` (adaptive: `@color/l
 + GENERATED `drawable/ic_launcher_foreground.xml` / `ic_launcher_monochrome.xml`) and GENERATED legacy
 `mipmap-*/ic_launcher{,_round}.webp` for API 24–25, GENERATED `drawable/ic_notification.xml` (notification
 small icon, used by both doom-scroll notifications),
-`activity_main.xml` (`main_pager` ViewPager2, `pet_transition_layer` over it, `nav_view`), `activity_onboarding.xml` (`name_step`: title,
+`activity_main.xml` (`pet_transition_layer_back` behind `main_pager` ViewPager2, `pet_transition_layer` over it, `nav_view`), `activity_onboarding.xml` (`name_step`: title,
 `pet_choices` grid, `pet_name_layout`/`pet_name_input`, `start_button`; then `permissions_step`:
 `usage_row`/`notifications_row` (the current one drawn selected), `permission_button`, `permission_skip_button`), `res/menu/bottom_nav_menu.xml`,
 `fragment_debug_panel.xml` + `values/strings_debug.xml` + `values/styles_debug.xml` (debug panel).
@@ -653,21 +653,27 @@ How the page is hosted (`HtmlManiengineRenderer`):
 - **Layout note:** there is **one** WebView, moved (not reloaded) between three viewports: the large
   one on Pets, a preview at 40% of the page height on Customise, above the slot tabs and item
   circles, and a borderless full-page one on Chat, behind the translucent transcript (the chat list
-  takes the touches there, so the pet can't be turned on Chat; Chat doesn't call `registerViewport`,
-  as it isn't part of the shrink transition). On Pets the cards float over the pet, so `fit()` sits the pet higher in tall viewports,
+  takes the touches there, so the pet can't be turned on Chat). On Pets the cards float over the pet, so `fit()` sits the pet higher in tall viewports,
   clear of the health bar below it. The page is resized on each move, so it must refit to any size without distorting the
   model (`index.html` does, with a `ResizeObserver` calling `fit()`). The page that isn't shown has an empty viewport.
-- **Pets ↔ Customise transition** (`PetStage`, renderers with `supportsFramedTransition()`): when the
-  pager starts scrolling between pages 0 and 1, the pet moves into `pet_transition_layer` (over the
-  pager, the same size) and every `onPageScrolled` sends `setFrame` with the rect between the two
+- **Page transitions** (`PetStage`, renderers with `supportsFramedTransition()`): when the
+  pager starts scrolling between pages 0 and 1 (Customise ↔ Pets), the pet moves into
+  `pet_transition_layer` (over the pager, the same size) and every `onPageScrolled` sends `setFrame` with the rect between the two
   viewports' pet areas (Pets: whole viewport, radius 0; Customise: inside the border, radius
   `pet_viewport_corner_radius - pet_viewport_stroke`), interpolated by the offset. So the pet shrinks
   into the preview card (or grows out of it) with the finger, and the health bar slides away with the
   Pets page. The frame is sent before the move, so growing out of Customise never flashes a full-size pet.
   The settled page's `attach` (or, for a cancelled swipe, `SCROLL_STATE_IDLE`) clears the frame and
   moves the pet back into a viewport; the endpoint frames match that viewport's own framing, so nothing
-  jumps. A scroll that brings Chat in ends the transition and leaves the pet in the Pets viewport.
+  jumps. Between pages 1 and 2 (Pets ↔ Chat) the same happens in `pet_transition_layer_back`, **behind**
+  the pager: both viewports are full-page and borderless, so the pet stays put while the Pets cards
+  slide out and the translucent chat slides in over it (the pages are transparent, so the pet shows
+  through; the front layer would cover the bubbles). `PetTransitionMath.layerFor` picks the layer;
+  resting exactly on Pets keeps the current one, and a scroll crossing Pets from one pair to the other
+  (a Customise ↔ Chat tab tap) lands the pet on Pets and restarts in the other layer. Stats coming in
+  ends the transition and leaves the pet in the Chat viewport. Each pet page calls `registerViewport`.
   `MainActivity` sets `offscreenPageLimit(1)` so both viewports are laid out from the first frame.
+  Keep the Pets and Chat page roots background-free, or the back layer is hidden.
 - **Acceptance:** equipping/unequipping on the Customise tab updates the viewport immediately. Rotating
   or switching tabs doesn't leak views (`release` cleans up). Nothing happens off the main thread
   in `render`. The export loads offline from `assets/maniengine/` and reacts to `tomodoom:petstate`.
@@ -941,7 +947,7 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
   `testImplementation` dependency. Tests can then call `AgentProfileLoader.parse(JSONObject)` on the
   real asset (unit tests run with `app/` as the working directory).
 - **Shared pet WebView:** `PetStage` reparents one WebView between page viewports, and during a
-  Pets ↔ Customise scroll into the activity's `pet_transition_layer` (which ignores touches, so
+  Customise ↔ Pets ↔ Chat scroll into one of the activity's `pet_transition_layer{,_back}` (which ignore touches, so
   nothing on the pet responds until the pager is idle). Its touch box isn't meaningful there. It's created
   with the viewport's (activity) context, so `PetStage` lives in `MainActivity` and is released
   in its `onDestroy`. Never hold it in a ViewModel or `AppContainer`: that would leak the activity.
@@ -1192,8 +1198,11 @@ Debug helpers:
    - **Transition:** swipe slowly from Pets to Customise. The pet stays on screen and shrinks, with
      the finger, into the preview card, its corners rounding as it goes, while the health bar slides
      away with Pets. It lands with no jump. Reverse the swipe halfway: it grows back. Tapping the
-     Customise or Pets tab, and Chat → Customise, animate the same way. Pets → Chat is unchanged (the
-     pet slides away with Pets). After any transition, turning and pinching still work on both pages.
+     Customise or Pets tab, and Chat → Customise, animate the same way. Swipe slowly from Pets to
+     Chat: the pet doesn't move at all while the health bar and Usage Access card slide out and the
+     chat slides in over it, its bubbles in front of the pet; reversing halfway is just as still.
+     *(Pets ↔ Chat verified on an API 37 emulator, 2026-11-19.)* After any transition, turning and
+     pinching still work on Pets and Customise.
    - the selected slot tab and the current page survive rotation;
    - Back on Customise or Chat returns to Pets; Back on Pets leaves the app;
    - **Swiping:** from Pets, swipe left to Chat and right to Customise, either from the 16dp page
@@ -1313,8 +1322,6 @@ Known gaps and TODOs (not assigned to anyone yet):
 - To change HP for manual testing, use the debug panel (long-press the Pets tab). To start over,
   use the hidden reset (long-press the Wardrobe tab, or the panel). Whether it keeps Usage Access and
   the notification permission hasn't been checked on a device.
-- Pets ↔ Chat doesn't animate the pet: it slides out with Pets and appears in Chat's viewport once
-  the swipe settles (and the other way round).
 - The Pets ↔ Customise shrink transition is verified only on the page side (headless Edge) and by
   unit tests; it hasn't been watched on a device yet. Watch for a blank frame when the WebView grows
   from the Customise size into the full-size layer, and for the frame trailing the finger
