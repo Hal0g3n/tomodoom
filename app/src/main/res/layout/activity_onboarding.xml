@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- First-launch onboarding: choose a pet and name it, then grant Usage Access and notifications. Colours come from the theme (CLAUDE.md §6.3). -->
+<!-- First-launch onboarding: choose a pet and name it, then grant Usage Access, choose the tracked apps and allow notifications. Colours come from the theme (CLAUDE.md §6.3). -->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
@@ -142,6 +142,43 @@
                 android:textAppearance="?attr/textAppearanceCaption"
                 android:textColor="?android:attr/textColorPrimary"
                 tools:text="@string/onboarding_permission_allowed" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/apps_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_pet_choice"
+            android:orientation="vertical"
+            android:padding="16dp"
+            android:visibility="gone"
+            tools:visibility="visible">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/onboarding_permission_apps_title"
+                android:textAppearance="?attr/textAppearanceSubtitle1"
+                android:textColor="?android:attr/textColorPrimary" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/onboarding_permission_apps_text"
+                android:textAppearance="?attr/textAppearanceBody2"
+                android:textColor="?android:attr/textColorSecondary" />
+
+            <TextView
+                android:id="@+id/apps_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/onboarding_permission_apps_chosen"
+                android:textAppearance="?attr/textAppearanceCaption"
+                android:textColor="?android:attr/textColorPrimary"
+                android:visibility="gone" />
         </LinearLayout>
 
         <LinearLayout

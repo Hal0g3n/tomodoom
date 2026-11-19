@@ -19,8 +19,9 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Lets the user choose which apps doom-scroll detection watches. Opened from the Pets page's
- * Usage Access card. Changes save at once; Back closes it.
+ * Lets the user choose which apps doom-scroll detection watches. Opened from onboarding's
+ * "Choose apps to track" step and the Settings page's Tracked apps card. Changes save at once;
+ * Back closes it.
  */
 public class WatchedAppsActivity extends AppCompatActivity {
 

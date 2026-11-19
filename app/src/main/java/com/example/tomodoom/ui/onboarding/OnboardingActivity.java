@@ -23,12 +23,14 @@ import com.example.tomodoom.databinding.ActivityOnboardingBinding;
 import com.example.tomodoom.di.ViewModelFactory;
 import com.example.tomodoom.model.PetNames;
 import com.example.tomodoom.ui.NotificationPrompt;
+import com.example.tomodoom.ui.watchedapps.WatchedAppsActivity;
 import com.example.tomodoom.viewmodel.OnboardingPermissionFlow;
 import com.example.tomodoom.viewmodel.OnboardingViewModel;
 
 /**
  * Launcher activity. On the first launch it asks the user to choose and name their pet, then for
- * Usage Access and then notifications, then opens {@link MainActivity}. Once onboarding is
+ * Usage Access, which apps to track (once access is granted, through
+ * {@link WatchedAppsActivity}) and notifications, then opens {@link MainActivity}. Once onboarding is
  * complete it forwards straight to {@link MainActivity} without showing anything.
  *
  * <p>Naming the pet completes onboarding at once, so the permission step is shown only while this
@@ -48,6 +50,14 @@ public class OnboardingActivity extends AppCompatActivity {
                 viewModel.onNotificationsHandled();
                 updatePermissionStep();
             });
+
+    /** Coming back from the watched-apps picker (it saves as it goes) finishes the apps step. */
+    private final ActivityResultLauncher<Intent> watchedAppsLauncher =
+            registerForActivityResult(new ActivityResultContracts.StartActivityForResult(),
+                    result -> {
+                        viewModel.onAppsHandled();
+                        updatePermissionStep();
+                    });
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -126,7 +136,7 @@ public class OnboardingActivity extends AppCompatActivity {
     }
 
     // ---------------------------------------------------------------------------------------
-    // Permission step: Usage Access first, then notifications
+    // Permission step: Usage Access first, then tracked apps, then notifications
     // ---------------------------------------------------------------------------------------
 
     @Override
@@ -165,8 +175,13 @@ public class OnboardingActivity extends AppCompatActivity {
         OnboardingPermissionFlow.Step step = currentStep();
 
         binding.usageRow.setSelected(step == OnboardingPermissionFlow.Step.USAGE_ACCESS);
-        setStatus(binding.usageStatus, viewModel.isUsageAccessGranted(),
-                viewModel.isUsageSkipped());
+        boolean usageGranted = viewModel.isUsageAccessGranted();
+        setStatus(binding.usageStatus, usageGranted, viewModel.isUsageSkipped());
+
+        // Choosing apps only matters once usage is tracked, so the row waits for the grant.
+        binding.appsRow.setVisibility(usageGranted ? View.VISIBLE : View.GONE);
+        binding.appsRow.setSelected(step == OnboardingPermissionFlow.Step.TRACKED_APPS);
+        binding.appsStatus.setVisibility(viewModel.isAppsHandled() ? View.VISIBLE : View.GONE);
 
         // Below Android 13, notifications need no runtime grant, so the row is hidden.
         boolean notificationsAsked = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU;
@@ -179,6 +194,10 @@ public class OnboardingActivity extends AppCompatActivity {
         switch (step) {
             case USAGE_ACCESS:
                 binding.permissionButton.setText(R.string.onboarding_permission_allow_usage);
+                binding.permissionSkipButton.setVisibility(View.VISIBLE);
+                break;
+            case TRACKED_APPS:
+                binding.permissionButton.setText(R.string.onboarding_permission_choose_apps);
                 binding.permissionSkipButton.setVisibility(View.VISIBLE);
                 break;
             case NOTIFICATIONS:
@@ -211,6 +230,9 @@ public class OnboardingActivity extends AppCompatActivity {
             case USAGE_ACCESS:
                 startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS));
                 break;
+            case TRACKED_APPS:
+                watchedAppsLauncher.launch(new Intent(this, WatchedAppsActivity.class));
+                break;
             case NOTIFICATIONS:
                 NotificationPrompt.launch(notificationPermissionLauncher);
                 break;
@@ -225,6 +247,9 @@ public class OnboardingActivity extends AppCompatActivity {
         OnboardingPermissionFlow.Step step = currentStep();
         if (step == OnboardingPermissionFlow.Step.USAGE_ACCESS) {
             viewModel.skipUsageAccess();
+        } else if (step == OnboardingPermissionFlow.Step.TRACKED_APPS) {
+            // Keeps the default watched apps; Settings can change them later.
+            viewModel.onAppsHandled();
         } else if (step == OnboardingPermissionFlow.Step.NOTIFICATIONS) {
             // Skipping counts as asked, so Pets doesn't prompt again in this launch.
             NotificationPrompt.markRequested();
