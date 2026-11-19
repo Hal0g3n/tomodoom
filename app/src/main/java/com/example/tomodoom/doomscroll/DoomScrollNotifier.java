@@ -63,7 +63,7 @@ public final class DoomScrollNotifier implements DoomScrollListener {
         int minutes = (int) TimeUnit.MILLISECONDS.toMinutes(sessionMillis);
         manager.notify(WARNING_NOTIFICATION_ID,
                 new NotificationCompat.Builder(appContext, WARNING_CHANNEL_ID)
-                        .setSmallIcon(R.drawable.ic_pets_24dp)
+                        .setSmallIcon(R.drawable.ic_notification)
                         .setContentTitle(appContext.getString(R.string.doom_scroll_warning_title))
                         .setContentText(appContext.getResources().getQuantityString(
                                 R.plurals.doom_scroll_warning_text, minutes, minutes))

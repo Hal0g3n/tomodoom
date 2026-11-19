@@ -214,7 +214,8 @@ pet portraits, §5.1), `item_pet_choice.xml` + `res/drawable/bg_pet_choice.xml` 
 `res/drawable/ic_hanger_24dp.xml` (Customise tab icon),
 launcher icon: `mipmap-anydpi-v26/ic_launcher{,_round}.xml` (adaptive: `@color/launcher_background`
 + GENERATED `drawable/ic_launcher_foreground.xml` / `ic_launcher_monochrome.xml`) and GENERATED legacy
-`mipmap-*/ic_launcher{,_round}.webp` for API 24–25,
+`mipmap-*/ic_launcher{,_round}.webp` for API 24–25, GENERATED `drawable/ic_notification.xml` (notification
+small icon, used by both doom-scroll notifications),
 `activity_main.xml` (`main_pager` ViewPager2 + `nav_view`), `activity_onboarding.xml` (title,
 `pet_choices` grid, `pet_name_layout`/`pet_name_input`, `start_button`), `res/menu/bottom_nav_menu.xml`.
 `res/values/dimens.xml` (`pet_viewport_stroke`).
@@ -818,6 +819,10 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
   checks `isOnboardingComplete()` before inflating anything and forwards to `MainActivity` if set.
   Anything that should run on every launch belongs in `TomodoomApplication` or `MainActivity`,
   not in the onboarding screen.
+- **Launcher shows the old (robot) icon after an icon change:** the APK is fine, but the phone
+  still has an older install or the launcher cached the icon (`versionCode` stays 1, and Android
+  Studio's *Apply Changes* doesn't reinstall the package). Uninstall the app and reinstall it; if it
+  persists, restart the launcher or phone. Check the APK with `unzip -l` for `mipmap-anydpi-v26/`.
 - **Read-only emulators lose app data:** an emulator started with `-read-only` discards its data
   on shutdown, so the app is a fresh install (with onboarding) after each emulator restart.
 - **Maniengine overrides are applied by the page, not the editor.** `pet-scene.js` matches each
@@ -872,6 +877,9 @@ Rules:
   colour). On API 26+ the launcher mask stands in for the logo's eggshell emblem square: the adaptive
   background is `launcher_background` (→ `eggshell`) and the foreground is the phone, scaled so the
   emblem fills the 72dp visible area. The monochrome (themed-icon) layer keeps only the `jet` line work.
+  `ic_notification.xml` is that same line work cropped to the phone at 24dp and painted
+  `@android:color/white`: status-bar icons are alpha-only and tinted by the system, so it's the one
+  drawable that uses a framework colour instead of a palette token.
 
 **Typography.** All UI text is **Playpen Sans**; user and bot chat bubbles use **Unkempt**
 (`Widget.Tomodoom.ChatBubble`, applied with `style=`: Unkempt Bold, 17sp from its text appearance). SYSTEM chat
@@ -1038,7 +1046,7 @@ Debug helpers available in the debug build:
 
 **Doom-scroll detection (real device, watched app installed):**
 
-14. Grant Usage Access and allow notifications. A low-priority "Tomodoom is watching over your pet" notification appears.
+14. Grant Usage Access and allow notifications. A low-priority "Tomodoom is watching over your pet" notification appears, with the white phone-and-pet logo (not a paw) in the status bar.
 15. Scroll Instagram or YouTube Shorts in portrait. HP drops by 1 each minute.
 16. Keep going to 10 and 20 minutes. A "Time to look up" notification appears each time.
 17. Play a fullscreen landscape YouTube video. HP stops dropping, then resumes when you return to portrait.

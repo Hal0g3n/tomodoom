@@ -73,7 +73,7 @@ public final class DoomScrollMonitorService extends Service {
             }
         }
         return new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_pets_24dp)
+                .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(getString(R.string.doom_scroll_monitor_title))
                 .setContentText(getString(R.string.doom_scroll_monitor_text))
                 .setContentIntent(DoomScrollNotifier.openAppIntent(this))
