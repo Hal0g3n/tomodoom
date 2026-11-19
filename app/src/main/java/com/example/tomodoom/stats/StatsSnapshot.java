@@ -25,17 +25,17 @@ public final class StatsSnapshot {
     }
 
     @NonNull
-    TokenUsageLedger getTokens() {
+    public TokenUsageLedger getTokens() {
         return tokens;
     }
 
     @NonNull
-    HpHistory getHp() {
+    public HpHistory getHp() {
         return hp;
     }
 
     @NonNull
-    DoomScrollLog getDoomScroll() {
+    public DoomScrollLog getDoomScroll() {
         return doomScroll;
     }
 }

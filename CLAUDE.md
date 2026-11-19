@@ -199,7 +199,8 @@ com.example.tomodoom
 │   ├── LocalDays                 local-day numbers without java.time
 │   ├── StatsSnapshot             immutable copy of the three ledgers (what StatsRepository publishes)
 │   ├── StatsReport               the numbers the page shows, computed for a time + time zone
-│   └── DurationSplit             a duration → its two largest units ("2 h 15 min")
+│   ├── DurationSplit             a duration → its two largest units ("2 h 15 min")
+│   └── DemoStats                 a seeded, plausible demo week (debug panel), HP line ending at the real HP
 │
 ├── di/
 │   ├── AppContainer              THE ONLY PLACE implementations are chosen ("SWAP POINT" comments)
@@ -421,6 +422,8 @@ ui  ──►  viewmodel  ──►  repository  ──►  contracts  ◄──
   through `StatsRecordingDoomScrollListener`. The hidden reset wipes it with everything else.
   `DoomScrollLog` splits sessions on gaps over 2 minutes (the monitor reports one event per counted
   minute), so its "session" is wall-clock span, while the per-day minutes are counted time.
+  `replaceAll(StatsSnapshot)` (the debug panel's demo week from `stats.DemoStats`) and
+  `clear(PetState)` overwrite every ledger plus `tracking_since`; they never touch the pet.
 - ViewModels hold only UI state (e.g. the selected customisation tab). Domain state lives in
   repositories.
 
@@ -1148,7 +1151,9 @@ Debug helpers:
   unequip all; simulate one doom-scroll minute (−1 HP) or the 10-minute warning notification, Usage
   Access status and settings; chat backend (mock or Gemini + models), simulate a quiz pass (+10 HP
   through `McpPetActionHandler.onQuizPassed`), replay it (the replay guard should reject it), start a
-  new conversation; version and the hidden reset. HP changes use reason `debug`.
+  new conversation; fill Stats with a demo week (`DemoStats`: random sessions, quizzes and tokens over
+  the last 7 days, the HP line ending at the pet's current HP) or clear the Stats history; version and
+  the hidden reset. HP changes use reason `debug`.
 - **Mock chat commands:** `quiz` (new quiz), `help`, `/tool <name> key=value …` (calls an MCP tool
   as if the backend had), anything else is echoed back.
 - **`StubDoomScrollMonitor.simulateDoomScroll(pkg, durationMs, penalty)`:** tests the
@@ -1221,7 +1226,10 @@ Debug helpers:
    Pets; a second long-press doesn't stack a second panel). −10 lowers the health bar at once; set 0
    tips the pet over, 80 makes it hop. Simulate quiz pass shows "+10 HP awarded via MCP!", Replay shows
    "⚠ Quiz debug:… was already rewarded." Simulate warning posts "Time to look up". New conversation
-   clears the Chat transcript and greets again. Reset all data shows the same confirm dialog as Wardrobe.
+   clears the Chat transcript and greets again. Fill Stats with a demo week: the Stats tab shows a
+   week of bars, apps, a health line ending at the current HP, quiz gains and three Gemini models; HP
+   on Pets is unchanged. Clear Stats history empties it again. Reset all data shows the same confirm
+   dialog as Wardrobe.
 
 **Personas on Gemini (real LLM)**: build with `GEMINI_API_URL`/`GEMINI_API_KEY`/`GEMINI_MODELS` set (§5.2):
 

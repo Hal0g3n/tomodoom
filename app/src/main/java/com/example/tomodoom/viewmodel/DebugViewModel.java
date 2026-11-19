@@ -16,7 +16,10 @@ import com.example.tomodoom.model.McpToolResult;
 import com.example.tomodoom.model.PetState;
 import com.example.tomodoom.repository.ChatRepository;
 import com.example.tomodoom.repository.PetStateRepository;
+import com.example.tomodoom.repository.StatsRepository;
+import com.example.tomodoom.stats.DemoStats;
 
+import java.util.TimeZone;
 import java.util.UUID;
 
 /**
@@ -48,6 +51,8 @@ public class DebugViewModel extends ViewModel {
     private final DoomScrollMonitor doomScrollMonitor;
     @NonNull
     private final DoomScrollListener doomScrollListener;
+    @NonNull
+    private final StatsRepository statsRepository;
 
     private final MutableLiveData<String> lastResult = new MutableLiveData<>(null);
     @Nullable
@@ -57,12 +62,14 @@ public class DebugViewModel extends ViewModel {
                           @NonNull McpPetActionHandler mcpHandler,
                           @NonNull ChatRepository chatRepository,
                           @NonNull DoomScrollMonitor doomScrollMonitor,
-                          @NonNull DoomScrollListener doomScrollListener) {
+                          @NonNull DoomScrollListener doomScrollListener,
+                          @NonNull StatsRepository statsRepository) {
         this.petStateRepository = petStateRepository;
         this.mcpHandler = mcpHandler;
         this.chatRepository = chatRepository;
         this.doomScrollMonitor = doomScrollMonitor;
         this.doomScrollListener = doomScrollListener;
+        this.statsRepository = statsRepository;
     }
 
     @NonNull
@@ -163,6 +170,25 @@ public class DebugViewModel extends ViewModel {
     @MainThread
     public void startNewConversation() {
         chatRepository.startNewConversation();
+    }
+
+    // --- Stats -------------------------------------------------------------------------------
+
+    /**
+     * Replaces the Stats history with a fresh, random week of demo data ending at the pet's
+     * current HP ({@link DemoStats}). The pet itself is untouched.
+     */
+    @MainThread
+    public void fillDemoStats() {
+        PetState pet = petStateRepository.getCurrentState();
+        statsRepository.replaceAll(DemoStats.generate(System.currentTimeMillis(),
+                TimeZone.getDefault(), pet.getCurrentHp(), pet.getMaxHp(), System.nanoTime()));
+    }
+
+    /** Forgets the Stats history (demo or real); tracking starts again now. */
+    @MainThread
+    public void clearStats() {
+        statsRepository.clear(petStateRepository.getCurrentState());
     }
 
     private void report(@NonNull McpToolResult result) {

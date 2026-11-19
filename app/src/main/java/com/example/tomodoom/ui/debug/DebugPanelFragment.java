@@ -98,6 +98,18 @@ public class DebugPanelFragment extends BottomSheetDialogFragment {
                     Toast.LENGTH_SHORT).show();
         });
 
+        // Stats
+        binding.statsDemo.setOnClickListener(v -> {
+            viewModel.fillDemoStats();
+            Toast.makeText(requireContext(), R.string.debug_stats_demo_done,
+                    Toast.LENGTH_SHORT).show();
+        });
+        binding.statsClear.setOnClickListener(v -> {
+            viewModel.clearStats();
+            Toast.makeText(requireContext(), R.string.debug_stats_clear_done,
+                    Toast.LENGTH_SHORT).show();
+        });
+
         // App
         binding.appVersion.setText(getString(R.string.debug_app_version,
                 BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE,
