@@ -8,6 +8,7 @@ import android.os.Build;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.annotation.MainThread;
 import androidx.annotation.NonNull;
+import androidx.core.app.NotificationManagerCompat;
 import androidx.core.content.ContextCompat;
 
 /**
@@ -27,6 +28,14 @@ public final class NotificationPrompt {
         return Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
                 && ContextCompat.checkSelfPermission(context,
                 Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED;
+    }
+
+    /**
+     * @return whether the app may post notifications now: on Android 13+ the runtime grant, below
+     * that the app's notification switch in system settings (on by default).
+     */
+    public static boolean areEnabled(@NonNull Context context) {
+        return NotificationManagerCompat.from(context).areNotificationsEnabled();
     }
 
     /** @return whether to show the system prompt now: a grant is needed and not asked this launch. */

@@ -1,7 +1,6 @@
 package com.example.tomodoom.ui.onboarding;
 
 import android.content.Intent;
-import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.text.Editable;
@@ -183,11 +182,10 @@ public class OnboardingActivity extends AppCompatActivity {
         binding.appsRow.setSelected(step == OnboardingPermissionFlow.Step.TRACKED_APPS);
         binding.appsStatus.setVisibility(viewModel.isAppsHandled() ? View.VISIBLE : View.GONE);
 
-        // Below Android 13, notifications need no runtime grant, so the row is hidden.
-        boolean notificationsAsked = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU;
-        binding.notificationsRow.setVisibility(notificationsAsked ? View.VISIBLE : View.GONE);
+        // The row always shows. It's only an actionable step when a runtime grant is needed
+        // (Android 13+, not granted); otherwise it just reports that notifications are on.
         binding.notificationsRow.setSelected(step == OnboardingPermissionFlow.Step.NOTIFICATIONS);
-        boolean notificationsGranted = !NotificationPrompt.isGrantNeeded(this);
+        boolean notificationsGranted = NotificationPrompt.areEnabled(this);
         setStatus(binding.notificationsStatus, notificationsGranted,
                 viewModel.isNotificationsHandled());
 

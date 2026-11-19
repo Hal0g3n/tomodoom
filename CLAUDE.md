@@ -1270,7 +1270,8 @@ Debug helpers:
    with `Tomo`. Tapping Cat moves the ring (rotation keeps it); after **Start** the Pets and Customise
    viewports show the cat, and it stays the cat after a relaunch. Clearing it disables **Start**; the counter caps
    at 20. Type `Mochi` and tap **Start** (or the keyboard's Done): a "Help Mochi look after you" screen
-   lists **Track app usage** (ringed) and **Notifications** (Android 13+ only). **Allow usage tracking**
+   lists **Track app usage** (ringed) and **Notifications** (always shown; it reads "✓ Allowed" when
+   notifications are already on, e.g. below Android 13, and is then not a step). **Allow usage tracking**
    opens the Usage Access settings; grant it and go back: the row shows "✓ Allowed", a **Choose apps
    to track** row appears ringed and the button reads **Choose apps**, which opens Watched apps (the
    default social apps on); switch one off and press Back: the row shows "✓ Chosen" (and Settings'
