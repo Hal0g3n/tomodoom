@@ -103,9 +103,16 @@ fit();
 // camera.zoom scales the picture uniformly, so the model is never distorted.
 // Speeds are in viewport (frame) widths per second, so a swipe feels the same at any size.
 const SPEED_WINDOW_MS = 100, SLOW_SPEED = .5, FAST_SPEED = 3, SLOW_GAIN = .75, FAST_GAIN = 1.75;
-const MIN_FLING = .6, MAX_FLING = 14, FLING_DECAY = 2.5, TAB_HANDOVER_MS = 300;
+const MIN_FLING = .3, MAX_FLING = 14, FLING_DECAY = 1.2, TAB_HANDOVER_MS = 300;
+// A held turn is eased in over ~70 ms rather than in one frame; a release this long after the last
+// move means the finger was held still, so the pet doesn't coast.
+const CATCH_UP_RATE = 14, STILL_MS = 80;
+// Mirrors ManiengineProtocol.TAB_FLICK_WINDOW_MS / TAB_FLICK_MIN_DP_PER_SEC (CSS px = dp): change both
+// together. While a young drag is this fast it may still become a tab flick, which the app hands to the
+// pager (pointercancel), so its turn is held back instead of spinning the pet and snapping it back.
+const FLICK_WINDOW_MS = 200, FLICK_PX_PER_SEC = 1200, FLICK_HOLD_FRACTION = .5;
 const pointers = new Map();
-let pinch = null, spin = null, spinVelocity = 0;
+let pinch = null, spin = null, spinVelocity = 0, spinCatchUp = 0;
 const spread = () => { const [a, b] = [...pointers.values()]; return Math.max(Math.hypot(a.x - b.x, a.y - b.y), 1); };
 const startPinch = () => { pinch = pointers.size === 2 ? { spread: spread(), zoom: camera.zoom } : null; };
 const canvas = renderer.domElement;
@@ -122,13 +129,24 @@ function swipeSpeed(now) {
   const first = spin.samples[0], latest = spin.samples[spin.samples.length - 1];
   return (latest.x - first.x) / Math.max(latest.time - first.time, 1) * 1000 / viewWidth();
 }
+// Speed at release: measured up to the last move (pointerup often lands a little later), 0 if held still.
+function releaseSpeed(upTime) {
+  const lastTime = spin.samples[spin.samples.length - 1].time;
+  return upTime - lastTime > STILL_MS ? 0 : swipeSpeed(lastTime);
+}
+// Horizontal finger speed over the same window, in CSS px per second.
+function fingerPxPerSec() {
+  const s = spin.samples;
+  if (s.length < 2) return 0;
+  return Math.abs(s[s.length - 1].x - s[0].x) / Math.max(s[s.length - 1].time - s[0].time, 1) * 1000;
+}
 const swipeGain = speed => THREE.MathUtils.lerp(SLOW_GAIN, FAST_GAIN, THREE.MathUtils.smoothstep(Math.abs(speed), SLOW_SPEED, FAST_SPEED));
 canvas.addEventListener('pointerdown', e => {
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   startPinch();
   spinVelocity = 0;
   spin = pointers.size === 1 && inModelBox(e)  // a second finger ends the turn
-    ? { id: e.pointerId, x: e.clientX, start: e.timeStamp, startYaw: pet.rotation.y, samples: [{ x: e.clientX, time: e.timeStamp }] } : null;
+    ? { id: e.pointerId, x: e.clientX, start: e.timeStamp, startYaw: pet.rotation.y, pending: 0, samples: [{ x: e.clientX, time: e.timeStamp }] } : null;
 });
 canvas.addEventListener('pointermove', e => {
   if (!pointers.has(e.pointerId)) return;
@@ -136,8 +154,15 @@ canvas.addEventListener('pointermove', e => {
   if (spin && spin.id === e.pointerId) {
     spin.samples.push({ x: e.clientX, time: e.timeStamp });
     const widths = (e.clientX - spin.x) / viewWidth();
-    pet.rotation.y += widths * Math.PI * 2 * swipeGain(swipeSpeed(e.timeStamp));
+    const delta = widths * Math.PI * 2 * swipeGain(swipeSpeed(e.timeStamp));
     spin.x = e.clientX;
+    if (e.timeStamp - spin.start < FLICK_WINDOW_MS && fingerPxPerSec() >= FLICK_PX_PER_SEC * FLICK_HOLD_FRACTION) {
+      spin.pending += delta;  // may still be a tab flick: hold the turn
+    } else {
+      spinCatchUp += spin.pending;  // a turn after all: ease the held part in
+      spin.pending = 0;
+      pet.rotation.y += delta;
+    }
   }
   if (!pinch) return;
   camera.zoom = THREE.MathUtils.clamp(pinch.zoom * spread() / pinch.spread, MIN_ZOOM, MAX_ZOOM);
@@ -147,10 +172,12 @@ for (const type of ['pointerup', 'pointercancel']) canvas.addEventListener(type,
   pointers.delete(e.pointerId);
   startPinch();
   if (!spin || spin.id !== e.pointerId) return;
-  if (type === 'pointercancel') {  // a quick flick went to the tab pager: undo its small nudge
-    if (e.timeStamp - spin.start < TAB_HANDOVER_MS) pet.rotation.y = spin.startYaw;
+  if (type === 'pointercancel') {  // a quick flick went to the tab pager: drop the held turn, ease the nudge back
+    if (e.timeStamp - spin.start < TAB_HANDOVER_MS) spinCatchUp = spin.startYaw - pet.rotation.y;
+    spinVelocity = 0;
   } else {
-    const speed = swipeSpeed(e.timeStamp), release = speed * Math.PI * 2 * swipeGain(speed);
+    spinCatchUp += spin.pending;  // released on the pet: a quick flick still turns it, smoothly
+    const speed = releaseSpeed(e.timeStamp), release = speed * Math.PI * 2 * swipeGain(speed);
     spinVelocity = Math.abs(release) < MIN_FLING ? 0 : THREE.MathUtils.clamp(release, -MAX_FLING, MAX_FLING);
   }
   spin = null;
@@ -162,6 +189,11 @@ let last = performance.now();
 function frame(now) {
   const t = now / 1000, dt = Math.max(0, Math.min(now - last, 100)) / 1000, k = 1 - Math.exp(-dt * 6);  // a slow first render can leave now < last
   last = now;
+  if (spinCatchUp) {  // ease in a held turn (or ease back a cancelled nudge)
+    const step = Math.abs(spinCatchUp) < .001 ? spinCatchUp : spinCatchUp * (1 - Math.exp(-dt * CATCH_UP_RATE));
+    pet.rotation.y += step;
+    spinCatchUp -= step;
+  }
   if (!spin && spinVelocity) {  // coast after a flick
     pet.rotation.y += spinVelocity * dt;
     spinVelocity *= Math.exp(-dt * FLING_DECAY);

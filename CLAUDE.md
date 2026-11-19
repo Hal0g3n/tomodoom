@@ -672,11 +672,13 @@ How the page is hosted (`HtmlManiengineRenderer`):
   Drags starting outside the box change tab at any speed. Inside it, a horizontal flick reaching
   `ManiengineProtocol.TAB_FLICK_MIN_DP_PER_SEC` within `TAB_FLICK_WINDOW_MS` of touch-down also changes
   tab (`isTabFlick`); while a drag is still that young and at least half that fast, `index.html` holds
-  its turn back and applies it only once the drag proves not to be a flick, so a flick that changes tab
+  its turn back and eases it in (~70 ms, never in one frame) only once the drag proves not to be a flick
+  (a cancelled flick's small early nudge eases back the same way), so a flick that changes tab
   never spins the pet and snaps it back (the page mirrors the `TAB_FLICK_*` values: change both
   together). Other drags turn the `pet` group (`rotation.y`): `index.html` measures finger
   speed over the last 100 ms, so slow drags are precise, fast ones turn further and the release speed
-  sets how far it coasts. The rug stays still. A second finger always keeps the gesture in the page (`PetWebView` blocks the pager on
+  (measured up to the last move; 0 if the finger rested for 80 ms) sets how far it coasts, slowing
+  smoothly over a second or two (`FLING_DECAY`). The rug stays still. A second finger always keeps the gesture in the page (`PetWebView` blocks the pager on
   `ACTION_POINTER_DOWN`), which is how `index.html` pinch-zooms (`camera.zoom`, 0.75x to 3x).
 - **Frame:** the host places the pet by setting
   `window.tomodoomFrame = { x, y, w, h, r, lift, hostW, hostH }` (CSS px; `lift` 0–1) and dispatching **`tomodoom:frame`**
@@ -1274,7 +1276,8 @@ Debug helpers:
      selection follows, and the rabbit neither spins and snaps back during the flick nor stays turned.
    - **Rotating:** on Pets and Customise, a slower one-finger drag inside the model box (on Pets this
      includes the health bar) turns the pet both ways without changing page. Slow drags are precise,
-     faster ones turn further, and the release speed sets how far it coasts. Starting slowly then
+     faster ones turn further, and the release speed sets how far it coasts. A quick swipe on the pet
+     never jumps: it keeps spinning and slows smoothly, and a tap stops it. Starting slowly then
      speeding up stays on the page. The rug stays still, worn items turn with the rabbit, and the angle
      is kept when moving between the two pages.
    - On Pets the pet has no border and fills the page behind the mostly opaque health bar card. Pinching with two
