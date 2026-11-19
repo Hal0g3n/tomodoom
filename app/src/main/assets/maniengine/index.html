@@ -13,7 +13,8 @@
       lift (0-1) says how much to raise the pet clear of a health bar below it.
   tomodoom-touch "centre": one-finger drags starting in the model box (window.tomodoomTouchBox, set by
   the host) turn the pet. Fast flicks and drags starting outside the box swipe between tabs. Two
-  fingers pinch-zoom (the host keeps multi-touch gestures away from the tab pager).
+  fingers pinch-zoom (the host keeps multi-touch gestures away from the tab pager). A double tap in the
+  model box eases the pet back to its starting angle and 1x zoom.
 -->
 <html lang="en">
 <head>
@@ -113,8 +114,17 @@ const FLICK_SPIN_SEC = .8;
 // together. While a young drag is this fast it may still become a tab flick, which the app hands to the
 // pager (pointercancel), so its turn is held back instead of spinning the pet and snapping it back.
 const FLICK_WINDOW_MS = 200, FLICK_PX_PER_SEC = 1200, FLICK_HOLD_FRACTION = .5;
+// A double tap eases the pet back to the view it started with, the shortest way round.
+const TAP_MAX_MS = 250, TAP_MAX_PX = 10, DOUBLE_TAP_MS = 300, DOUBLE_TAP_PX = 40, RESET_SEC = .5;
+const HOME_YAW = pet.rotation.y, HOME_ZOOM = camera.zoom;
 const pointers = new Map();
 let pinch = null, spin = null, spinVelocity = 0, spinCatchUp = 0, flickSpin = null;
+let tap = null, lastTap = null, viewReset = null;
+function resetView() {
+  spinVelocity = 0; spinCatchUp = 0; flickSpin = null;
+  const turns = Math.round((pet.rotation.y - HOME_YAW) / (Math.PI * 2));
+  viewReset = { fromYaw: pet.rotation.y, toYaw: HOME_YAW + turns * Math.PI * 2, fromZoom: camera.zoom, t: 0 };
+}
 const spread = () => { const [a, b] = [...pointers.values()]; return Math.max(Math.hypot(a.x - b.x, a.y - b.y), 1); };
 const startPinch = () => { pinch = pointers.size === 2 ? { spread: spread(), zoom: camera.zoom } : null; };
 const canvas = renderer.domElement;
@@ -148,6 +158,8 @@ canvas.addEventListener('pointerdown', e => {
   startPinch();
   spinVelocity = 0;
   flickSpin = null;  // a touch catches the pet mid-spin
+  viewReset = null;  // ... or mid-reset
+  tap = pointers.size === 1 && inModelBox(e) ? { id: e.pointerId, x: e.clientX, y: e.clientY, time: e.timeStamp } : null;
   spin = pointers.size === 1 && inModelBox(e)  // a second finger ends the turn
     ? { id: e.pointerId, x: e.clientX, x0: e.clientX, start: e.timeStamp, startYaw: pet.rotation.y, pending: 0, samples: [{ x: e.clientX, time: e.timeStamp }] } : null;
 });
@@ -174,6 +186,20 @@ canvas.addEventListener('pointermove', e => {
 for (const type of ['pointerup', 'pointercancel']) canvas.addEventListener(type, e => {
   pointers.delete(e.pointerId);
   startPinch();
+  if (tap && tap.id === e.pointerId) {
+    const isTap = type === 'pointerup' && e.timeStamp - tap.time <= TAP_MAX_MS
+      && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) <= TAP_MAX_PX;
+    if (isTap && lastTap && tap.time - lastTap.time <= DOUBLE_TAP_MS
+        && Math.hypot(tap.x - lastTap.x, tap.y - lastTap.y) <= DOUBLE_TAP_PX) {
+      lastTap = null;  // a third tap starts a new pair
+      spin = null;
+      tap = null;
+      resetView();
+      return;
+    }
+    lastTap = isTap ? { x: tap.x, y: tap.y, time: e.timeStamp } : null;
+    tap = null;
+  }
   if (!spin || spin.id !== e.pointerId) return;
   if (type === 'pointercancel') {  // a quick flick went to the tab pager: drop the held turn, spin once
     spinVelocity = 0;
@@ -200,6 +226,14 @@ function frame(now) {
     flickSpin.t = Math.min(flickSpin.t + dt / FLICK_SPIN_SEC, 1);
     pet.rotation.y = THREE.MathUtils.lerp(flickSpin.from, flickSpin.to, 1 - Math.pow(1 - flickSpin.t, 3));
     if (flickSpin.t === 1) flickSpin = null;
+  }
+  if (viewReset) {  // back to the starting angle and zoom after a double tap (easeOutCubic)
+    viewReset.t = Math.min(viewReset.t + dt / RESET_SEC, 1);
+    const ease = 1 - Math.pow(1 - viewReset.t, 3);
+    pet.rotation.y = THREE.MathUtils.lerp(viewReset.fromYaw, viewReset.toYaw, ease);
+    camera.zoom = THREE.MathUtils.lerp(viewReset.fromZoom, HOME_ZOOM, ease);
+    camera.updateProjectionMatrix();
+    if (viewReset.t === 1) viewReset = null;
   }
   if (spinCatchUp) {  // ease in a held turn
     const step = Math.abs(spinCatchUp) < .001 ? spinCatchUp : spinCatchUp * (1 - Math.exp(-dt * CATCH_UP_RATE));

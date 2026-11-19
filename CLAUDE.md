@@ -678,7 +678,9 @@ How the page is hosted (`HtmlManiengineRenderer`):
   together). Other drags turn the `pet` group (`rotation.y`): `index.html` measures finger
   speed over the last 100 ms, so slow drags are precise, fast ones turn further and the release speed
   (measured up to the last move; 0 if the finger rested for 80 ms) sets how far it coasts, slowing
-  smoothly over a second or two (`FLING_DECAY`). The rug stays still. A second finger always keeps the gesture in the page (`PetWebView` blocks the pager on
+  smoothly over a second or two (`FLING_DECAY`). The rug stays still. A **double tap** in the model box (two taps ≤ 300 ms and ≤ 40 px apart, each
+  ≤ 250 ms and ≤ 10 px of movement) eases the pet back to its starting angle (the shortest way round)
+  and 1x zoom over `RESET_SEC` (0.5 s); a touch mid-reset stops it. A second finger always keeps the gesture in the page (`PetWebView` blocks the pager on
   `ACTION_POINTER_DOWN`), which is how `index.html` pinch-zooms (`camera.zoom`, 0.75x to 3x).
 - **Frame:** the host places the pet by setting
   `window.tomodoomFrame = { x, y, w, h, r, lift, hostW, hostH }` (CSS px; `lift` 0–1) and dispatching **`tomodoom:frame`**
@@ -1283,7 +1285,8 @@ Debug helpers:
      faster ones turn further, and the release speed sets how far it coasts. A quick swipe on the pet
      never jumps: it keeps spinning and slows smoothly, and a tap stops it. Starting slowly then
      speeding up stays on the page. The rug stays still, worn items turn with the rabbit, and the angle
-     is kept when moving between the two pages.
+     is kept when moving between the two pages. Turn and pinch the pet, then double-tap it: it turns back
+     to face forward (never more than half a turn) and returns to normal size; a single tap only stops a spin.
    - On Pets the pet has no border and fills the page behind the mostly opaque health bar card. Pinching with two
      fingers zooms it evenly (0.75x to 3x) without changing page.
    - Mood: HP ≥ the thriving threshold makes the rabbit hop, struggling droops its head and
