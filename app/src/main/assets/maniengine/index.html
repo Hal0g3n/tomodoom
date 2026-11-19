@@ -5,9 +5,9 @@
   This page owns the camera, lighting loop and the app contract:
     - reads window.tomodoomPetState at startup and listens for "tomodoom:petstate";
     - mood drives the idle animation, equipped items toggle the add-ons below.
-  tomodoom-touch "centre": one-finger drags starting in the centre turn the rabbit; those starting on
-  the side edges or bottom strip swipe between tabs. Two fingers pinch-zoom (the host keeps multi-touch
-  gestures away from the tab pager).
+  tomodoom-touch "centre": one-finger drags starting in the model box (window.tomodoomTouchBox, set by
+  the host) turn the rabbit. Fast flicks and drags starting outside the box swipe between tabs. Two
+  fingers pinch-zoom (the host keeps multi-touch gestures away from the tab pager).
 -->
 <html lang="en">
 <head>
@@ -53,7 +53,7 @@ addEventListener('tomodoom:petstate', e => applyState(e.detail));
 applyState(window.tomodoomPetState);
 
 // --- Camera: frame the rabbit (+ the near rug) for whatever aspect the viewport has ---
-const TALL_ASPECT = .8, TALL_DROP = .08, MIN_ZOOM = .75, MAX_ZOOM = 3;
+const TALL_ASPECT = .8, TALL_LIFT = .08, MIN_ZOOM = .75, MAX_ZOOM = 3;
 function fit() {
   const w = document.documentElement.clientWidth, h = document.documentElement.clientHeight;
   if (!w || !h) return;  // detached while moving between pages: keep the last good framing
@@ -64,8 +64,8 @@ function fit() {
   const dist = Math.max(fitH, fitW, 2.5);
   camera.position.set(0, centre.y + dist * .18, centre.z + dist);
   camera.lookAt(0, centre.y - size.y * .08, centre.z);
-  // Tall (full-page) viewports: sit the rabbit lower, clear of the HP card floating at the top.
-  if (camera.aspect < TALL_ASPECT) camera.setViewOffset(w, h, 0, -h * TALL_DROP, w, h);
+  // Tall (full-page) viewports: sit the rabbit higher, clear of the health bar floating below it.
+  if (camera.aspect < TALL_ASPECT) camera.setViewOffset(w, h, 0, h * TALL_LIFT, w, h);
   else camera.clearViewOffset();
   camera.updateProjectionMatrix();
   renderer.setSize(w, h);
@@ -74,32 +74,43 @@ function fit() {
 new ResizeObserver(fit).observe(document.documentElement);
 fit();
 
-// --- Touch: one finger in the centre turns the rabbit; two fingers pinch to zoom ---
+// --- Touch: one finger in the model box turns the rabbit; two fingers pinch to zoom ---
 // camera.zoom scales the picture uniformly, so the model is never distorted.
-// TAB_EDGE and TAB_BOTTOM mirror ManiengineProtocol: outside the centre, drags belong to the tab pager.
-const TAB_EDGE = .15, TAB_BOTTOM = .2, MAX_FLING = 10, FLING_DECAY = 4, FLING_STALE_MS = 80;
+// Speeds are in viewport widths per second, so a swipe feels the same on any screen size.
+const SPEED_WINDOW_MS = 100, SLOW_SPEED = .5, FAST_SPEED = 3, SLOW_GAIN = .75, FAST_GAIN = 1.75;
+const MIN_FLING = .6, MAX_FLING = 14, FLING_DECAY = 2.5, TAB_HANDOVER_MS = 300;
 const pointers = new Map();
 let pinch = null, spin = null, spinVelocity = 0;
 const spread = () => { const [a, b] = [...pointers.values()]; return Math.max(Math.hypot(a.x - b.x, a.y - b.y), 1); };
 const startPinch = () => { pinch = pointers.size === 2 ? { spread: spread(), zoom: camera.zoom } : null; };
 const canvas = renderer.domElement;
-const inCentre = e => e.clientX >= canvas.clientWidth * TAB_EDGE && e.clientX < canvas.clientWidth * (1 - TAB_EDGE)
-  && e.clientY < canvas.clientHeight * (1 - TAB_BOTTOM);
+const inModelBox = e => {
+  const box = window.tomodoomTouchBox, x = e.clientX / canvas.clientWidth, y = e.clientY / canvas.clientHeight;
+  return !!box && x >= box.left && x < box.right && y >= box.top && y < box.bottom;
+};
+// Signed finger speed over the last moments of the drag; 0 once the finger has been held still.
+function swipeSpeed(now) {
+  spin.samples = spin.samples.filter(s => now - s.time <= SPEED_WINDOW_MS);
+  if (spin.samples.length < 2) return 0;
+  const first = spin.samples[0], latest = spin.samples[spin.samples.length - 1];
+  return (latest.x - first.x) / Math.max(latest.time - first.time, 1) * 1000 / Math.max(canvas.clientWidth, 1);
+}
+const swipeGain = speed => THREE.MathUtils.lerp(SLOW_GAIN, FAST_GAIN, THREE.MathUtils.smoothstep(Math.abs(speed), SLOW_SPEED, FAST_SPEED));
 canvas.addEventListener('pointerdown', e => {
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   startPinch();
   spinVelocity = 0;
-  spin = pointers.size === 1 && inCentre(e) ? { id: e.pointerId, x: e.clientX, time: e.timeStamp } : null;  // a second finger ends the turn
+  spin = pointers.size === 1 && inModelBox(e)  // a second finger ends the turn
+    ? { id: e.pointerId, x: e.clientX, start: e.timeStamp, startYaw: rabbit.rotation.y, samples: [{ x: e.clientX, time: e.timeStamp }] } : null;
 });
 canvas.addEventListener('pointermove', e => {
   if (!pointers.has(e.pointerId)) return;
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (spin && spin.id === e.pointerId) {
-    const turn = (e.clientX - spin.x) / Math.max(canvas.clientWidth, 1) * Math.PI * 2;  // one viewport width = one full turn
-    rabbit.rotation.y += turn;
-    spinVelocity = THREE.MathUtils.clamp(turn / Math.max(e.timeStamp - spin.time, 1) * 1000, -MAX_FLING, MAX_FLING);
+    spin.samples.push({ x: e.clientX, time: e.timeStamp });
+    const widths = (e.clientX - spin.x) / Math.max(canvas.clientWidth, 1);
+    rabbit.rotation.y += widths * Math.PI * 2 * swipeGain(swipeSpeed(e.timeStamp));
     spin.x = e.clientX;
-    spin.time = e.timeStamp;
   }
   if (!pinch) return;
   camera.zoom = THREE.MathUtils.clamp(pinch.zoom * spread() / pinch.spread, MIN_ZOOM, MAX_ZOOM);
@@ -109,7 +120,12 @@ for (const type of ['pointerup', 'pointercancel']) canvas.addEventListener(type,
   pointers.delete(e.pointerId);
   startPinch();
   if (!spin || spin.id !== e.pointerId) return;
-  if (type === 'pointercancel' || e.timeStamp - spin.time > FLING_STALE_MS) spinVelocity = 0;  // held still before lifting: no coast
+  if (type === 'pointercancel') {  // a quick flick went to the tab pager: undo its small nudge
+    if (e.timeStamp - spin.start < TAB_HANDOVER_MS) rabbit.rotation.y = spin.startYaw;
+  } else {
+    const speed = swipeSpeed(e.timeStamp), release = speed * Math.PI * 2 * swipeGain(speed);
+    spinVelocity = Math.abs(release) < MIN_FLING ? 0 : THREE.MathUtils.clamp(release, -MAX_FLING, MAX_FLING);
+  }
   spin = null;
 });
 

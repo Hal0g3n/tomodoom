@@ -19,23 +19,20 @@ import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 
-import com.example.tomodoom.BuildConfig;
 import com.example.tomodoom.R;
 import com.example.tomodoom.contracts.DoomScrollMonitor;
 import com.example.tomodoom.databinding.FragmentPetsBinding;
 import com.example.tomodoom.di.AppContainer;
 import com.example.tomodoom.di.ViewModelFactory;
-import com.example.tomodoom.model.DoomScrollEvent;
 import com.example.tomodoom.model.PetMood;
 import com.example.tomodoom.model.PetState;
 import com.example.tomodoom.ui.PetStage;
 import com.example.tomodoom.viewmodel.PetsViewModel;
 
 /**
- * Pets page (the default tab): HP header, the Usage Access prompt, the pet viewport (drawn
- * by the activity's shared pet renderer, {@link PetStage}, while this page is resumed) and, in
- * debug builds, a debug row. Customisation
- * is its own page ({@code ui.customise.CustomiseFragment}).
+ * Pets page (the default tab): the pet viewport (drawn by the activity's shared pet renderer,
+ * {@link PetStage}, while this page is resumed), the Usage Access prompt and the health bar below
+ * the pet. Customisation is its own page ({@code ui.customise.CustomiseFragment}).
  */
 public class PetsFragment extends Fragment {
 
@@ -80,7 +77,6 @@ public class PetsFragment extends Fragment {
                 .get(PetsViewModel.class);
         doomScrollMonitor = AppContainer.from(requireContext()).getDoomScrollMonitor();
 
-        setUpDebugPanel();
         binding.usageAccessButton.setOnClickListener(v ->
                 startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)));
         updateUsageAccessCard();
@@ -140,18 +136,6 @@ public class PetsFragment extends Fragment {
             default:
                 return R.string.pet_status_struggling;
         }
-    }
-
-    // ---------------------------------------------------------------------------------------
-    // Debug
-    // ---------------------------------------------------------------------------------------
-
-    private void setUpDebugPanel() {
-        binding.debugPanel.setVisibility(BuildConfig.DEBUG ? View.VISIBLE : View.GONE);
-        binding.debugDoomScroll.setText(
-                getString(R.string.debug_simulate_doom_scroll, DoomScrollEvent.DEFAULT_HP_PENALTY));
-        binding.debugDoomScroll.setOnClickListener(v -> viewModel.debugSimulateDoomScroll());
-        binding.debugReset.setOnClickListener(v -> viewModel.debugResetPet());
     }
 
     private void updateUsageAccessCard() {

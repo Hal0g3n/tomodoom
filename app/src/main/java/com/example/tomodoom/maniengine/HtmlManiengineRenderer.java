@@ -11,6 +11,8 @@ import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.MotionEvent;
+import android.view.VelocityTracker;
+import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.webkit.RenderProcessGoneDetail;
@@ -74,6 +76,9 @@ public final class HtmlManiengineRenderer implements ManiengineAssetRenderer {
     private String latestJson;
     @Nullable
     private String deliveredJson;
+    /** Last model box script sent to the loaded page. */
+    @Nullable
+    private String deliveredTouchBox;
 
     @MainThread
     @Override
@@ -153,6 +158,8 @@ public final class HtmlManiengineRenderer implements ManiengineAssetRenderer {
 
         view.setBackgroundColor(Color.TRANSPARENT); // the viewport background shows while loading
         view.setWebViewClient(new Client(context.getAssets()));
+        view.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight,
+                                        oldBottom) -> v.post(this::updateTouchBox));
 
         container.setClipToOutline(true);
         container.addView(view, webViewParams(container));
@@ -160,6 +167,7 @@ public final class HtmlManiengineRenderer implements ManiengineAssetRenderer {
         webView = view;
         pageReady = false;
         deliveredJson = null;
+        deliveredTouchBox = null;
         if (paused) {
             view.onPause();
         }
@@ -201,6 +209,7 @@ public final class HtmlManiengineRenderer implements ManiengineAssetRenderer {
         webView = null;
         pageReady = false;
         deliveredJson = null;
+        deliveredTouchBox = null;
         if (view == null) {
             return;
         }
@@ -219,6 +228,44 @@ public final class HtmlManiengineRenderer implements ManiengineAssetRenderer {
         deliveredJson = latestJson;
     }
 
+    /**
+     * Works out where drags rotate the pet: lined up with the health bar when the page has one,
+     * otherwise inset from the viewport's sides. Sends the page the box whenever it changes.
+     */
+    @MainThread
+    private void updateTouchBox() {
+        PetWebView view = webView;
+        if (view == null || !(view.getParent() instanceof ViewGroup)
+                || view.getWidth() == 0 || view.getHeight() == 0) {
+            return;
+        }
+        ViewGroup container = (ViewGroup) view.getParent();
+        int width = view.getWidth();
+        int height = view.getHeight();
+        float inset = view.getResources().getDimension(R.dimen.pet_model_box_inset);
+        float left = inset;
+        float top = 0f;
+        float right = width - inset;
+        float bottom = height * (1f - (float) ManiengineProtocol.TAB_SWIPE_BOTTOM_FRACTION);
+        ViewParent page = container.getParent();
+        View healthBar = page instanceof ViewGroup
+                ? ((ViewGroup) page).findViewById(R.id.hp_card) : null;
+        if (healthBar != null) { // the bar sits below the rabbit and stays inside the box
+            int offsetX = container.getLeft() + view.getLeft();
+            left = healthBar.getLeft() - offsetX;
+            top = inset;
+            right = healthBar.getRight() - offsetX;
+            bottom = healthBar.getBottom() - (container.getTop() + view.getTop());
+        }
+        view.setModelBox(left, top, right, bottom);
+        String script = ManiengineProtocol.touchBoxScript(left / width, top / height,
+                right / width, bottom / height);
+        if (pageReady && !script.equals(deliveredTouchBox)) {
+            view.evaluateJavascript(script, null);
+            deliveredTouchBox = script;
+        }
+    }
+
     @MainThread
     private void onPageReady(@NonNull WebView view) {
         if (view != webView) {
@@ -232,6 +279,7 @@ public final class HtmlManiengineRenderer implements ManiengineAssetRenderer {
                 webView.capturesCentre = ManiengineProtocol.TOUCH_CENTRE.equals(policy);
             }
         });
+        updateTouchBox();
         deliverIfReady();
     }
 
@@ -281,8 +329,16 @@ public final class HtmlManiengineRenderer implements ManiengineAssetRenderer {
 
         /** Page asked to keep drags (see {@link ManiengineProtocol#TOUCH_CAPTURE}). */
         boolean capturesTouch;
-        /** Page asked to keep centre drags (see {@link ManiengineProtocol#TOUCH_CENTRE}). */
+        /** Page asked to keep model box drags (see {@link ManiengineProtocol#TOUCH_CENTRE}). */
         boolean capturesCentre;
+        private float boxLeft;
+        private float boxTop;
+        private float boxRight;
+        private float boxBottom;
+        /** Measures a model box drag until it is a tab flick or too old to become one. */
+        @Nullable
+        private VelocityTracker flickTracker;
+        private long touchDownTime;
 
         PetWebView(@NonNull Context context) {
             super(context);
@@ -295,16 +351,72 @@ public final class HtmlManiengineRenderer implements ManiengineAssetRenderer {
         @Override
         public boolean dispatchTouchEvent(@NonNull MotionEvent event) {
             int action = event.getActionMasked();
-            boolean keepDrag = action == MotionEvent.ACTION_DOWN && (capturesTouch
-                    || (capturesCentre && ManiengineProtocol.isCentreZone(
-                            event.getX(), event.getY(), getWidth(), getHeight())));
-            if (action == MotionEvent.ACTION_POINTER_DOWN || keepDrag) {
-                ViewParent parent = getParent();
-                if (parent != null) {
-                    parent.requestDisallowInterceptTouchEvent(true);
+            if (action == MotionEvent.ACTION_DOWN) {
+                stopFlickTracking();
+                boolean inModelBox = capturesCentre && ManiengineProtocol.isModelBox(
+                        event.getX(), event.getY(), boxLeft, boxTop, boxRight, boxBottom);
+                if (inModelBox) {
+                    flickTracker = VelocityTracker.obtain();
+                    touchDownTime = event.getEventTime();
+                }
+                if (capturesTouch || inModelBox) {
+                    setPagerBlocked(true);
+                }
+            } else if (action == MotionEvent.ACTION_POINTER_DOWN) {
+                stopFlickTracking();
+                setPagerBlocked(true);
+            }
+            trackFlick(event, action);
+            return super.dispatchTouchEvent(event);
+        }
+
+        @Override
+        protected void onDetachedFromWindow() {
+            stopFlickTracking();
+            super.onDetachedFromWindow();
+        }
+
+        void setModelBox(float left, float top, float right, float bottom) {
+            boxLeft = left;
+            boxTop = top;
+            boxRight = right;
+            boxBottom = bottom;
+        }
+
+        /** Hands a fast flick to the pager, which then cancels this touch for the page. */
+        private void trackFlick(@NonNull MotionEvent event, int action) {
+            if (flickTracker == null) {
+                return;
+            }
+            flickTracker.addMovement(event);
+            if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                stopFlickTracking();
+            } else if (action == MotionEvent.ACTION_MOVE) {
+                long elapsed = event.getEventTime() - touchDownTime;
+                float density = getResources().getDisplayMetrics().density;
+                flickTracker.computeCurrentVelocity(1000);
+                if (ManiengineProtocol.isTabFlick(flickTracker.getXVelocity() / density,
+                        flickTracker.getYVelocity() / density, elapsed)) {
+                    stopFlickTracking();
+                    setPagerBlocked(false);
+                } else if (elapsed > ManiengineProtocol.TAB_FLICK_WINDOW_MS) {
+                    stopFlickTracking();
                 }
             }
-            return super.dispatchTouchEvent(event);
+        }
+
+        private void stopFlickTracking() {
+            if (flickTracker != null) {
+                flickTracker.recycle();
+                flickTracker = null;
+            }
+        }
+
+        private void setPagerBlocked(boolean blocked) {
+            ViewParent parent = getParent();
+            if (parent != null) {
+                parent.requestDisallowInterceptTouchEvent(blocked);
+            }
         }
     }
 

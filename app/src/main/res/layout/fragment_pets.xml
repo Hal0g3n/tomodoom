@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Pets page: the pet fills the page; the HP header, Usage Access prompt and (debug builds) debug
-     row float over it on transparent cards.
+<!-- Pets page: the pet fills the page; the Usage Access prompt (top) and health bar (bottom) float
+     over it on transparent cards.
      Customisation is its own page (fragment_customise.xml). -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -21,20 +21,20 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <!-- HP header -->
+    <!-- Health bar, below the rabbit -->
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/hp_card"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
+        android:layout_marginBottom="16dp"
         android:layout_marginStart="16dp"
         android:layout_marginEnd="16dp"
         app:cardBackgroundColor="@android:color/transparent"
         app:cardCornerRadius="16dp"
         app:cardElevation="0dp"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
         app:strokeWidth="0dp">
 
         <LinearLayout
@@ -90,7 +90,7 @@
         android:id="@+id/usage_access_card"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
+        android:layout_marginTop="16dp"
         android:layout_marginStart="16dp"
         android:layout_marginEnd="16dp"
         app:cardBackgroundColor="@android:color/transparent"
@@ -98,7 +98,7 @@
         app:cardElevation="0dp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/hp_card"
+        app:layout_constraintTop_toTopOf="parent"
         app:strokeWidth="0dp">
 
         <LinearLayout
@@ -127,39 +127,4 @@
                 app:strokeColor="@color/eggshell" />
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
-
-    <!-- Debug-only controls (shown when BuildConfig.DEBUG) -->
-    <LinearLayout
-        android:id="@+id/debug_panel"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="16dp"
-        android:layout_marginEnd="16dp"
-        android:layout_marginBottom="8dp"
-        android:orientation="horizontal"
-        android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        tools:visibility="visible">
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/debug_doom_scroll"
-            style="?attr/materialButtonOutlinedStyle"
-            app:strokeColor="@color/eggshell"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            tools:text="@string/debug_simulate_doom_scroll" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/debug_reset"
-            style="?attr/materialButtonOutlinedStyle"
-            app:strokeColor="@color/eggshell"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:layout_weight="1"
-            android:text="@string/debug_reset_pet" />
-    </LinearLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -87,14 +87,28 @@ public class ManiengineProtocolTest {
     }
 
     @Test
-    public void isCentreZone_leavesSideEdgesAndBottomStripToThePager() {
-        assertTrue(ManiengineProtocol.isCentreZone(500, 400, 1000, 1000));
-        assertTrue(ManiengineProtocol.isCentreZone(150, 0, 1000, 1000));
-        assertFalse(ManiengineProtocol.isCentreZone(149, 400, 1000, 1000));
-        assertFalse(ManiengineProtocol.isCentreZone(850, 400, 1000, 1000));
-        assertTrue(ManiengineProtocol.isCentreZone(500, 799, 1000, 1000));
-        assertFalse(ManiengineProtocol.isCentreZone(500, 800, 1000, 1000));
-        assertFalse(ManiengineProtocol.isCentreZone(0, 0, 0, 0));
+    public void isModelBox_includesTopLeftAndExcludesBottomRight() {
+        assertTrue(ManiengineProtocol.isModelBox(16, 40, 16, 40, 344, 600));
+        assertTrue(ManiengineProtocol.isModelBox(343, 599, 16, 40, 344, 600));
+        assertFalse(ManiengineProtocol.isModelBox(15, 100, 16, 40, 344, 600));
+        assertFalse(ManiengineProtocol.isModelBox(344, 100, 16, 40, 344, 600));
+        assertFalse(ManiengineProtocol.isModelBox(100, 39, 16, 40, 344, 600));
+        assertFalse(ManiengineProtocol.isModelBox(100, 600, 16, 40, 344, 600));
+    }
+
+    @Test
+    public void touchBoxScript_publishesFractions() {
+        assertEquals("window.tomodoomTouchBox={left:0.0500,top:0.0250,right:0.9500,bottom:0.8000};",
+                ManiengineProtocol.touchBoxScript(0.05f, 0.025f, 0.95f, 0.8f));
+    }
+
+    @Test
+    public void isTabFlick_needsAnEarlyFastHorizontalSwipe() {
+        assertTrue(ManiengineProtocol.isTabFlick(1200f, 0f, 200L));
+        assertTrue(ManiengineProtocol.isTabFlick(-1500f, 300f, 50L));
+        assertFalse(ManiengineProtocol.isTabFlick(1199f, 0f, 50L));
+        assertFalse(ManiengineProtocol.isTabFlick(3000f, 0f, 201L));
+        assertFalse(ManiengineProtocol.isTabFlick(1500f, 1100f, 50L));
     }
 
     @Test
@@ -105,13 +119,11 @@ public class ManiengineProtocolTest {
     }
 
     @Test
-    public void bundledEntryPage_mirrorsTheCentreTouchZone() throws Exception {
+    public void bundledEntryPage_rotatesInsideTheHostsModelBox() throws Exception {
         String html = bundledEntryPage();
         assertTrue(html.contains("<meta name=\"" + ManiengineProtocol.TOUCH_META_NAME
                 + "\" content=\"" + ManiengineProtocol.TOUCH_CENTRE + "\">"));
-        assertEquals(0.15, ManiengineProtocol.TAB_SWIPE_EDGE_FRACTION, 0);
-        assertEquals(0.20, ManiengineProtocol.TAB_SWIPE_BOTTOM_FRACTION, 0);
-        assertTrue(html.contains("TAB_EDGE = .15, TAB_BOTTOM = .2"));
+        assertTrue(html.contains("window." + ManiengineProtocol.TOUCH_BOX_GLOBAL));
     }
 
     private static String bundledEntryPage() throws Exception {

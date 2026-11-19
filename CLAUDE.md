@@ -188,14 +188,14 @@ com.example.tomodoom
     ├── PetStage                  MainActivity's ONE pet renderer, lent to the resumed page's viewport
     ├── customise/CustomiseFragment   pet preview viewport (via PetStage) + full-width slot tabs + item grid
     ├── customise/AccessoryGridAdapter, AccessoryThumbnails   two-column item circles; item ID → thumbnail
-    ├── pets/PetsFragment         full-page pet viewport (FrameLayout) under the HP header, Usage Access card, debug row
+    ├── pets/PetsFragment         full-page pet viewport (FrameLayout) under the Usage Access card and health bar
     └── chat/ChatFragment, ChatAdapter   RecyclerView (3 view types) + input bar
 ```
 
 Resources: `res/values/colors.xml` + `res/values/themes.xml` (palette and theme, §6.3; no
 `values-night/`), `res/layout/fragment_pets.xml` (a `ConstraintLayout`: a borderless `pet_viewport` fills the page, with
-`hp_card`, `usage_access_card` (Usage Access prompt, §5.3) and `debug_panel` floating over it; both cards
-are transparent),
+`usage_access_card` (Usage Access prompt, §5.3) at the top and `hp_card` (the health bar) at the bottom
+floating over it; both cards are transparent),
 `fragment_customise.xml` (`customise_header`, `pet_viewport` at 40% of the page height, `slot_tabs`,
 `item_grid` RecyclerView), `fragment_chat.xml`, `item_chat_{user,bot,system}.xml`,
 `item_accessory_circle.xml`, `res/drawable/bg_accessory_circle.xml`, `ic_item_none_24dp.xml`,
@@ -480,18 +480,24 @@ How the page is hosted (`HtmlManiengineRenderer`):
   filled slots (`hat`, `accessory`), with the catalog display name.
 - **Touch:** by default, horizontal drags on the pet swipe between tabs. A page that needs drags
   declares a policy with `<meta name="tomodoom-touch" content="…">`. `capture` keeps every drag that
-  *starts* on the viewport. `centre` (used by `index.html`) keeps only drags starting in
-  `ManiengineProtocol.isCentreZone`; the outer 15% on each side and the bottom 20% stay with the tab
-  pager. `index.html` mirrors those fractions (`TAB_EDGE`, `TAB_BOTTOM`), and `ManiengineProtocolTest`
-  fails if they drift. A centre drag turns the `rabbit` group (`rotation.y`, one viewport width = one
-  full turn) and a flick coasts to a stop; the rug stays still. A second finger always keeps the gesture in the page (`PetWebView` blocks the pager on
+  *starts* on the viewport. `centre` (used by `index.html`) keeps drags starting in the **model box**.
+  `HtmlManiengineRenderer` works the box out and publishes it as `window.tomodoomTouchBox`
+  (`{left, top, right, bottom}`, viewport fractions): on Pets its left, right and bottom line up with
+  `hp_card`, so the transparent health bar below the rabbit is inside it, and its top is
+  `@dimen/pet_model_box_inset` from the page top. Without a health bar (Customise) it starts at the top
+  with that side inset and ends 20% above the viewport's bottom.
+  Drags starting outside the box change tab at any speed. Inside it, a horizontal flick reaching
+  `ManiengineProtocol.TAB_FLICK_MIN_DP_PER_SEC` within `TAB_FLICK_WINDOW_MS` of touch-down also changes
+  tab (`isTabFlick`). Other drags turn the `rabbit` group (`rotation.y`): `index.html` measures finger
+  speed over the last 100 ms, so slow drags are precise, fast ones turn further and the release speed
+  sets how far it coasts. The rug stays still. A second finger always keeps the gesture in the page (`PetWebView` blocks the pager on
   `ACTION_POINTER_DOWN`), which is how `index.html` pinch-zooms (`camera.zoom`, 0.75x to 3x).
 - The page talks only one way (app → page). If it ever needs to call back (e.g. "item tapped"),
   extend `ManiengineProtocol` and this section together.
 - **Layout note:** there is **one** WebView, moved (not reloaded) between two viewports: the large
   one on Pets and a preview at 40% of the page height on Customise, above the slot tabs and item
-  circles. On Pets the cards and debug row float over the pet, so `fit()` sits the rabbit lower in tall
-  viewports. The page is resized on each move, so it must refit to any size without distorting the
+  circles. On Pets the cards float over the pet, so `fit()` sits the rabbit higher in tall viewports,
+  clear of the health bar below it. The page is resized on each move, so it must refit to any size without distorting the
   model (`index.html` does, with a `ResizeObserver` calling `fit()`). The page that isn't shown has an empty viewport, and
   while you drag between pages the incoming viewport stays empty until the swipe settles.
 - **Acceptance:** equipping/unequipping on the Customise tab updates the viewport immediately. Rotating
@@ -735,7 +741,7 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
   The app is **light only**: don't add `values-night/` resources. Colours follow §6.3.
 - **No action bar:** the theme is `NoActionBar`, so `getSupportActionBar()` returns `null`; don't
   rely on it. Each page draws its own header
-  (the HP card on Pets, a title on Customise); content starts right under the status bar.
+  (the health bar below the pet on Pets, a title on Customise); content starts right under the status bar.
 - **Top-level pages (`ViewPager2`):** there is no Jetpack Navigation. `MainActivity` hosts the pages
   in `main_pager` and keeps it in sync with `nav_view` both ways. `viewpager2` (1.1.0-beta02) comes
   in transitively from Material, like drawerlayout, so don't pin it. Rules:
@@ -751,8 +757,9 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
   - ViewPager2 restores its page **without** calling `onPageSelected`, so `MainActivity` re-syncs
     the bottom nav and Back callback in `onRestoreInstanceState`.
   - A child that needs horizontal drags calls `getParent().requestDisallowInterceptTouchEvent(true)`
-    on `ACTION_DOWN` (as the Maniengine WebView does for its `tomodoom-touch` policy). If a whole page
-    ever needs to suspend swiping, add a host callback calling `ViewPager2.setUserInputEnabled`
+    on `ACTION_DOWN` (as the Maniengine WebView does for its `tomodoom-touch` policy). To give a drag
+    back mid-gesture, call it with `false`: the pager takes over on the next move and the child gets
+    `ACTION_CANCEL` (how a tab flick on the pet works). If a whole page ever needs to suspend swiping, add a host callback calling `ViewPager2.setUserInputEnabled`
     (the old `PageSwipeHost` did this for the removed customisation drawer).
 - **Bottom bar:** `labelVisibilityMode="selected"` makes Material widen the open tab and show only
   its label. `MainActivity.emphasiseNavIcon` adds the icon scale and lift. It finds the icon by type
@@ -923,8 +930,6 @@ for your feature) as "manual verification needed", and add those new steps to §
 Debug helpers available in the debug build:
 - **Mock chat commands:** `quiz` (new quiz), `help`, `/tool <name> key=value …` (calls an MCP tool
   as if the backend had), anything else is echoed back.
-- **Pets debug row** (`BuildConfig.DEBUG` only): *Simulate doom-scroll* (goes through
-  `DoomScrollHpBridge`) and *Reset pet*.
 - **`StubDoomScrollMonitor.simulateDoomScroll(pkg, durationMs, penalty)`:** tests the
   monitor → listener path in code.
 - **Logcat tags:** `PetStateRepository` (every HP change with its reason), `ChatRepository`,
@@ -937,11 +942,11 @@ Debug helpers available in the debug build:
 0. Fresh install: the onboarding screen shows "Meet your new
    pet" with the name field prefilled with `Tomo`. Clearing it disables **Start**; the counter caps
    at 20. Type `Mochi` and tap **Start** (or the keyboard's Done): the Pets tab opens and its
-   header shows `Mochi`. Rotation keeps the typed text. Relaunching skips onboarding. (The steps
+   health bar shows `Mochi`. Rotation keeps the typed text. Relaunching skips onboarding. (The steps
    below assume you kept `Tomo`.)
-1. Launch the app. The **Pets** tab has **no action bar** (the HP card sits right under the status
-   bar) and shows `Tomo`, **HP 50 / 100** and status "Okay". Until Usage Access is granted, a Usage Access card with an **Enable** button
-   sits under the HP card (it disappears once access is granted). The bottom bar shows three icons (Customise, Pets, Chat). Pets is open: its tile is wider, its icon is larger and only it shows a label.
+1. Launch the app. The **Pets** tab has **no action bar** and no debug buttons. The health bar sits below
+   the rabbit and shows `Tomo`, **HP 50 / 100** and status "Okay". Until Usage Access is granted, a Usage Access card with an **Enable** button
+   sits at the top of the page (it disappears once access is granted). The bottom bar shows three icons (Customise, Pets, Chat). Pets is open: its tile is wider, its icon is larger and only it shows a label.
 2. Swipe right (or tap **Customise**). The Customise page shows "Customise pet", a pet preview and
    full-width Hat / Accessory tabs above a two-column grid of circles showing each item's model
    (None first). Tap the **Cap** circle on the Hat tab: its ring darkens and the preview (the 3D
@@ -951,21 +956,24 @@ Debug helpers available in the debug build:
    lists a single page target. Also check:
    - the selected slot tab and the current page survive rotation;
    - Back on Customise or Chat returns to Pets; Back on Pets leaves the app;
-   - **Swiping:** from Pets, starting on a side edge or the bottom strip of the page, swipe left to
-     Chat and right to Customise. The bottom nav selection follows.
-   - **Rotating:** on Pets and Customise, a one-finger drag starting in the centre of the pet turns
-     it both ways without changing page, and a flick coasts to a stop. The rug stays still, worn items
-     turn with the rabbit, and the angle is kept when moving between the two pages.
+   - **Swiping:** from Pets, swipe left to Chat and right to Customise, either from the 16dp page
+     margins at any speed, or with a fast flick anywhere on the pet. The bottom nav
+     selection follows, and the flick doesn't leave the rabbit turned.
+   - **Rotating:** on Pets and Customise, a slower one-finger drag inside the model box (on Pets this
+     includes the health bar) turns the pet both ways without changing page. Slow drags are precise,
+     faster ones turn further, and the release speed sets how far it coasts. Starting slowly then
+     speeding up stays on the page. The rug stays still, worn items turn with the rabbit, and the angle
+     is kept when moving between the two pages. The Usage Access button still responds.
    - On Pets the pet has no border and fills the page behind transparent cards. Pinching with two
      fingers zooms it evenly (0.75x to 3x) without changing page.
    - Mood: HP ≥ the thriving threshold makes the rabbit hop, struggling droops its head and
-     desaturates, and 0 HP (Simulate doom-scroll repeatedly) tips it over in grey.
+     desaturates, and 0 HP tips it over in grey. Only real doom-scroll detection lowers HP in the app.
 3. Open **Chat**. There is no action bar; the transcript starts right under the status bar. The mock bot greets you. Type `quiz`, and the bot asks a question (e.g. "What is 2 + 2?").
 4. Answer correctly (`4`). The bot confirms, and a SYSTEM message shows **"+10 HP awarded via MCP! (60/100 HP)"**.
 5. Switch to **Pets**: **HP 60 / 100**.
 6. In Chat, type `/tool get_pet_state` (or `/tool award_hp amount=5`). A SYSTEM message shows the MCP result.
-7. Pets debug row: **Simulate doom-scroll** → HP −5. **Reset pet** → back to 50/100, nothing equipped, name unchanged.
-8. Kill and relaunch the app. HP and equipped items persist (SharedPreferences). Onboarding doesn't show again, even if you used **Reset pet** in step 7. The chat transcript resets (in memory only).
+7. On **Customise**, equip an item and note the current HP.
+8. Kill and relaunch the app. HP and equipped items persist (SharedPreferences). Onboarding doesn't show again. The chat transcript resets (in memory only). To start over, clear the app's data in Android Settings.
 
 **Kafka (real LLM)**: build with `TRUFAR_LLM_URL`/`TRUFAR_LLM_API_KEY` set (§5.2):
 
@@ -1008,7 +1016,7 @@ Update this table in the same commit when your task changes a subsystem's status
 |---|---|---|
 | Pet state + persistence | ✅ Done | `PetStateRepository` |
 | MCP tool bridge | ✅ Production-capable default | `DefaultMcpPetActionHandler` |
-| Pets UI (HP header, pet viewport, debug row) | ✅ Skeleton done | `PetsFragment` / `PetsViewModel` |
+| Pets UI (pet viewport, health bar below the pet) | ✅ Skeleton done | `PetsFragment` / `PetsViewModel` |
 | Customise UI (pet preview, slot tabs, item circle grid) | ✅ Skeleton done | `CustomiseFragment` / `CustomiseViewModel` |
 | Onboarding (name the pet) | ✅ Done | `OnboardingActivity` / `OnboardingViewModel` |
 | Chat UI | ✅ Skeleton done | `ChatFragment` / `ChatViewModel` / `ChatRepository` |
@@ -1028,5 +1036,7 @@ Known gaps and TODOs (not assigned to anyone yet):
   lifetime. Real backends must use globally unique quiz IDs.
 - Non-UI user-facing text (MCP results, chat notices, mock bot) is inline English, not in `strings.xml`.
 - Nothing happens yet when HP reaches 0 beyond the "Fainted" status label.
+- The app has no built-in way to lower HP or reset the pet for manual testing. Use real doom-scroll
+  detection, or clear the app's data to start over.
 - No instrumented/UI tests yet. JVM tests only (`model`, `doomscroll`, `trufar`, `maniengine`),
   plus pytest for `backend/`.

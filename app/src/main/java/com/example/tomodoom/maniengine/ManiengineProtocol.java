@@ -30,8 +30,9 @@ import java.util.Map;
  *
  * <p>The page opts in to keeping horizontal drags (e.g. orbit controls), instead of letting them
  * swipe between tabs, with {@code <meta name="tomodoom-touch" content="capture">} (every drag that
- * starts on it) or {@code content="centre"} (only drags starting in {@link #isCentreZone}, leaving
- * the side edges and bottom strip to the tab pager).</p>
+ * starts on it) or {@code content="centre"} (only drags starting in the model box, leaving the rest
+ * of the viewport to the tab pager). Under {@code centre} the host publishes the box with
+ * {@link #touchBoxScript}, and a fast flick inside it still changes tab ({@link #isTabFlick}).</p>
  */
 public final class ManiengineProtocol {
 
@@ -43,12 +44,18 @@ public final class ManiengineProtocol {
     public static final String TOUCH_META_NAME = "tomodoom-touch";
     /** {@code content} value meaning "the page keeps all drags that start on it". */
     public static final String TOUCH_CAPTURE = "capture";
-    /** {@code content} value meaning "the page keeps drags that start in the centre zone". */
+    /** {@code content} value meaning "the page keeps slower drags that start in the model box". */
     public static final String TOUCH_CENTRE = "centre";
-    /** Width of each side strip left to the tab pager, as a fraction of the viewport width. */
-    public static final double TAB_SWIPE_EDGE_FRACTION = 0.15;
+    /** Global holding the model box as viewport fractions: {@code {left, top, right, bottom}}. */
+    public static final String TOUCH_BOX_GLOBAL = "tomodoomTouchBox";
     /** Height of the bottom strip left to the tab pager, as a fraction of the viewport height. */
     public static final double TAB_SWIPE_BOTTOM_FRACTION = 0.20;
+    /** Horizontal speed from which a drag in the model box is a tab flick. */
+    public static final float TAB_FLICK_MIN_DP_PER_SEC = 1200f;
+    /** A flick must reach that speed this soon after touching down; later drags stay rotations. */
+    public static final long TAB_FLICK_WINDOW_MS = 200L;
+    /** A flick's horizontal speed must exceed its vertical speed by this factor. */
+    private static final float TAB_FLICK_HORIZONTAL_RATIO = 1.5f;
 
     /** Evaluates to the page's {@link #TOUCH_META_NAME} content, or {@code ""}. */
     public static final String TOUCH_POLICY_QUERY =
@@ -122,14 +129,31 @@ public final class ManiengineProtocol {
         return v.toLowerCase(Locale.ROOT);
     }
 
+    /** @return true if ({@code x}, {@code y}) is in the box; left/top inclusive, right/bottom not. */
+    public static boolean isModelBox(float x, float y,
+                                     float left, float top, float right, float bottom) {
+        return x >= left && x < right && y >= top && y < bottom;
+    }
+
+    /** @return JavaScript publishing the model box to the page, as viewport fractions. */
+    @NonNull
+    public static String touchBoxScript(float left, float top, float right, float bottom) {
+        return String.format(Locale.ROOT,
+                "window.%s={left:%.4f,top:%.4f,right:%.4f,bottom:%.4f};",
+                TOUCH_BOX_GLOBAL, left, top, right, bottom);
+    }
+
     /**
-     * @return true if a touch at ({@code x}, {@code y}) in a {@code width} × {@code height} viewport
-     * belongs to the page under {@link #TOUCH_CENTRE}. {@code index.html} mirrors this test.
+     * @param velocityXDp horizontal finger speed in dp per second (either direction).
+     * @param velocityYDp vertical finger speed in dp per second (either direction).
+     * @param elapsedMs   time since the finger touched down.
+     * @return true if a drag in the model box should change tab instead of rotating the pet.
      */
-    public static boolean isCentreZone(float x, float y, int width, int height) {
-        return x >= width * TAB_SWIPE_EDGE_FRACTION
-                && x < width * (1 - TAB_SWIPE_EDGE_FRACTION)
-                && y < height * (1 - TAB_SWIPE_BOTTOM_FRACTION);
+    public static boolean isTabFlick(float velocityXDp, float velocityYDp, long elapsedMs) {
+        float speedX = Math.abs(velocityXDp);
+        return elapsedMs <= TAB_FLICK_WINDOW_MS
+                && speedX >= TAB_FLICK_MIN_DP_PER_SEC
+                && speedX >= Math.abs(velocityYDp) * TAB_FLICK_HORIZONTAL_RATIO;
     }
 
     /** JSON string literal; also escapes U+2028/2029 and '<' so the JSON is safe inline in JS. */
