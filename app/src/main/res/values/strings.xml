@@ -21,6 +21,18 @@
     <string name="item_none">None</string>
     <string name="usage_access_explanation">Allow Usage Access so Tomodoom can notice portrait scrolling in social and video apps. Your pet loses 1 HP for every minute of scrolling.</string>
     <string name="usage_access_open_settings">Enable</string>
+    <string name="usage_access_watching">Only scrolling in the apps you choose costs HP.</string>
+    <string name="usage_access_choose_apps">Choose apps</string>
+
+    <!-- Watched-apps picker -->
+    <string name="watched_apps_title">Watched apps</string>
+    <string name="watched_apps_explanation">Your pet only loses HP while you scroll in the apps switched on here. Time in any other app, like work or study apps, never counts.</string>
+    <string name="watched_apps_loading">Loading your apps</string>
+    <string name="watched_apps_empty">No apps found</string>
+    <plurals name="watched_apps_summary">
+        <item quantity="one">%d app watched</item>
+        <item quantity="other">%d apps watched</item>
+    </plurals>
 
     <!-- Doom-scroll notifications -->
     <string name="doom_scroll_monitor_channel">Scroll monitoring</string>

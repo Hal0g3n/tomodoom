@@ -13,6 +13,8 @@ import com.example.tomodoom.contracts.ManiengineAssetRenderer;
 import com.example.tomodoom.contracts.McpPetActionHandler;
 import com.example.tomodoom.contracts.ChatService;
 import com.example.tomodoom.doomscroll.DoomScrollNotifier;
+import com.example.tomodoom.doomscroll.LauncherAppsQuery;
+import com.example.tomodoom.model.InstalledApp;
 import com.example.tomodoom.doomscroll.UsageStatsDoomScrollMonitor;
 import com.example.tomodoom.maniengine.HtmlManiengineRenderer;
 import com.example.tomodoom.repository.ChatRepository;
@@ -20,9 +22,13 @@ import com.example.tomodoom.repository.DoomScrollHpBridge;
 import com.example.tomodoom.repository.PetStateRepository;
 import com.example.tomodoom.repository.StatsRecordingDoomScrollListener;
 import com.example.tomodoom.repository.StatsRepository;
+import com.example.tomodoom.repository.WatchedAppsRepository;
 import com.example.tomodoom.stubs.DefaultMcpPetActionHandler;
 import com.example.tomodoom.stubs.MockChatService;
 import com.example.tomodoom.chat.GeminiChatService;
+
+import java.util.List;
+import java.util.function.Supplier;
 
 /**
  * Hand-written service locator: the <b>only</b> place where concrete implementations are chosen.
@@ -54,6 +60,10 @@ public final class AppContainer {
     private final DoomScrollHpBridge doomScrollHpBridge;
     @NonNull
     private final DoomScrollMonitor doomScrollMonitor;
+    @NonNull
+    private final WatchedAppsRepository watchedAppsRepository;
+    @NonNull
+    private final Supplier<List<InstalledApp>> installedAppsSource;
 
     public AppContainer(@NonNull Context context) {
         Context appContext = context.getApplicationContext();
@@ -81,8 +91,13 @@ public final class AppContainer {
 
         chatRepository = new ChatRepository(chatService, mcpPetActionHandler);
 
+        // The apps the user chose to watch; only time in them can cost HP.
+        watchedAppsRepository = new WatchedAppsRepository(appContext);
+        installedAppsSource = new LauncherAppsQuery(appContext);
+
         // SWAP POINT (Doom Scroll Agent): Usage Access-based foreground-app session detector.
-        doomScrollMonitor = new UsageStatsDoomScrollMonitor(appContext);
+        doomScrollMonitor = new UsageStatsDoomScrollMonitor(appContext,
+                watchedAppsRepository::getCurrent);
 
         // Doom-scroll detections → HP loss. Keep this wiring when swapping the monitor.
         doomScrollHpBridge = new DoomScrollHpBridge(petStateRepository);
@@ -137,6 +152,17 @@ public final class AppContainer {
     @NonNull
     public DoomScrollMonitor getDoomScrollMonitor() {
         return doomScrollMonitor;
+    }
+
+    @NonNull
+    public WatchedAppsRepository getWatchedAppsRepository() {
+        return watchedAppsRepository;
+    }
+
+    /** The launcher apps the watched-apps picker offers. Blocking: call it off the main thread. */
+    @NonNull
+    public Supplier<List<InstalledApp>> getInstalledAppsSource() {
+        return installedAppsSource;
     }
 
     /**
