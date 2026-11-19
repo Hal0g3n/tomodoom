@@ -233,7 +233,9 @@ thumbnail tool; `PETS` profiles per model), `models/rabbit.js` and `models/cat.j
 and scene-5 exports) and `vendor/three/` (three.js 0.187.0).
 Tools: `tools/maniengine/extract_model.py` (+ `source/scene-3.html`, `source/scene-5.html`), `make_thumbnails.py` (+ `thumbnails.html`);
 `tools/launcher_icon/make_launcher_icon.py` (+ `logo.svg`, the app logo) regenerates every launcher-icon file
-listed above (needs `rsvg-convert` and Pillow; WSL has both). Edit the logo, then re-run it.
+listed above, plus the GENERATED full-bleed PNGs `app/src/main/ic_launcher-playstore.png` (512px, Play
+Store; outside `res/`, so not packaged) and `tools/launcher_icon/export/ic_launcher-{1024,2048}.png`
+(`EXPORTS`, for stores, splash art and large-icon launchers) (needs `rsvg-convert` and Pillow; WSL has both). Edit the logo, then re-run it.
 
 ### Dependency direction (enforced by convention)
 
@@ -891,6 +893,9 @@ Rules:
   `ic_notification.xml` is that same line work cropped to the phone at 24dp and painted
   `@android:color/white`: status-bar icons are alpha-only and tinted by the system, so it's the one
   drawable that uses a framework colour instead of a palette token.
+  The large PNG exports flatten the adaptive icon (eggshell square, phone at the 108dp framing) with no
+  alpha; Play rounds the corners itself. The in-app icons on API 26+ are vectors, so they're sharp at any
+  launcher size; only the API 24–25 webps are fixed-size (up to xxxhdpi, 192px).
 
 **Typography.** All UI text is **Playpen Sans**; user and bot chat bubbles use **Unkempt**
 (`Widget.Tomodoom.ChatBubble`, applied with `style=`: Unkempt Bold, 17sp from its text appearance). SYSTEM chat

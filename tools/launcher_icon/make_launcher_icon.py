@@ -9,6 +9,9 @@ Writes (all GENERATED, never edit by hand):
   res/drawable/ic_notification.xml          notification small icon: the monochrome line work, cropped
                                             to the phone and painted white (status-bar icons are
                                             alpha-only, so this is the one non-palette colour)
+  app/src/main/ic_launcher-playstore.png    512px Play Store icon: full-bleed eggshell square, phone at the
+                                            adaptive icon's framing (Play rounds the corners itself)
+  tools/launcher_icon/export/ic_launcher-<n>.png   the same artwork at larger sizes (EXPORTS)
 
 The adaptive background is @color/launcher_background (eggshell): the launcher mask replaces the
 logo's floral-white field and emblem square. Needs rsvg-convert and Pillow.
@@ -32,6 +35,7 @@ BACKDROP = 2                  # first two top-level shapes: the floral-white fie
 EMBLEM = (140, 232)           # emblem x/y and size in logo units; it maps onto the 72dp visible area
 PHONE_SPAN = 184              # square around the phone frame (outer edge 179 units tall) for the 24dp icon
 JET = "#383A3D"
+EXPORTS = (1024, 2048)        # extra full-bleed PNG sizes for stores, splash art and large-icon launchers
 DENSITIES = {"mdpi": 48, "hdpi": 72, "xhdpi": 96, "xxhdpi": 144, "xxxhdpi": 192}
 ANDROID = "http://schemas.android.com/apk/res/android"
 PALETTE = {"#FBF7EF": "floral_white", "#F7F0DE": "eggshell", "#585B5E": "charcoal", JET: "jet",
@@ -117,10 +121,27 @@ def legacy_svg(root, round_icon):
     return ET.tostring(svg)
 
 
+def full_bleed_svg(root):
+    """The adaptive icon flattened: eggshell square under the phone, framed like the 108dp canvas."""
+    svg = copy.deepcopy(root)
+    for el in [e for e in svg if tag(e) != "defs"][:BACKDROP]:
+        svg.remove(el)
+    span = EMBLEM[1] * 108 / 72
+    offset = 256 - span / 2
+    svg.set("viewBox", f"{offset:g} {offset:g} {span:g} {span:g}")
+    svg.insert(1, ET.Element(f"{{{SVG_NS}}}rect", x=f"{offset:g}", y=f"{offset:g}", width=f"{span:g}",
+                             height=f"{span:g}", fill="#F7F0DE"))
+    return ET.tostring(svg)
+
+
 def render(svg_bytes, size, out):
     png = subprocess.run(["rsvg-convert", "-w", str(size), "-h", str(size)], input=svg_bytes,
                          capture_output=True, check=True).stdout
-    Image.open(io.BytesIO(png)).save(out, "WEBP", lossless=True)
+    image = Image.open(io.BytesIO(png))
+    if out.suffix == ".webp":
+        image.save(out, "WEBP", lossless=True)
+    else:
+        image.convert("RGB").save(out, "PNG", optimize=True)  # full-bleed: no alpha (Play requirement)
 
 
 def main():
@@ -133,7 +154,13 @@ def main():
         folder = RES / f"mipmap-{density}"
         render(legacy_svg(root, False), size, folder / "ic_launcher.webp")
         render(legacy_svg(root, True), size, folder / "ic_launcher_round.webp")
-    print("make_launcher_icon: wrote the adaptive layers and", 2 * len(DENSITIES), "legacy icons + the notification icon")
+    flat = full_bleed_svg(root)
+    render(flat, 512, RES.parent / "ic_launcher-playstore.png")
+    (HERE / "export").mkdir(exist_ok=True)
+    for size in EXPORTS:
+        render(flat, size, HERE / "export" / f"ic_launcher-{size}.png")
+    print("make_launcher_icon: wrote the adaptive layers,", 2 * len(DENSITIES), "legacy icons, the notification"
+          " icon, the Play Store icon and", len(EXPORTS), "large exports")
 
 
 if __name__ == "__main__":
