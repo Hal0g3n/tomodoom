@@ -139,7 +139,8 @@ com.example.tomodoom
 │   ├── McpToolResult             success, message, data map
 │   ├── DoomScrollEvent           sourcePackage, durationMillis, hpPenalty, timestamp
 │   ├── WatchedApps               default watched-app package IDs + set/sort helpers for the picker
-│   └── InstalledApp              packageName, label (a launcher app in the watched-apps picker)
+│   ├── InstalledApp              packageName, label (a launcher app in the watched-apps picker)
+│   └── ChatTextScale             chat text sizes offered in Settings (0.8–1.5×, default 1.0) + snapping
 │
 ├── contracts/                    Interfaces that downstream agents implement (see §4)
 │   ├── ManiengineAssetRenderer
@@ -157,6 +158,7 @@ com.example.tomodoom
 │   ├── DoomScrollHpBridge        DoomScrollListener → PetStateRepository.decreaseHp(...)
 │   ├── InactivityDecayPolicy     pure Java: HP lost to time away (30 min grace, keeps 70% per 8 h)
 │   ├── InactivityDecayTracker    time away (prefs tomodoom_decay) → decreaseHp on return + notice
+│   ├── SettingsRepository        Settings page preferences (prefs `tomodoom_settings` + LiveData): chat text scale
 │   ├── WatchedAppsRepository     the user's watched apps (prefs `tomodoom_doomscroll` + LiveData); read by the monitor
 │   ├── StatsRepository           Stats page history (prefs `tomodoom_stats` + LiveData<StatsSnapshot>)
 │   └── StatsRecordingDoomScrollListener   records each DoomScrollEvent in StatsRepository, then forwards
@@ -351,6 +353,9 @@ ui  ──►  viewmodel  ──►  repository  ──►  contracts  ◄──
     the onboarding flag; `completeOnboarding` also sets the name (validate it with
     `PetNames.normalize`) and the `PetSpecies` (unknown → default). A one-argument overload keeps
     the current species. `resetPetState()` keeps the species too.
+  - `PetState renamePet(String petName)` / `PetState changeSpecies(String species)`: the Settings
+    page's edits. They keep HP, equipped items and the onboarding flag; validate the name with
+    `PetNames.normalize` first (empty throws), and an unknown species becomes the default.
 - Persistence: prefs file **`tomodoom_pet_state`**, keys `pet_name`, `current_hp`, `max_hp`,
   `equipped.<slotId>`, `onboarding_complete`, `pet_species` (a `PetSpecies` ID; missing or unknown →
   `rabbit`). **Only `PetStateRepository` may read or write this file.** A write that
@@ -425,6 +430,8 @@ ui  ──►  viewmodel  ──►  repository  ──►  contracts  ◄──
   through `StatsRecordingDoomScrollListener`. The hidden reset wipes it with everything else.
   `DoomScrollLog` splits sessions on gaps over 2 minutes (the monitor reports one event per counted
   minute), so its "session" is wall-clock span, while the per-day minutes are counted time.
+- `SettingsRepository` owns prefs file **`tomodoom_settings`**, key `chat_text_scale` (float, a
+  `ChatTextScale` step; missing → 1.0, other values snap to the nearest step). Same §3.2 rules.
 - ViewModels hold only UI state (e.g. the selected customisation tab). Domain state lives in
   repositories.
 

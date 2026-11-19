@@ -215,6 +215,55 @@ public final class PetStateRepository {
     }
 
     /**
+     * Renames the pet (the Settings page). HP, equipped items, species and the onboarding flag
+     * are kept.
+     *
+     * @param petName the new name; the caller validates it with
+     *                {@link com.example.tomodoom.model.PetNames#normalize(String)}.
+     * @return the new snapshot.
+     * @throws IllegalArgumentException if {@code petName} is empty.
+     */
+    @AnyThread
+    @NonNull
+    public PetState renamePet(@NonNull String petName) {
+        if (petName.isEmpty()) {
+            throw new IllegalArgumentException("petName must be non-empty");
+        }
+        synchronized (lock) {
+            PetState next = current.withName(petName);
+            if (next.equals(current)) {
+                return current;
+            }
+            prefs.edit().putString(KEY_PET_NAME, petName).apply();
+            Log.i(TAG, "pet renamed");
+            publishLocked(next);
+            return next;
+        }
+    }
+
+    /**
+     * Switches the pet to another species (the Settings page). HP, equipped items, name and the
+     * onboarding flag are kept.
+     *
+     * @param species a {@link PetSpecies} ID; an unknown one becomes {@link PetSpecies#DEFAULT}.
+     * @return the new snapshot.
+     */
+    @AnyThread
+    @NonNull
+    public PetState changeSpecies(@Nullable String species) {
+        synchronized (lock) {
+            PetState next = current.withPetSpecies(species);
+            if (next.equals(current)) {
+                return current;
+            }
+            prefs.edit().putString(KEY_PET_SPECIES, next.getPetSpecies()).apply();
+            Log.i(TAG, "species = " + next.getPetSpecies());
+            publishLocked(next);
+            return next;
+        }
+    }
+
+    /**
      * Restores the default HP and unequips everything. The pet's name, species and the onboarding
      * flag are kept, because onboarding only runs once.
      *

@@ -21,6 +21,7 @@ import com.example.tomodoom.repository.ChatRepository;
 import com.example.tomodoom.repository.DoomScrollHpBridge;
 import com.example.tomodoom.repository.InactivityDecayTracker;
 import com.example.tomodoom.repository.PetStateRepository;
+import com.example.tomodoom.repository.SettingsRepository;
 import com.example.tomodoom.repository.StatsRecordingDoomScrollListener;
 import com.example.tomodoom.repository.StatsRepository;
 import com.example.tomodoom.repository.WatchedAppsRepository;
@@ -69,12 +70,17 @@ public final class AppContainer {
     private final WatchedAppsRepository watchedAppsRepository;
     @NonNull
     private final Supplier<List<InstalledApp>> installedAppsSource;
+    @NonNull
+    private final SettingsRepository settingsRepository;
 
     public AppContainer(@NonNull Context context) {
         Context appContext = context.getApplicationContext();
 
         // Single source of truth for pet state. Never replace or duplicate it.
         petStateRepository = new PetStateRepository(appContext);
+
+        // Settings page preferences (chat text size).
+        settingsRepository = new SettingsRepository(appContext);
 
         // Stats page history: HP changes, LLM tokens and doom-scrolling are recorded here.
         statsRepository = new StatsRepository(appContext, petStateRepository.getCurrentState());
@@ -136,6 +142,11 @@ public final class AppContainer {
     @NonNull
     public PetStateRepository getPetStateRepository() {
         return petStateRepository;
+    }
+
+    @NonNull
+    public SettingsRepository getSettingsRepository() {
+        return settingsRepository;
     }
 
     @NonNull
