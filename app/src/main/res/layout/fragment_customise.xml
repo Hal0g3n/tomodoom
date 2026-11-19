@@ -8,28 +8,17 @@
     android:padding="16dp"
     tools:context=".ui.customise.CustomiseFragment">
 
-    <TextView
-        android:id="@+id/customise_header"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:text="@string/customise_title"
-        android:textAppearance="?attr/textAppearanceHeadline6"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
-
     <!-- Pet preview: owned entirely by ManiengineAssetRenderer. Add no children here. -->
     <FrameLayout
         android:id="@+id/pet_viewport"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_marginTop="12dp"
         android:background="@drawable/bg_pet_viewport"
         android:contentDescription="@string/pet_viewport_description"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintHeight_percent="0.4"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/customise_header" />
+        app:layout_constraintTop_toTopOf="parent" />
 
     <com.google.android.material.tabs.TabLayout
         android:id="@+id/slot_tabs"
