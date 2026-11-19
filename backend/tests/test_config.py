@@ -3,7 +3,8 @@ import pytest
 from config import Config
 
 ENV_NAMES = ("TOMODOOM_STORE", "GOOGLE_APPLICATION_CREDENTIALS", "K_SERVICE", "BACKEND_TOKEN",
-             "MCP_KEY", "TRUFAR_CONVERSATION_ID", "TRUFAR_COOKIE", "TRUFAR_BASE_URL")
+             "MCP_KEY", "TRUFAR_CONVERSATION_ID", "TRUFAR_COOKIE", "TRUFAR_BASE_URL",
+             "FIREBASE_SERVICE_ACCOUNT")
 
 
 @pytest.fixture(autouse=True)
@@ -28,6 +29,13 @@ def test_cloud_run_uses_firestore(monkeypatch):
 def test_key_file_uses_firestore(monkeypatch):
     monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", "/secrets/key.json")
     assert Config.from_env().store == "firestore"
+
+
+def test_service_account_env_uses_firestore(monkeypatch):
+    monkeypatch.setenv("FIREBASE_SERVICE_ACCOUNT", '{"type": "service_account"}')
+    config = Config.from_env()
+    assert config.store == "firestore"
+    assert config.firebase_service_account == '{"type": "service_account"}'
 
 
 def test_explicit_store_wins(monkeypatch):

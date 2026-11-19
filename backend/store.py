@@ -13,6 +13,7 @@ Layout (Firestore):
 
 from __future__ import annotations
 
+import json
 import threading
 import time
 import uuid
@@ -141,13 +142,21 @@ class MemoryStore(Store):
 class FirestoreStore(Store):
     """Firestore-backed store, safe across processes (all lease changes are transactions)."""
 
-    def __init__(self) -> None:
+    def __init__(self, service_account_json: str = "") -> None:
+        # Validate the key first, so a bad paste is reported even before the SDK loads.
+        key_info = parse_service_account(service_account_json) if service_account_json else None
         # Imported lazily so tests and local runs don't need the Firebase SDK installed.
         import firebase_admin
-        from firebase_admin import firestore
+        from firebase_admin import credentials, firestore
 
         if not firebase_admin._apps:
-            firebase_admin.initialize_app()  # credentials from GOOGLE_APPLICATION_CREDENTIALS
+            if key_info is not None:
+                # Hosts without a file system for a key file (Vercel): the JSON is an env var.
+                firebase_admin.initialize_app(credentials.Certificate(key_info))
+            else:
+                # Application Default Credentials: GOOGLE_APPLICATION_CREDENTIALS key file,
+                # or the service's own account on Google Cloud (Cloud Run).
+                firebase_admin.initialize_app()
         self._firestore = firestore
         self._db = firestore.client()
         self._lease_ref = self._db.collection("relay").document("current")
@@ -220,9 +229,23 @@ class FirestoreStore(Store):
             {"awarded": awarded, "amount": amount, "reason": reason, "at": time.time()})
 
 
-def create_store(kind: str) -> Store:
+def parse_service_account(value: str) -> dict:
+    """Parses the FIREBASE_SERVICE_ACCOUNT env var. Errors never include the (secret) value."""
+    try:
+        info = json.loads(value)
+    except ValueError:
+        raise ValueError("FIREBASE_SERVICE_ACCOUNT is not valid JSON; paste the whole "
+                         "service-account key file") from None
+    if not isinstance(info, dict) or info.get("type") != "service_account" or \
+            not info.get("private_key") or not info.get("client_email"):
+        raise ValueError("FIREBASE_SERVICE_ACCOUNT is not a Firebase service-account key "
+                         "(expected type, private_key and client_email)")
+    return info
+
+
+def create_store(kind: str, service_account_json: str = "") -> Store:
     if kind == "firestore":
-        return FirestoreStore()
+        return FirestoreStore(service_account_json)
     if kind == "memory":
         return MemoryStore()
     raise ValueError("TOMODOOM_STORE must be 'firestore' or 'memory', not %r" % kind)

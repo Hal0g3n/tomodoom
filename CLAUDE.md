@@ -582,11 +582,17 @@ in `backend/README.md`.
 - Secrets come from **Secret Manager** as env vars: `backend-token` → `BACKEND_TOKEN`,
   `mcp-key` → `MCP_KEY`, `trufar-cookie` → `TRUFAR_COOKIE`. `TRUFAR_CONVERSATION_ID` and
   `GOOGLE_CLOUD_PROJECT` are plain env vars.
-- `Config.from_env()` picks the Firestore store automatically when `K_SERVICE` (set by Cloud Run)
-  or `GOOGLE_APPLICATION_CREDENTIALS` is present, otherwise memory. On Cloud Run,
-  `firebase_admin.initialize_app()` uses the service's own account (Application Default
-  Credentials), so no key file exists. That account needs `roles/secretmanager.secretAccessor`
-  and `roles/datastore.user`.
+- `Config.from_env()` picks the Firestore store automatically when `FIREBASE_SERVICE_ACCOUNT`,
+  `GOOGLE_APPLICATION_CREDENTIALS` or `K_SERVICE` (set by Cloud Run) is present, otherwise memory.
+  Firestore credentials, in order:
+  - `FIREBASE_SERVICE_ACCOUNT`: the whole service-account key JSON as one env var, for hosts
+    with no file system for a key file. It's validated by `store.parse_service_account`, whose
+    errors never contain the value.
+  - otherwise Application Default Credentials: a key file, or on Cloud Run the service's own
+    account, which needs `roles/secretmanager.secretAccessor` and `roles/datastore.user`.
+
+  A bad key doesn't crash the app: `GET /` reports it under `missing`. Secret fields of
+  `Config` are `repr=False`.
 - PythonAnywhere is still documented in the README, but its **free plan is confirmed to block
   trufar.cn** (§6.2).
 
