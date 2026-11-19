@@ -1,0 +1,15 @@
+# Files left out of `gcloud run deploy --source .` uploads.
+.gcloudignore
+.gitignore
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+.env
+tests/
+requirements-dev.txt
+README.md
+*-firebase-adminsdk-*.json
+serviceAccount*.json
+service-account*.json

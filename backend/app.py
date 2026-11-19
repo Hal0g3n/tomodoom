@@ -77,8 +77,15 @@ def create_app(config: Optional[Config] = None, store: Optional[Store] = None,
     if missing:
         log.error("relay not configured; missing: %s", ", ".join(missing))
     relay = None
+    if not missing and store is None:
+        try:
+            store = create_store(config.store, config.firebase_service_account)
+        except ValueError as error:
+            # e.g. a mangled FIREBASE_SERVICE_ACCOUNT; the message never contains the value.
+            log.error("relay store unavailable: %s", error)
+            missing = [str(error)]
     if not missing:
-        relay = _Relay(config, store or create_store(config.store),
+        relay = _Relay(config, store,
                        trufar or TruFarClient(config.trufar_base_url, config.trufar_cookie))
     app.config["RELAY"] = relay
 
