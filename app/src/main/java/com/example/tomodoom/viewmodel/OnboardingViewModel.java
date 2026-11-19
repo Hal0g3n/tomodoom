@@ -15,8 +15,8 @@ import java.util.function.BooleanSupplier;
 
 /**
  * ViewModel for the first-launch onboarding screen: the user picks and names their pet, then is
- * asked for Usage Access, which apps to track and then notifications
- * ({@link OnboardingPermissionFlow}).
+ * asked for Usage Access and then notifications ({@link OnboardingPermissionFlow}). The next
+ * page, choosing the tracked apps, uses {@link WatchedAppsViewModel}.
  */
 public class OnboardingViewModel extends ViewModel {
 
@@ -30,7 +30,6 @@ public class OnboardingViewModel extends ViewModel {
     private final BooleanSupplier usageAccessGranted;
     /** UI state (main thread only): the permission steps the user skipped or answered. */
     private boolean usageSkipped;
-    private boolean appsHandled;
     private boolean notificationsHandled;
 
     public OnboardingViewModel(@NonNull PetStateRepository petStateRepository,
@@ -106,19 +105,11 @@ public class OnboardingViewModel extends ViewModel {
         return notificationsHandled;
     }
 
-    public boolean isAppsHandled() {
-        return appsHandled;
-    }
-
     /** The user tapped "Not now" on the Usage Access step. Main thread only. */
     public void skipUsageAccess() {
         usageSkipped = true;
     }
 
-    /** The user came back from the watched-apps picker or skipped it. Main thread only. */
-    public void onAppsHandled() {
-        appsHandled = true;
-    }
 
     /** The user answered or skipped the notification prompt. Main thread only. */
     public void onNotificationsHandled() {
@@ -132,6 +123,6 @@ public class OnboardingViewModel extends ViewModel {
     @NonNull
     public OnboardingPermissionFlow.Step currentPermissionStep(boolean notificationsNeeded) {
         return OnboardingPermissionFlow.current(isUsageAccessGranted(), usageSkipped,
-                appsHandled, notificationsNeeded, notificationsHandled);
+                notificationsNeeded, notificationsHandled);
     }
 }

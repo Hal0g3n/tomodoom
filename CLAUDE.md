@@ -223,8 +223,7 @@ com.example.tomodoom
 │   ├── CustomiseViewModel        exposes PetState, selected slot, catalog items, equip action
 │   ├── OnboardingViewModel       onboarding flag, suggested name, species list + selectedSpecies, submitName(),
 │   │                             permission-step state (usage skipped, notifications handled)
-│   ├── OnboardingPermissionFlow  pure Java: next permission step (Usage Access → tracked apps, only once
-│   │                             access is granted → notifications → done)
+│   ├── OnboardingPermissionFlow  pure Java: next permission step (Usage Access → notifications → done)
 │   ├── ChatViewModel             exposes transcript + active quiz + PetState (for the pet backdrop), sends messages
 │   ├── StatsViewModel            StatsReport per snapshot / refresh(); selected health-chart range; PetState (hidden backdrop)
 │   ├── SettingsViewModel         rename (PetNames), species switch, watched-app count (installed launcher apps
@@ -232,9 +231,9 @@ com.example.tomodoom
 │   └── WatchedAppsViewModel      installed apps (loaded once, off the main thread) + watched set, toggles
 │
 └── ui/
-    ├── onboarding/OnboardingActivity   LAUNCHER: picks + names the pet on first launch only, then asks
-    │                             for Usage Access, then which apps to track (WatchedAppsActivity),
-    │                             then notifications; otherwise forwards straight to
+    ├── onboarding/OnboardingActivity   LAUNCHER: three pages on first launch only: pick + name the pet;
+    │                             Usage Access, then notifications; choose the tracked apps
+    │                             (WatchedAppsList, always shown). Otherwise forwards straight to
     │                             MainActivity and finishes
     ├── NotificationPrompt        Android 13+ notification permission; one "asked this launch" flag
     │                             shared by onboarding and Pets
@@ -267,7 +266,8 @@ com.example.tomodoom
     ├── stats/HpLineChartView, BarChartView   Canvas charts in the palette (no chart library)
     ├── stats/StatsFormatter      durations, token counts and app labels → display text
     └── watchedapps/WatchedAppsActivity, WatchedAppsAdapter   picker: one switch per launcher app
-                                  (opened from the Settings Tracked apps card; not exported)
+                                  (opened from the Settings Tracked apps card; not exported);
+                                  WatchedAppsList binds the shared list (also onboarding's apps page)
 ```
 
 Resources: `res/values/colors.xml` + `res/values/themes.xml` (palette and theme, §6.3; no
@@ -288,9 +288,11 @@ launcher icon: `mipmap-anydpi-v26/ic_launcher{,_round}.xml` (adaptive: `@color/l
 + GENERATED `drawable/ic_launcher_foreground.xml` / `ic_launcher_monochrome.xml`) and GENERATED legacy
 `mipmap-*/ic_launcher{,_round}.webp` for API 24–25, GENERATED `drawable/ic_notification.xml` (notification
 small icon, used by both doom-scroll notifications),
-`activity_main.xml` (`pet_layer` under `main_pager` ViewPager2, `nav_view`), `activity_onboarding.xml` (`name_step`: title,
+`activity_main.xml` (`pet_layer` under `main_pager` ViewPager2, `nav_view`), `activity_onboarding.xml` (a `FrameLayout`: `scroll_steps` holds `name_step`: title,
 `pet_choices` grid, `pet_name_layout`/`pet_name_input`, `start_button`; then `permissions_step`:
-`usage_row`/`apps_row`/`notifications_row` (the current one drawn selected; `apps_row` shown only while Usage Access is granted), `permission_button`, `permission_skip_button`), `res/menu/bottom_nav_menu.xml`,
+`usage_row`/`notifications_row` (the current one drawn selected), `permission_button`, `permission_skip_button`;
+beside it the full-height `apps_step`: title, `apps_subtitle`, `apps_list` (an include of
+`view_watched_apps_list.xml`, shared with `activity_watched_apps.xml`), `apps_continue_button`), `res/menu/bottom_nav_menu.xml`,
 `fragment_debug_panel.xml` + `values/strings_debug.xml` + `values/styles_debug.xml` (debug panel).
 `res/values/dimens.xml` (`pet_viewport_stroke`, `pet_viewport_corner_radius`).
 `res/raw/calm_bgm.ogg` (the background music, §3.3).
@@ -877,8 +879,8 @@ How `GeminiChatService` behaves:
 #### Current implementation
 
 `doomscroll.UsageStatsDoomScrollMonitor` uses the special Android Usage Access setting. Onboarding's
-second step asks for it first, then (once it is granted) which apps to track, and then for
-notifications (Android 13+), each skippable with **Not now**.
+second page asks for it first and then for notifications (Android 13+), each skippable with **Not now**;
+its third page is the tracked-apps list.
 As a fallback the Settings page's **Tracked apps** card offers **Enable** (opens that setting) while
 access is missing. The Pets tab has no card any more; it starts the monitor on resume once access is
 granted, and asks for notifications once per launch unless onboarding already asked in that launch
@@ -886,10 +888,10 @@ granted, and asks for notifications once per launch unless onboarding already as
 
 **Watched apps are the user's choice.** Only time in a watched app can cost HP; any other app (a
 work or study app) never counts.
-- Once access is granted, onboarding's **Choose apps to track** step (returning from the picker or
-  **Not now**, which keeps the defaults, finishes it) and the Settings **Tracked apps** card's
-  **Choose apps** button open
-  `ui.watchedapps.WatchedAppsActivity`: a switch per launcher app (`LauncherAppsQuery`, which needs
+- Onboarding's last page, **Choose apps to track** (shown even if Usage Access was skipped; the
+  choice applies once access is granted), and, once access is granted, the Settings **Tracked
+  apps** card's **Choose apps** button (opening `ui.watchedapps.WatchedAppsActivity`) show the same
+  list, `ui.watchedapps.WatchedAppsList` bound to `WatchedAppsViewModel`: a switch per launcher app (`LauncherAppsQuery`, which needs
   the manifest's `<queries>` MAIN/LAUNCHER intent on Android 11+; Tomodoom itself isn't listed).
   Watched apps come first, sorted once so rows don't jump while toggling.
 - Changes save at once (`WatchedAppsRepository`, §3.3) and apply at the next poll
@@ -1040,9 +1042,10 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
   updating, so catch it.
 - **Launcher is `OnboardingActivity`**, not `MainActivity` (which is `exported="false"`). It
   checks `isOnboardingComplete()` before inflating anything and forwards to `MainActivity` if set.
-  **Start** completes onboarding *before* the permission step, so that step exists only while the
-  activity lives: a restore with the saved `permissions_step` flag (rotation) shows it again instead of
-  forwarding, and a relaunch after process death skips it (Settings' Tracked apps card is the fallback).
+  **Start** completes onboarding *before* the permission and tracked-apps pages, so they exist only
+  while the activity lives: a restore with the saved `onboarding_page` (rotation) shows that page again
+  instead of forwarding, and a relaunch after process death skips them (Settings' Tracked apps card is
+  the fallback).
   Anything that should run on every launch belongs in `TomodoomApplication` or `MainActivity`,
   not in the onboarding screen.
 - **On-device checks are possible on this Windows machine:** the SDK has an AVD
@@ -1272,14 +1275,14 @@ Debug helpers:
    at 20. Type `Mochi` and tap **Start** (or the keyboard's Done): a "Help Mochi look after you" screen
    lists **Track app usage** (ringed) and **Notifications** (always shown; it reads "✓ Allowed" when
    notifications are already on, e.g. below Android 13, and is then not a step). **Allow usage tracking**
-   opens the Usage Access settings; grant it and go back: the row shows "✓ Allowed", a **Choose apps
-   to track** row appears ringed and the button reads **Choose apps**, which opens Watched apps (the
-   default social apps on); switch one off and press Back: the row shows "✓ Chosen" (and Settings'
-   Tracked apps count reflects the change). The ring moves to
+   opens the Usage Access settings; grant it and go back: the row shows "✓ Allowed", the ring moves to
    Notifications and the button reads **Allow notifications**, which shows the system prompt. Then
-   **Continue**: the Pets tab opens with no second notification prompt, and its
-   health bar shows `Mochi`. **Not now** skips a step ("Skipped…"); skipping usage also leaves out the apps
-   row, and afterwards Settings' Tracked apps card offers **Enable**. Rotating on the permission screen keeps it. Rotation keeps the typed text. Relaunching skips onboarding. (The steps
+   **Continue** opens a separate **Choose apps to track** page: a scrolling switch list of your
+   launcher apps with the default social apps on and first, "N apps watched" above it. Switch one off
+   and tap **Continue**: the Pets tab opens with no second notification prompt, its health bar shows
+   `Mochi`, and Settings' Tracked apps count reflects the change. **Not now** skips a permission
+   ("Skipped…"); the apps page still follows, and after skipping usage Settings' Tracked apps card
+   offers **Enable**. Rotating on the permission or apps page keeps it. Rotation keeps the typed text. Relaunching skips onboarding. (The steps
    below assume you kept `Tomo` and the Rabbit.)
 1. The home-screen icon is the phone with a pet peeking out of its pocket, on eggshell (with any
    mask shape; on Android 13+ with themed icons on, a tinted line drawing). Launch the app. The **Pets** tab has **no action bar** and no debug buttons. The health bar sits below
@@ -1433,7 +1436,7 @@ Update this table in the same commit when your task changes a subsystem's status
 | MCP tool bridge | ✅ Production-capable default | `DefaultMcpPetActionHandler` |
 | Pets UI (pet viewport, health bar below the pet) | ✅ Skeleton done | `PetsFragment` / `PetsViewModel` |
 | Customise UI (pet preview, slot tabs, item circle grid) | ✅ Skeleton done | `CustomiseFragment` / `CustomiseViewModel` |
-| Onboarding (choose and name the pet, then Usage Access, the tracked apps and notifications) | ✅ Done (permission step, including the tracked-apps step, not yet tested on a device) | `OnboardingActivity` / `OnboardingViewModel` |
+| Onboarding (choose and name the pet; Usage Access and notifications; the tracked apps on their own page) | ✅ Done (permission and tracked-apps pages not yet tested on a device) | `OnboardingActivity` / `OnboardingViewModel` |
 | Chat UI | ✅ Skeleton done; bot replies render Markdown, LaTeX (JLatexMath) and copyable code blocks (unit-tested; on a device only the plain greeting was seen through the new path) | `ChatFragment` / `ChatViewModel` / `ChatRepository` |
 | Pet rendering | ✅ scene-3 rabbit (default) and scene-5 cat (three.js, offline) via the HTML/WebView pipeline; add-ons are primitive placeholders | `HtmlManiengineRenderer` + `assets/maniengine/` |
 | Item catalog | ⏳ Placeholder (6 hard-coded items: hats and accessories) | `AccessoryCatalog` → Maniengine Agent |

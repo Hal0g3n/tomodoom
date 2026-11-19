@@ -22,25 +22,30 @@ import com.example.tomodoom.databinding.ActivityOnboardingBinding;
 import com.example.tomodoom.di.ViewModelFactory;
 import com.example.tomodoom.model.PetNames;
 import com.example.tomodoom.ui.NotificationPrompt;
-import com.example.tomodoom.ui.watchedapps.WatchedAppsActivity;
+import com.example.tomodoom.ui.watchedapps.WatchedAppsList;
 import com.example.tomodoom.viewmodel.OnboardingPermissionFlow;
 import com.example.tomodoom.viewmodel.OnboardingViewModel;
+import com.example.tomodoom.viewmodel.WatchedAppsViewModel;
 
 /**
- * Launcher activity. On the first launch it asks the user to choose and name their pet, then for
- * Usage Access, which apps to track (once access is granted, through
- * {@link WatchedAppsActivity}) and notifications, then opens {@link MainActivity}. Once onboarding is
- * complete it forwards straight to {@link MainActivity} without showing anything.
+ * Launcher activity. On the first launch it shows three pages: choose and name the pet; grant
+ * Usage Access and notifications; choose the apps to track ({@link WatchedAppsList}). Then it opens
+ * {@link MainActivity}. Once onboarding is complete it forwards straight to {@link MainActivity}
+ * without showing anything.
  *
- * <p>Naming the pet completes onboarding at once, so the permission step is shown only while this
- * activity lives; a restore of that step (rotation) keeps it instead of forwarding.</p>
+ * <p>Naming the pet completes onboarding at once, so the later pages are shown only while this
+ * activity lives; a restore of one of them (rotation) keeps it instead of forwarding.</p>
  */
 public class OnboardingActivity extends AppCompatActivity {
 
-    private static final String KEY_PERMISSIONS_STEP = "permissions_step";
+    /** Saved page: one of the {@code PAGE_*} values. */
+    private static final String KEY_PAGE = "onboarding_page";
+    private static final int PAGE_NAME = 0;
+    private static final int PAGE_PERMISSIONS = 1;
+    private static final int PAGE_APPS = 2;
 
     private ActivityOnboardingBinding binding;
-    private boolean showingPermissions;
+    private int page = PAGE_NAME;
     private OnboardingViewModel viewModel;
 
     /** Any answer moves the flow on; a denial just leaves the Pets fallback prompt for later. */
@@ -50,22 +55,14 @@ public class OnboardingActivity extends AppCompatActivity {
                 updatePermissionStep();
             });
 
-    /** Coming back from the watched-apps picker (it saves as it goes) finishes the apps step. */
-    private final ActivityResultLauncher<Intent> watchedAppsLauncher =
-            registerForActivityResult(new ActivityResultContracts.StartActivityForResult(),
-                    result -> {
-                        viewModel.onAppsHandled();
-                        updatePermissionStep();
-                    });
-
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         viewModel = new ViewModelProvider(this, ViewModelFactory.from(this))
                 .get(OnboardingViewModel.class);
-        boolean restoringPermissions = savedInstanceState != null
-                && savedInstanceState.getBoolean(KEY_PERMISSIONS_STEP);
-        if (viewModel.isOnboardingComplete() && !restoringPermissions) {
+        int restoredPage = savedInstanceState != null
+                ? savedInstanceState.getInt(KEY_PAGE, PAGE_NAME) : PAGE_NAME;
+        if (viewModel.isOnboardingComplete() && restoredPage == PAGE_NAME) {
             openMainAndFinish();
             return;
         }
@@ -74,8 +71,13 @@ public class OnboardingActivity extends AppCompatActivity {
         setContentView(binding.getRoot());
         binding.permissionButton.setOnClickListener(v -> onPermissionButton());
         binding.permissionSkipButton.setOnClickListener(v -> onSkipPermission());
-        if (restoringPermissions) {
+        binding.appsContinueButton.setOnClickListener(v -> openMainAndFinish());
+        if (restoredPage == PAGE_PERMISSIONS) {
             showPermissionStep();
+            return;
+        }
+        if (restoredPage == PAGE_APPS) {
+            showAppsStep();
             return;
         }
 
@@ -134,27 +136,27 @@ public class OnboardingActivity extends AppCompatActivity {
         return text != null ? text.toString() : "";
     }
 
+    @Override
+    protected void onSaveInstanceState(@NonNull Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putInt(KEY_PAGE, page);
+    }
+
     // ---------------------------------------------------------------------------------------
-    // Permission step: Usage Access first, then tracked apps, then notifications
+    // Page 2, permissions: Usage Access first, then notifications
     // ---------------------------------------------------------------------------------------
 
     @Override
     protected void onResume() {
         super.onResume();
         // The user may come back from the Usage Access settings screen.
-        if (showingPermissions) {
+        if (page == PAGE_PERMISSIONS) {
             updatePermissionStep();
         }
     }
 
-    @Override
-    protected void onSaveInstanceState(@NonNull Bundle outState) {
-        super.onSaveInstanceState(outState);
-        outState.putBoolean(KEY_PERMISSIONS_STEP, showingPermissions);
-    }
-
     private void showPermissionStep() {
-        showingPermissions = true;
+        page = PAGE_PERMISSIONS;
         binding.nameStep.setVisibility(View.GONE);
         binding.permissionsStep.setVisibility(View.VISIBLE);
         binding.permissionsTitle.setText(
@@ -174,13 +176,8 @@ public class OnboardingActivity extends AppCompatActivity {
         OnboardingPermissionFlow.Step step = currentStep();
 
         binding.usageRow.setSelected(step == OnboardingPermissionFlow.Step.USAGE_ACCESS);
-        boolean usageGranted = viewModel.isUsageAccessGranted();
-        setStatus(binding.usageStatus, usageGranted, viewModel.isUsageSkipped());
-
-        // Choosing apps only matters once usage is tracked, so the row waits for the grant.
-        binding.appsRow.setVisibility(usageGranted ? View.VISIBLE : View.GONE);
-        binding.appsRow.setSelected(step == OnboardingPermissionFlow.Step.TRACKED_APPS);
-        binding.appsStatus.setVisibility(viewModel.isAppsHandled() ? View.VISIBLE : View.GONE);
+        setStatus(binding.usageStatus, viewModel.isUsageAccessGranted(),
+                viewModel.isUsageSkipped());
 
         // The row always shows. It's only an actionable step when a runtime grant is needed
         // (Android 13+, not granted); otherwise it just reports that notifications are on.
@@ -192,10 +189,6 @@ public class OnboardingActivity extends AppCompatActivity {
         switch (step) {
             case USAGE_ACCESS:
                 binding.permissionButton.setText(R.string.onboarding_permission_allow_usage);
-                binding.permissionSkipButton.setVisibility(View.VISIBLE);
-                break;
-            case TRACKED_APPS:
-                binding.permissionButton.setText(R.string.onboarding_permission_choose_apps);
                 binding.permissionSkipButton.setVisibility(View.VISIBLE);
                 break;
             case NOTIFICATIONS:
@@ -228,15 +221,12 @@ public class OnboardingActivity extends AppCompatActivity {
             case USAGE_ACCESS:
                 startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS));
                 break;
-            case TRACKED_APPS:
-                watchedAppsLauncher.launch(new Intent(this, WatchedAppsActivity.class));
-                break;
             case NOTIFICATIONS:
                 NotificationPrompt.launch(notificationPermissionLauncher);
                 break;
             case DONE:
             default:
-                openMainAndFinish();
+                showAppsStep();
                 break;
         }
     }
@@ -245,15 +235,28 @@ public class OnboardingActivity extends AppCompatActivity {
         OnboardingPermissionFlow.Step step = currentStep();
         if (step == OnboardingPermissionFlow.Step.USAGE_ACCESS) {
             viewModel.skipUsageAccess();
-        } else if (step == OnboardingPermissionFlow.Step.TRACKED_APPS) {
-            // Keeps the default watched apps; Settings can change them later.
-            viewModel.onAppsHandled();
         } else if (step == OnboardingPermissionFlow.Step.NOTIFICATIONS) {
             // Skipping counts as asked, so Pets doesn't prompt again in this launch.
             NotificationPrompt.markRequested();
             viewModel.onNotificationsHandled();
         }
         updatePermissionStep();
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Page 3, tracked apps: the watched-apps list (saves as it goes), then Continue
+    // ---------------------------------------------------------------------------------------
+
+    private void showAppsStep() {
+        page = PAGE_APPS;
+        binding.scrollSteps.setVisibility(View.GONE);
+        binding.appsStep.setVisibility(View.VISIBLE);
+        binding.appsSubtitle.setText(
+                getString(R.string.onboarding_apps_subtitle, viewModel.getPetName()));
+        // Created only now, so the installed apps load only when this page is reached.
+        WatchedAppsViewModel appsViewModel = new ViewModelProvider(this,
+                ViewModelFactory.from(this)).get(WatchedAppsViewModel.class);
+        WatchedAppsList.bind(this, binding.appsList, appsViewModel);
     }
 
     private void openMainAndFinish() {

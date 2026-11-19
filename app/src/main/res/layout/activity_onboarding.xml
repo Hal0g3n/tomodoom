@@ -1,12 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- First-launch onboarding: choose a pet and name it, then grant Usage Access, choose the tracked apps and allow notifications. Colours come from the theme (CLAUDE.md §6.3). -->
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- First-launch onboarding, three pages: choose a pet and name it; grant Usage Access and
+     notifications; choose the tracked apps. Colours come from the theme (CLAUDE.md §6.3). -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fillViewport="true"
     tools:context=".ui.onboarding.OnboardingActivity">
+
+<ScrollView
+    android:id="@+id/scroll_steps"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -145,43 +151,6 @@
         </LinearLayout>
 
         <LinearLayout
-            android:id="@+id/apps_row"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:background="@drawable/bg_pet_choice"
-            android:orientation="vertical"
-            android:padding="16dp"
-            android:visibility="gone"
-            tools:visibility="visible">
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/onboarding_permission_apps_title"
-                android:textAppearance="?attr/textAppearanceSubtitle1"
-                android:textColor="?android:attr/textColorPrimary" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="@string/onboarding_permission_apps_text"
-                android:textAppearance="?attr/textAppearanceBody2"
-                android:textColor="?android:attr/textColorSecondary" />
-
-            <TextView
-                android:id="@+id/apps_status"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="@string/onboarding_permission_apps_chosen"
-                android:textAppearance="?attr/textAppearanceCaption"
-                android:textColor="?android:attr/textColorPrimary"
-                android:visibility="gone" />
-        </LinearLayout>
-
-        <LinearLayout
             android:id="@+id/notifications_row"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -234,3 +203,56 @@
     </LinearLayout>
     </LinearLayout>
 </ScrollView>
+
+    <!-- Page 3: the tracked apps. Its own full-height page so the app list scrolls by itself. -->
+    <LinearLayout
+        android:id="@+id/apps_step"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:paddingTop="24dp"
+        android:paddingBottom="24dp"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="24dp"
+            android:layout_marginEnd="24dp"
+            android:gravity="center"
+            android:text="@string/onboarding_apps_title"
+            android:textAppearance="?attr/textAppearanceHeadline5"
+            android:textColor="?android:attr/textColorPrimary" />
+
+        <TextView
+            android:id="@+id/apps_subtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="24dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginEnd="24dp"
+            android:gravity="center"
+            tools:text="@string/onboarding_apps_subtitle"
+            android:textAppearance="?attr/textAppearanceBody1"
+            android:textColor="?android:attr/textColorSecondary" />
+
+        <include
+            android:id="@+id/apps_list"
+            layout="@layout/view_watched_apps_list"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_marginTop="16dp"
+            android:layout_weight="1" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/apps_continue_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="24dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginEnd="24dp"
+            android:minHeight="56dp"
+            android:text="@string/onboarding_continue"
+            app:cornerRadius="16dp" />
+    </LinearLayout>
+</FrameLayout>
