@@ -209,12 +209,18 @@ Assets: `assets/trufar/kafka_agent.json` (the Kafka TruFar agent export, icon st
 thumbnail tool), `pet-model.js` (GENERATED from the scene-3 export) and `vendor/three/` (three.js 0.187.0).
 Tools: `tools/maniengine/extract_model.py` (+ `source/scene-3.html`), `make_thumbnails.py` (+ `thumbnails.html`).
 
-Outside the app: **`backend/`** is the Python relay server (Flask, hosted on **Google Cloud Run**,
-with Firestore) that connects the app's chat to Kafka on trufar.cn. It's a flat folder of modules
-(`app.py` WSGI entry, `trufar_client.py`, `mcp_server.py`, `store.py`, `markers.py`, `config.py`)
-with pytest tests in `backend/tests/`. Cloud Run packaging: `Procfile` (gunicorn), `.python-version`
-(3.12) and `.gcloudignore`; `gcloud run deploy --source backend` builds it with Google's Python
-buildpack, so there's no Dockerfile. It isn't part of the Gradle build; see §5.2 and `backend/README.md`.
+Outside the app: **`backend/`** is the Python relay server that connects the app's chat to Kafka on
+trufar.cn. It's Flask, hosted on **Vercel** (free Hobby plan, no card), with Firestore on Firebase's
+free Spark plan. It's a flat folder of modules (`app.py` WSGI entry, `trufar_client.py`,
+`mcp_server.py`, `store.py`, `markers.py`, `config.py`) with pytest tests in `backend/tests/`.
+
+Deploy config:
+- Vercel: `vercel.json` (region `hkg1`) and `.vercelignore`. The Vercel project's Root Directory
+  is `backend`, and Vercel's zero-config Flask support finds `app.py` → `app`.
+- Shared: `.python-version` (3.12).
+- Cloud Run (needs a billing card, kept as an alternative): `Procfile` (gunicorn) and `.gcloudignore`.
+
+It isn't part of the Gradle build; see §5.2 and `backend/README.md`.
 
 ### Dependency direction (enforced by convention)
 
