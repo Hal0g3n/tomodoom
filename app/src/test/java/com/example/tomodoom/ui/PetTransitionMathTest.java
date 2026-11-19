@@ -42,6 +42,36 @@ public class PetTransitionMathTest {
     }
 
     @Test
+    public void parkedFrame_movesTheLastFrameOffTheLeftEdge() {
+        PetTransitionMath.Frame last = new PetTransitionMath.Frame(0f, 40f, 300f, 600f, 0f, 1f);
+        PetTransitionMath.Frame parked = PetTransitionMath.parkedFrame(4, null, last);
+        assertEquals(-300f, parked.left, EPS);
+        assertEquals(0f, parked.right, EPS);
+        assertEquals(40f, parked.top, EPS);
+        assertEquals(600f, parked.bottom, EPS);
+        assertEquals(1f, parked.lift, EPS);
+    }
+
+    @Test
+    public void isOffScreen_onlyWhenWhollyOutsideTheLayer() {
+        assertTrue(PetTransitionMath.isOffScreen(
+                new PetTransitionMath.Frame(-300f, 0f, 0f, 600f, 0f, 1f), 1080f));
+        assertTrue(PetTransitionMath.isOffScreen(
+                new PetTransitionMath.Frame(1080f, 0f, 1380f, 600f, 0f, 1f), 1080f));
+        assertFalse(PetTransitionMath.isOffScreen(
+                new PetTransitionMath.Frame(-299f, 0f, 1f, 600f, 0f, 1f), 1080f));
+    }
+
+    @Test
+    public void parkedFrame_onlyWhenPastPetsWithPetsDetached() {
+        PetTransitionMath.Frame last = new PetTransitionMath.Frame(0f, 0f, 300f, 600f, 0f, 1f);
+        assertNull(PetTransitionMath.parkedFrame(4, last, last)); // Pets laid out
+        assertNull(PetTransitionMath.parkedFrame(1, null, last)); // on Pets
+        assertNull(PetTransitionMath.parkedFrame(0, null, last)); // on Customise
+        assertNull(PetTransitionMath.parkedFrame(3, null, null)); // nothing sent yet
+    }
+
+    @Test
     public void frameFor_blendsOnlyBetweenCustomiseAndPets() {
         PetTransitionMath.Frame pets = new PetTransitionMath.Frame(0f, 0f, 400f, 800f, 0f, 1f);
         PetTransitionMath.Frame card = new PetTransitionMath.Frame(16f, 16f, 384f, 336f, 14f, 0f);

@@ -69,6 +69,34 @@ public final class PetTransitionMath {
         return position == MainPagerAdapter.PAGE_CUSTOMISE ? clamp01(1f - offset) : 0f;
     }
 
+    /**
+     * Where the pet waits while the pager is past Pets but the Pets page isn't laid out (a tab tap
+     * that jumps several pages detaches Pets before its frame has slid away).
+     *
+     * @param position the pager's left page.
+     * @param pets     the Pets viewport's pet area, or null if it isn't laid out.
+     * @param last     the last frame sent, or null if none yet.
+     * @return {@code last} moved just off the layer's left edge, as if it had slid away with Pets;
+     * null when the pet needn't be parked (Pets is laid out, the pager isn't past Pets, or no frame
+     * was ever sent).
+     */
+    @Nullable
+    public static Frame parkedFrame(int position, @Nullable Frame pets, @Nullable Frame last) {
+        if (pets != null || last == null || position <= MainPagerAdapter.PAGE_PETS) {
+            return null;
+        }
+        float width = last.width();
+        return new Frame(-width, last.top, 0f, last.bottom, last.radius, last.lift);
+    }
+
+    /**
+     * @return whether {@code frame} lies wholly outside a layer {@code layerWidth} px wide, so
+     * the pet can be hidden (a paused WebView may not redraw after its frame moves).
+     */
+    public static boolean isOffScreen(@NonNull Frame frame, float layerWidth) {
+        return frame.right <= 0f || frame.left >= layerWidth;
+    }
+
     /** @return the rect {@code t} of the way from {@code from} to {@code to} (t clamped to [0, 1]). */
     @NonNull
     public static Frame between(@NonNull Frame from, @NonNull Frame to, float t) {

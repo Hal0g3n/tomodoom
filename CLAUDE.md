@@ -682,7 +682,11 @@ How the page is hosted (`HtmlManiengineRenderer`):
   Customise and Pets are on screen it is interpolated between their pet areas by the scroll offset
   (`PetTransitionMath.frameFor`): the pet shrinks into the preview card, or grows out of it, with the
   finger, and the health bar slides away with Pets. Nothing is reparented or resized, so nothing
-  jumps when the swipe settles. `MainActivity` sets `offscreenPageLimit(1)` so both viewports are laid
+  jumps when the swipe settles. While the frame is wholly off screen (e.g. on Chat and beyond),
+  `PetStage` makes `pet_layer` INVISIBLE (`PetTransitionMath.isOffScreen`), because a paused WebView
+  keeps showing its last picture. A tab tap that jumps several pages (Pets → Settings) detaches Pets
+  before its frame slides away; then `PetTransitionMath.parkedFrame` moves the last frame off the left
+  edge. `MainActivity` sets `offscreenPageLimit(1)` so both viewports are laid
   out from the first frame. The page still refits to any size (`ResizeObserver` calling `fit()`).
 - **Touch forwarding:** `PetViewport` hands its touches to `PetStage` while its page is resumed and
   the pager is idle (decided at `ACTION_DOWN`); they are offset into layer coordinates and dispatched
@@ -969,6 +973,9 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
   `PetViewport`, so don't make the layer clickable or put the pager below it. It's created
   with the viewport's (activity) context, so `PetStage` lives in `MainActivity` and is released
   in its `onDestroy`. Never hold it in a ViewModel or `AppContainer`: that would leak the activity.
+- **Pages more than one away from Pets** (Stats, Settings) have no Pets view laid out
+  (`offscreenPageLimit(1)`), so `PetStage` can't follow it there; it parks and hides the pet instead
+  (§5.1 layout note). Their pages are transparent too, so without that the pet showed between cards.
 - **WebView (Maniengine):** an `OnTouchListener` on a WebView triggers lint
   `ClickableViewAccessibility`, so `HtmlManiengineRenderer` uses a private `WebView` subclass that
   overrides `dispatchTouchEvent`. `SetJavaScriptEnabled` is suppressed on purpose: the page is a

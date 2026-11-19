@@ -65,6 +65,9 @@ public final class PetStage implements PetViewport.TouchForwarder {
     private final SparseArray<PetViewport> viewports = new SparseArray<>();
     private int scrollState = ViewPager2.SCROLL_STATE_IDLE;
     private int scrollPosition = MainPagerAdapter.PAGE_PETS;
+    /** The last frame sent to the renderer, kept to park the pet off screen (frameFor null). */
+    @Nullable
+    private PetTransitionMath.Frame lastFrame;
     private float scrollOffset;
     /** The viewport whose touch gesture is being forwarded to the layer, or null. */
     @Nullable
@@ -260,10 +263,22 @@ public final class PetStage implements PetViewport.TouchForwarder {
             return;
         }
         target.getLocationInWindow(layerLocation);
+        PetTransitionMath.Frame pets = petArea(MainPagerAdapter.PAGE_PETS);
         PetTransitionMath.Frame f = PetTransitionMath.frameFor(scrollPosition, scrollOffset,
-                petArea(MainPagerAdapter.PAGE_PETS), petArea(MainPagerAdapter.PAGE_CUSTOMISE));
+                pets, petArea(MainPagerAdapter.PAGE_CUSTOMISE));
+        if (f == null) {
+            // Pets was detached by a jump of several pages before its frame slid away.
+            f = PetTransitionMath.parkedFrame(scrollPosition, pets, lastFrame);
+        }
         if (f == null || f.isEmpty()) {
             return; // not laid out yet; the layout listener tries again
+        }
+        lastFrame = f;
+        // Hide the layer while the pet is off screen: a paused WebView keeps its last picture.
+        int visibility = PetTransitionMath.isOffScreen(f, target.getWidth())
+                ? View.INVISIBLE : View.VISIBLE;
+        if (target.getVisibility() != visibility) {
+            target.setVisibility(visibility);
         }
         renderer.setFrame(target, new RectF(f.left, f.top, f.right, f.bottom), f.radius, f.lift);
     }
