@@ -22,11 +22,8 @@ import androidx.core.content.ContextCompat;
 import com.example.tomodoom.contracts.DoomScrollListener;
 import com.example.tomodoom.contracts.DoomScrollMonitor;
 import com.example.tomodoom.model.DoomScrollEvent;
+import com.example.tomodoom.model.WatchedApps;
 
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -51,18 +48,6 @@ public final class UsageStatsDoomScrollMonitor implements DoomScrollMonitor {
     private static final int EVENT_FOREGROUND = UsageEvents.Event.MOVE_TO_FOREGROUND;
     @SuppressWarnings("deprecation")
     private static final int EVENT_BACKGROUND = UsageEvents.Event.MOVE_TO_BACKGROUND;
-    private static final Set<String> DOOM_SCROLL_PACKAGES = Collections.unmodifiableSet(
-            new HashSet<>(Arrays.asList(
-                    "com.instagram.android",
-                    "com.zhiliaoapp.musically",
-                    "com.ss.android.ugc.trill",
-                    "com.reddit.frontpage",
-                    "com.google.android.youtube",
-                    "com.twitter.android",
-                    "com.facebook.katana",
-                    "com.snapchat.android"
-            )));
-
     @NonNull
     private final Context appContext;
     @Nullable
@@ -89,7 +74,7 @@ public final class UsageStatsDoomScrollMonitor implements DoomScrollMonitor {
         usageStatsManager = (UsageStatsManager) appContext.getSystemService(Context.USAGE_STATS_SERVICE);
         displayManager = (DisplayManager) appContext.getSystemService(Context.DISPLAY_SERVICE);
         powerManager = (PowerManager) appContext.getSystemService(Context.POWER_SERVICE);
-        sessionTracker = new DoomScrollSessionTracker(DOOM_SCROLL_PACKAGES, PENALTY_INTERVAL_MILLIS,
+        sessionTracker = new DoomScrollSessionTracker(WatchedApps.DEFAULT_PACKAGES, PENALTY_INTERVAL_MILLIS,
                 WARNING_INTERVAL_MILLIS, AWAY_GRACE_MILLIS, MAX_POLL_GAP_MILLIS);
     }
 

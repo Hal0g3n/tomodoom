@@ -134,7 +134,9 @@ com.example.tomodoom
 │   ├── QuizPrompt                quizId, question, options, hpReward
 │   ├── QuizEvaluation            quizId, passed, hpReward, feedback
 │   ├── McpToolResult             success, message, data map
-│   └── DoomScrollEvent           sourcePackage, durationMillis, hpPenalty, timestamp
+│   ├── DoomScrollEvent           sourcePackage, durationMillis, hpPenalty, timestamp
+│   ├── WatchedApps               default watched-app package IDs + set/sort helpers for the picker
+│   └── InstalledApp              packageName, label (a launcher app in the watched-apps picker)
 │
 ├── contracts/                    Interfaces that downstream agents implement (see §4)
 │   ├── ManiengineAssetRenderer
