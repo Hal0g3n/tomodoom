@@ -19,6 +19,7 @@ import com.example.tomodoom.doomscroll.UsageStatsDoomScrollMonitor;
 import com.example.tomodoom.maniengine.HtmlManiengineRenderer;
 import com.example.tomodoom.repository.ChatRepository;
 import com.example.tomodoom.repository.DoomScrollHpBridge;
+import com.example.tomodoom.repository.InactivityDecayTracker;
 import com.example.tomodoom.repository.PetStateRepository;
 import com.example.tomodoom.repository.StatsRecordingDoomScrollListener;
 import com.example.tomodoom.repository.StatsRepository;
@@ -51,6 +52,8 @@ public final class AppContainer {
     @NonNull
     private final StatsRepository statsRepository;
     @NonNull
+    private final InactivityDecayTracker inactivityDecayTracker;
+    @NonNull
     private final McpPetActionHandler mcpPetActionHandler;
     @NonNull
     private final ChatService chatService;
@@ -76,6 +79,9 @@ public final class AppContainer {
         // Stats page history: HP changes, LLM tokens and doom-scrolling are recorded here.
         statsRepository = new StatsRepository(appContext, petStateRepository.getCurrentState());
         petStateRepository.setHpChangeListener(statsRepository::recordHpChange);
+
+        // Time away from the app → HP decay, applied when the user comes back.
+        inactivityDecayTracker = new InactivityDecayTracker(appContext, petStateRepository);
 
         // SWAP POINT (Chat/MCP Agent): MCP pet tool bridge (the default is production-capable).
         mcpPetActionHandler = new DefaultMcpPetActionHandler(petStateRepository);
@@ -130,6 +136,11 @@ public final class AppContainer {
     @NonNull
     public PetStateRepository getPetStateRepository() {
         return petStateRepository;
+    }
+
+    @NonNull
+    public InactivityDecayTracker getInactivityDecayTracker() {
+        return inactivityDecayTracker;
     }
 
     @NonNull

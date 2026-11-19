@@ -12,12 +12,14 @@ import androidx.annotation.Nullable;
 import com.example.tomodoom.contracts.DoomScrollMonitor;
 import com.example.tomodoom.di.AppContainer;
 import com.example.tomodoom.repository.ChatRepository;
+import com.example.tomodoom.repository.InactivityDecayTracker;
 
 /**
  * Application entry point. It builds the {@link AppContainer}, starts doom-scroll monitoring
  * when the monitor already has its permissions, and tells {@link ChatRepository} when the app
  * goes to and comes back from the background (no activity started), so a long absence starts a
- * new conversation. The doom-scroll foreground service doesn't count as using the app.
+ * new conversation and costs the pet HP ({@link InactivityDecayTracker}). The doom-scroll
+ * foreground service doesn't count as using the app.
  */
 public class TomodoomApplication extends Application {
 
@@ -37,7 +39,8 @@ public class TomodoomApplication extends Application {
             Log.i(TAG, "doom-scroll monitor not started: permission not granted yet");
         }
 
-        registerActivityLifecycleCallbacks(new ForegroundTracker(appContainer.getChatRepository()));
+        registerActivityLifecycleCallbacks(new ForegroundTracker(appContainer.getChatRepository(),
+                appContainer.getInactivityDecayTracker()));
     }
 
     @NonNull
@@ -50,15 +53,21 @@ public class TomodoomApplication extends Application {
 
         @NonNull
         private final ChatRepository chatRepository;
+        @NonNull
+        private final InactivityDecayTracker inactivityDecayTracker;
         private int startedActivities;
 
-        ForegroundTracker(@NonNull ChatRepository chatRepository) {
+        ForegroundTracker(@NonNull ChatRepository chatRepository,
+                          @NonNull InactivityDecayTracker inactivityDecayTracker) {
             this.chatRepository = chatRepository;
+            this.inactivityDecayTracker = inactivityDecayTracker;
         }
 
         @Override
         public void onActivityStarted(@NonNull Activity activity) {
             if (startedActivities++ == 0) {
+                // Wall clock for decay: the time away must survive a reboot.
+                inactivityDecayTracker.onAppForegrounded(System.currentTimeMillis());
                 chatRepository.onAppForegrounded(SystemClock.elapsedRealtime());
             }
         }
@@ -66,6 +75,7 @@ public class TomodoomApplication extends Application {
         @Override
         public void onActivityStopped(@NonNull Activity activity) {
             if (startedActivities > 0 && --startedActivities == 0) {
+                inactivityDecayTracker.onAppBackgrounded(System.currentTimeMillis());
                 chatRepository.onAppBackgrounded(SystemClock.elapsedRealtime());
             }
         }

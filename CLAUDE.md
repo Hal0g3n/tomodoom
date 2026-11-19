@@ -87,6 +87,7 @@ virtual pet whose **HP** reflects your digital habits:
 |---|---|---|
 | A doom-scroll session is detected | Pet **loses** HP | Doom Scroll monitor |
 | You pass a quiz from the chatbot | Pet **gains** HP (applied via an MCP tool) | Gemini chat + MCP bridge |
+| You stay out of the app for over 30 minutes | Pet **loses** 30% of its HP per 8 h away, applied when you return | `InactivityDecayTracker` |
 | You equip clothes or accessories | The pet's look changes | Maniengine renderer |
 
 The app has three bottom-navigation tabs, left to right: **Customise** (live pet preview + slot tabs
@@ -152,6 +153,8 @@ com.example.tomodoom
 │   │                             new conversation after 10 min in the background
 │   ├── BackgroundTimer           pure Java: how long the app was in the background
 │   ├── DoomScrollHpBridge        DoomScrollListener → PetStateRepository.decreaseHp(...)
+│   ├── InactivityDecayPolicy     pure Java: HP lost to time away (30 min grace, keeps 70% per 8 h)
+│   ├── InactivityDecayTracker    time away (prefs tomodoom_decay) → decreaseHp on return + notice
 │   └── WatchedAppsRepository     the user's watched apps (prefs `tomodoom_doomscroll` + LiveData); read by the monitor
 │
 ├── stubs/                        Stubs and default implementations of the contracts
@@ -189,7 +192,7 @@ com.example.tomodoom
 │   └── ViewModelFactory          constructor injection for ViewModels
 │
 ├── viewmodel/
-│   ├── PetsViewModel             exposes PetState
+│   ├── PetsViewModel             exposes PetState + the inactivity-decay notice
 │   ├── DebugViewModel            debug panel actions, each through the feature's real path (§8)
 │   ├── CustomiseViewModel        exposes PetState, selected slot, catalog items, equip action
 │   ├── OnboardingViewModel       onboarding flag, suggested name, species list + selectedSpecies, submitName()
@@ -345,6 +348,17 @@ ui  ──►  viewmodel  ──►  repository  ──►  contracts  ◄──
 
   Rotation and switching between activities don't count. The doom-scroll foreground service
   isn't an activity, so it doesn't keep the chat alive.
+- **Inactivity HP decay:** the same 1 → 0 / 0 → 1 activity count also calls
+  `InactivityDecayTracker.onAppBackgrounded` / `onAppForegrounded`, with the **wall clock**
+  (`System.currentTimeMillis()`), since the time away must survive a reboot. The tracker owns prefs
+  file **`tomodoom_decay`**, key `away_since_ms` (removed on return). On return it calls
+  `PetStateRepository.decreaseHp(loss, "inactivity_decay")` (stats count it as "other" HP lost)
+  and posts `loss` to `getPendingNotice()`; `PetsFragment` shows it once as a Snackbar while it is
+  the resumed page. `InactivityDecayPolicy.hpLoss`: no loss for 30 min, then
+  `hp × 0.7^(t / 8 h)` remains (100 HP → ~70 after 8.5 h, ~12 after 2 days, 0 after a week). It is
+  proportional and memoryless on purpose: frequent check-ins never cost more than staying away.
+  No decay before onboarding, on first launch, if the clock went backwards, or if the process died
+  while visible (no stamp). Rotation and switching our own activities don't count as away.
 - `GeminiChatService` saves the persona in use in its own prefs file **`tomodoom_chat`**, key
   `persona` (`low_hp` | `high_hp`), so a new conversation or a cold start keeps the personality.
   This is separate from `tomodoom_pet_state`, which only `PetStateRepository` touches.
@@ -862,6 +876,9 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
 - **Foreground service start:** start `DoomScrollMonitorService` only through
   `DoomScrollMonitor.startFromForeground()` while a page is resumed. `Application.onCreate` can run
   in the background, where Android 12+ throws `ForegroundServiceStartNotAllowedException`.
+- **Inactivity decay uses the wall clock:** moving the device clock forward costs HP, and back
+  costs nothing. That makes it easy to test (set the clock forward while the app is in the
+  background), but don't switch it to `elapsedRealtime`, which resets on reboot.
 - **Switch on strings** works with the `AccessorySlot` / `McpPetActionHandler.TOOL_*` constants
   because they are compile-time constants. Keep new constants `static final` literals.
 - **Commit messages from Windows PowerShell 5.1:** `git commit -m @'…'@` with embedded double
@@ -1086,6 +1103,14 @@ Debug helpers:
     non-social app (e.g. Chrome) and use it in portrait: HP drops by 1 each minute. Rotation keeps
     the list; relaunching keeps the choice.
 
+**Inactivity decay (needs a finished onboarding):**
+
+21. Note the HP on Pets, press Home and come back within 30 minutes: HP is unchanged, with no Snackbar.
+22. Press Home, set the device clock 8.5 hours forward, then reopen the app. HP is about 30% lower
+    (100 → 70, 50 → 35), and a Snackbar above the health bar says "Tomo missed you: −N HP while
+    you were away", once. If the app reopens on another tab, the Snackbar waits until you open Pets.
+    Rotating or switching tabs never applies decay.
+
 ---
 
 ## 9. Project status & known gaps
@@ -1095,6 +1120,7 @@ Update this table in the same commit when your task changes a subsystem's status
 | Subsystem | Status | Implementation in `AppContainer` |
 |---|---|---|
 | Pet state + persistence | ✅ Done | `PetStateRepository` |
+| Inactivity HP decay | ✅ 30 min grace, then 30% of HP per 8 h away, applied on return, with a Snackbar on Pets (not yet tested on a device) | `InactivityDecayTracker` |
 | MCP tool bridge | ✅ Production-capable default | `DefaultMcpPetActionHandler` |
 | Pets UI (pet viewport, health bar below the pet) | ✅ Skeleton done | `PetsFragment` / `PetsViewModel` |
 | Customise UI (pet preview, slot tabs, item circle grid) | ✅ Skeleton done | `CustomiseFragment` / `CustomiseViewModel` |
@@ -1115,4 +1141,4 @@ Known gaps and TODOs (not assigned to anyone yet):
 - To change HP for manual testing, use the debug panel (long-press the Pets tab). To start over,
   use the hidden reset (long-press the Wardrobe tab, or the panel). Whether it keeps Usage Access and
   the notification permission hasn't been checked on a device.
-- No instrumented/UI tests yet. JVM tests only (`model`, `doomscroll`, `chat`, `maniengine`, `viewmodel`).
+- No instrumented/UI tests yet. JVM tests only (`model`, `doomscroll`, `chat`, `maniengine`, `viewmodel`, `repository`).

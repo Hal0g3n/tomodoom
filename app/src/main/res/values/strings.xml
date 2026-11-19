@@ -60,6 +60,9 @@
     <string name="chat_send">Send</string>
 
     <!-- HtmlManiengineRenderer -->
+    <!-- Pets page: inactivity decay -->
+    <string name="inactivity_decay_notice">%1$s missed you: −%2$d HP while you were away</string>
+
     <string name="maniengine_unavailable">Your pet can\'t be shown: this device has no working WebView.</string>
     <string name="maniengine_crashed">The pet viewer stopped. Switch tabs or reopen the app to reload it.</string>
 

@@ -38,7 +38,8 @@ public final class ViewModelFactory implements ViewModelProvider.Factory {
     @SuppressWarnings("unchecked")
     public <T extends ViewModel> T create(@NonNull Class<T> modelClass) {
         if (modelClass.isAssignableFrom(PetsViewModel.class)) {
-            return (T) new PetsViewModel(container.getPetStateRepository());
+            return (T) new PetsViewModel(container.getPetStateRepository(),
+                    container.getInactivityDecayTracker());
         }
         if (modelClass.isAssignableFrom(CustomiseViewModel.class)) {
             return (T) new CustomiseViewModel(container.getPetStateRepository());

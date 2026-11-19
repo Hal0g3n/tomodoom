@@ -29,6 +29,7 @@ import com.example.tomodoom.model.PetState;
 import com.example.tomodoom.ui.PetStage;
 import com.example.tomodoom.ui.watchedapps.WatchedAppsActivity;
 import com.example.tomodoom.viewmodel.PetsViewModel;
+import com.google.android.material.snackbar.Snackbar;
 
 /**
  * Pets page (the default tab): the pet viewport (drawn by the activity's shared pet renderer,
@@ -87,6 +88,7 @@ public class PetsFragment extends Fragment {
         updateUsageAccessCard();
 
         viewModel.getPetState().observe(getViewLifecycleOwner(), this::renderState);
+        viewModel.getDecayNotice().observe(getViewLifecycleOwner(), loss -> showDecayNotice());
     }
 
     @Override
@@ -106,6 +108,7 @@ public class PetsFragment extends Fragment {
             requestNotificationsOnce();
         }
         stage().attach(binding.petViewport, viewModel.getPetState().getValue());
+        showDecayNotice();
     }
 
     @Override
@@ -126,6 +129,24 @@ public class PetsFragment extends Fragment {
         binding.hpText.setText(getString(R.string.hp_format, state.getCurrentHp(), state.getMaxHp()));
 
         stage().render(binding.petViewport, state);
+    }
+
+    /**
+     * Shows "<name> missed you: −N HP while you were away" once, and only while this page is the
+     * one on screen (a hidden page stays STARTED, so the observer alone isn't enough).
+     */
+    private void showDecayNotice() {
+        Integer loss = viewModel.getDecayNotice().getValue();
+        if (binding == null || !isResumed() || loss == null || loss <= 0) {
+            return;
+        }
+        viewModel.acknowledgeDecayNotice();
+        String name = viewModel.getCurrentState().getPetName();
+        Snackbar.make(binding.getRoot(),
+                        getString(R.string.inactivity_decay_notice, name, loss),
+                        Snackbar.LENGTH_LONG)
+                .setAnchorView(binding.hpCard)
+                .show();
     }
 
     @StringRes
