@@ -673,8 +673,8 @@ How the page is hosted (`HtmlManiengineRenderer`):
   `ManiengineProtocol.TAB_FLICK_MIN_DP_PER_SEC` within `TAB_FLICK_WINDOW_MS` of touch-down also changes
   tab (`isTabFlick`); while a drag is still that young and at least half that fast, `index.html` holds
   its turn back and eases it in (~70 ms, never in one frame) only once the drag proves not to be a flick
-  (a cancelled flick's small early nudge eases back the same way), so a flick that changes tab
-  never spins the pet and snaps it back (the page mirrors the `TAB_FLICK_*` values: change both
+  (a flick that does change tab instead spins the pet one full turn in its direction over
+  `FLICK_SPIN_SEC`, ending at its starting angle), so a flick never jerks the pet and snaps it back (the page mirrors the `TAB_FLICK_*` values: change both
   together). Other drags turn the `pet` group (`rotation.y`): `index.html` measures finger
   speed over the last 100 ms, so slow drags are precise, fast ones turn further and the release speed
   (measured up to the last move; 0 if the finger rested for 80 ms) sets how far it coasts, slowing
@@ -1035,7 +1035,8 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
   wide whatever `--window-size` says, so check framing at ≥500px.
 - **Flick constants live twice:** `index.html`'s `FLICK_WINDOW_MS` / `FLICK_PX_PER_SEC` mirror
   `ManiengineProtocol.TAB_FLICK_WINDOW_MS` / `TAB_FLICK_MIN_DP_PER_SEC` (CSS px = dp). If they drift,
-  fast flicks that change tab spin the pet and snap it back on `pointercancel` again.
+  a flick that changes tab turns the pet under the finger before its full-turn spin on `pointercancel`
+  takes over, so the spin starts with a jerk.
 - **Pet parts aren't only meshes:** `pet-scene.js` groups meshes, lines and points (`isPart`); the
   cat's whiskers are `LineSegments` and stayed behind when the pet turned while it only took meshes.
   An export using another object type needs adding there.
@@ -1273,7 +1274,7 @@ Debug helpers:
    - Back on Customise or Chat returns to Pets; Back on Pets leaves the app;
    - **Swiping:** from Pets, swipe left to Chat and right to Customise, either from the 16dp page
      margins at any speed, or with a fast flick anywhere on the pet. The bottom nav
-     selection follows, and the rabbit neither spins and snaps back during the flick nor stays turned.
+     selection follows, and a flick on the pet spins it one smooth full turn in the flick's direction, ending facing as before.
    - **Rotating:** on Pets and Customise, a slower one-finger drag inside the model box (on Pets this
      includes the health bar) turns the pet both ways without changing page. Slow drags are precise,
      faster ones turn further, and the release speed sets how far it coasts. A quick swipe on the pet

@@ -107,12 +107,14 @@ const MIN_FLING = .3, MAX_FLING = 14, FLING_DECAY = 1.2, TAB_HANDOVER_MS = 300;
 // A held turn is eased in over ~70 ms rather than in one frame; a release this long after the last
 // move means the finger was held still, so the pet doesn't coast.
 const CATCH_UP_RATE = 14, STILL_MS = 80;
+// A flick that changes tab spins the pet one full turn in the flick's direction, easing out.
+const FLICK_SPIN_SEC = .8;
 // Mirrors ManiengineProtocol.TAB_FLICK_WINDOW_MS / TAB_FLICK_MIN_DP_PER_SEC (CSS px = dp): change both
 // together. While a young drag is this fast it may still become a tab flick, which the app hands to the
 // pager (pointercancel), so its turn is held back instead of spinning the pet and snapping it back.
 const FLICK_WINDOW_MS = 200, FLICK_PX_PER_SEC = 1200, FLICK_HOLD_FRACTION = .5;
 const pointers = new Map();
-let pinch = null, spin = null, spinVelocity = 0, spinCatchUp = 0;
+let pinch = null, spin = null, spinVelocity = 0, spinCatchUp = 0, flickSpin = null;
 const spread = () => { const [a, b] = [...pointers.values()]; return Math.max(Math.hypot(a.x - b.x, a.y - b.y), 1); };
 const startPinch = () => { pinch = pointers.size === 2 ? { spread: spread(), zoom: camera.zoom } : null; };
 const canvas = renderer.domElement;
@@ -145,8 +147,9 @@ canvas.addEventListener('pointerdown', e => {
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   startPinch();
   spinVelocity = 0;
+  flickSpin = null;  // a touch catches the pet mid-spin
   spin = pointers.size === 1 && inModelBox(e)  // a second finger ends the turn
-    ? { id: e.pointerId, x: e.clientX, start: e.timeStamp, startYaw: pet.rotation.y, pending: 0, samples: [{ x: e.clientX, time: e.timeStamp }] } : null;
+    ? { id: e.pointerId, x: e.clientX, x0: e.clientX, start: e.timeStamp, startYaw: pet.rotation.y, pending: 0, samples: [{ x: e.clientX, time: e.timeStamp }] } : null;
 });
 canvas.addEventListener('pointermove', e => {
   if (!pointers.has(e.pointerId)) return;
@@ -172,9 +175,13 @@ for (const type of ['pointerup', 'pointercancel']) canvas.addEventListener(type,
   pointers.delete(e.pointerId);
   startPinch();
   if (!spin || spin.id !== e.pointerId) return;
-  if (type === 'pointercancel') {  // a quick flick went to the tab pager: drop the held turn, ease the nudge back
-    if (e.timeStamp - spin.start < TAB_HANDOVER_MS) spinCatchUp = spin.startYaw - pet.rotation.y;
+  if (type === 'pointercancel') {  // a quick flick went to the tab pager: drop the held turn, spin once
     spinVelocity = 0;
+    if (e.timeStamp - spin.start < TAB_HANDOVER_MS) {
+      const dir = Math.sign(spin.x - spin.x0) || 1;
+      spinCatchUp = 0;
+      flickSpin = { from: pet.rotation.y, to: spin.startYaw + dir * Math.PI * 2, t: 0 };
+    }
   } else {
     spinCatchUp += spin.pending;  // released on the pet: a quick flick still turns it, smoothly
     const speed = releaseSpeed(e.timeStamp), release = speed * Math.PI * 2 * swipeGain(speed);
@@ -189,7 +196,12 @@ let last = performance.now();
 function frame(now) {
   const t = now / 1000, dt = Math.max(0, Math.min(now - last, 100)) / 1000, k = 1 - Math.exp(-dt * 6);  // a slow first render can leave now < last
   last = now;
-  if (spinCatchUp) {  // ease in a held turn (or ease back a cancelled nudge)
+  if (flickSpin) {  // one full turn after a tab flick (easeOutCubic), ending where the drag began
+    flickSpin.t = Math.min(flickSpin.t + dt / FLICK_SPIN_SEC, 1);
+    pet.rotation.y = THREE.MathUtils.lerp(flickSpin.from, flickSpin.to, 1 - Math.pow(1 - flickSpin.t, 3));
+    if (flickSpin.t === 1) flickSpin = null;
+  }
+  if (spinCatchUp) {  // ease in a held turn
     const step = Math.abs(spinCatchUp) < .001 ? spinCatchUp : spinCatchUp * (1 - Math.exp(-dt * CATCH_UP_RATE));
     pet.rotation.y += step;
     spinCatchUp -= step;
