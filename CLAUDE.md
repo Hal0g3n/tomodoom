@@ -186,12 +186,17 @@ com.example.tomodoom
 ├── viewmodel/
 │   ├── PetsViewModel             exposes PetState + debug actions
 │   ├── CustomiseViewModel        exposes PetState, selected slot, catalog items, equip action
-│   ├── OnboardingViewModel       onboarding flag, suggested name, species list + selectedSpecies, submitName()
+│   ├── OnboardingViewModel       onboarding flag, suggested name, species list + selectedSpecies, submitName(),
+│   │                             permission-step state (usage skipped, notifications handled)
+│   ├── OnboardingPermissionFlow  pure Java: next permission step (Usage Access → notifications → done)
 │   └── ChatViewModel             exposes transcript + active quiz, sends messages
 │
 └── ui/
-    ├── onboarding/OnboardingActivity   LAUNCHER: picks + names the pet on first launch only,
-    │                             otherwise forwards straight to MainActivity and finishes
+    ├── onboarding/OnboardingActivity   LAUNCHER: picks + names the pet on first launch only, then asks
+    │                             for Usage Access, then notifications; otherwise forwards straight to
+    │                             MainActivity and finishes
+    ├── NotificationPrompt        Android 13+ notification permission; one "asked this launch" flag
+    │                             shared by onboarding and Pets
     ├── onboarding/PetChoiceAdapter, PetPortraits   two-column pet portrait cards; species ID → portrait/name
     ├── MainPagerAdapter          FragmentStateAdapter: page index ↔ bottom-nav item id
     │                             (Customise=0, Pets=1 = default, Chat=2)
@@ -216,8 +221,9 @@ launcher icon: `mipmap-anydpi-v26/ic_launcher{,_round}.xml` (adaptive: `@color/l
 + GENERATED `drawable/ic_launcher_foreground.xml` / `ic_launcher_monochrome.xml`) and GENERATED legacy
 `mipmap-*/ic_launcher{,_round}.webp` for API 24–25, GENERATED `drawable/ic_notification.xml` (notification
 small icon, used by both doom-scroll notifications),
-`activity_main.xml` (`main_pager` ViewPager2 + `nav_view`), `activity_onboarding.xml` (title,
-`pet_choices` grid, `pet_name_layout`/`pet_name_input`, `start_button`), `res/menu/bottom_nav_menu.xml`.
+`activity_main.xml` (`main_pager` ViewPager2 + `nav_view`), `activity_onboarding.xml` (`name_step`: title,
+`pet_choices` grid, `pet_name_layout`/`pet_name_input`, `start_button`; then `permissions_step`:
+`usage_row`/`notifications_row` (the current one drawn selected), `permission_button`, `permission_skip_button`), `res/menu/bottom_nav_menu.xml`.
 `res/values/dimens.xml` (`pet_viewport_stroke`).
 `res/font/` + `res/font-v26/` (`playpen_sans`, `unkempt` families and their static TTFs; §6.3), with
 the font licences in `assets/licenses/`.
@@ -684,9 +690,11 @@ How `GeminiChatService` behaves:
 
 #### Current implementation
 
-`doomscroll.UsageStatsDoomScrollMonitor` uses the special Android Usage Access setting; the Pets
-tab provides a button to open that setting and starts the monitor when the user returns with access
-granted. It watches Instagram, TikTok, Reddit, YouTube, X/Twitter, Facebook and Snapchat.
+`doomscroll.UsageStatsDoomScrollMonitor` uses the special Android Usage Access setting. Onboarding's
+second step asks for it first and then for notifications (Android 13+), each skippable with **Not now**.
+As a fallback the Pets tab has a card with a button to open that setting, starts the monitor when the
+user returns with access granted, and asks for notifications once per launch unless onboarding already
+asked in that launch (`ui.NotificationPrompt`). It watches Instagram, TikTok, Reddit, YouTube, X/Twitter, Facebook and Snapchat.
 
 Session rules (`DoomScrollSessionTracker`):
 - The pet loses **1 HP per counted minute**, from the first minute. Part-minutes carry over.
@@ -817,6 +825,9 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
   updating, so catch it.
 - **Launcher is `OnboardingActivity`**, not `MainActivity` (which is `exported="false"`). It
   checks `isOnboardingComplete()` before inflating anything and forwards to `MainActivity` if set.
+  **Start** completes onboarding *before* the permission step, so that step exists only while the
+  activity lives: a restore with the saved `permissions_step` flag (rotation) shows it again instead of
+  forwarding, and a relaunch after process death skips it (Pets' card is the fallback).
   Anything that should run on every launch belongs in `TomodoomApplication` or `MainActivity`,
   not in the onboarding screen.
 - **Launcher shows the old (robot) icon after an icon change:** the APK is fine, but the phone
@@ -991,8 +1002,13 @@ Debug helpers available in the debug build:
    pet", portrait cards for every pet (Rabbit, Cat) with Rabbit ringed, and the name field prefilled
    with `Tomo`. Tapping Cat moves the ring (rotation keeps it); after **Start** the Pets and Customise
    viewports show the cat, and it stays the cat after a relaunch. Clearing it disables **Start**; the counter caps
-   at 20. Type `Mochi` and tap **Start** (or the keyboard's Done): the Pets tab opens and its
-   health bar shows `Mochi`. Rotation keeps the typed text. Relaunching skips onboarding. (The steps
+   at 20. Type `Mochi` and tap **Start** (or the keyboard's Done): a "Help Mochi look after you" screen
+   lists **Track app usage** (ringed) and **Notifications** (Android 13+ only). **Allow usage tracking**
+   opens the Usage Access settings; grant it and go back: the row shows "✓ Allowed", the ring moves to
+   Notifications and the button reads **Allow notifications**, which shows the system prompt. Then
+   **Continue**: the Pets tab opens with no Usage Access card and no second notification prompt, and its
+   health bar shows `Mochi`. **Not now** skips a step ("Skipped…"); after skipping usage the Pets card is
+   still there. Rotating on the permission screen keeps it. Rotation keeps the typed text. Relaunching skips onboarding. (The steps
    below assume you kept `Tomo` and the Rabbit.)
 1. The home-screen icon is the phone with a pet peeking out of its pocket, on eggshell (with any
    mask shape; on Android 13+ with themed icons on, a tinted line drawing). Launch the app. The **Pets** tab has **no action bar** and no debug buttons. The health bar sits below
@@ -1065,7 +1081,7 @@ Update this table in the same commit when your task changes a subsystem's status
 | MCP tool bridge | ✅ Production-capable default | `DefaultMcpPetActionHandler` |
 | Pets UI (pet viewport, health bar below the pet) | ✅ Skeleton done | `PetsFragment` / `PetsViewModel` |
 | Customise UI (pet preview, slot tabs, item circle grid) | ✅ Skeleton done | `CustomiseFragment` / `CustomiseViewModel` |
-| Onboarding (choose and name the pet) | ✅ Done | `OnboardingActivity` / `OnboardingViewModel` |
+| Onboarding (choose and name the pet, then Usage Access and notifications) | ✅ Done (permission step not yet tested on a device) | `OnboardingActivity` / `OnboardingViewModel` |
 | Chat UI | ✅ Skeleton done | `ChatFragment` / `ChatViewModel` / `ChatRepository` |
 | Pet rendering | ✅ scene-3 rabbit (default) and scene-5 cat (three.js, offline) via the HTML/WebView pipeline; add-ons are primitive placeholders | `HtmlManiengineRenderer` + `assets/maniengine/` |
 | Item catalog | ⏳ Placeholder (6 hard-coded items: hats and accessories) | `AccessoryCatalog` → Maniengine Agent |
@@ -1082,4 +1098,4 @@ Known gaps and TODOs (not assigned to anyone yet):
 - The app has no built-in way to lower HP for manual testing; use real doom-scroll detection. To
   start over, use the hidden reset (long-press the Wardrobe tab). Whether it keeps Usage Access and
   the notification permission hasn't been checked on a device.
-- No instrumented/UI tests yet. JVM tests only (`model`, `doomscroll`, `chat`, `maniengine`).
+- No instrumented/UI tests yet. JVM tests only (`model`, `doomscroll`, `chat`, `maniengine`, `viewmodel`).
