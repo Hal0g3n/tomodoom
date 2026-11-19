@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Contract for the <b>TruFar/MCP Agent</b>: the Model Context Protocol (MCP) tool bridge that
+ * Contract for the <b>Chat/MCP Agent</b>: the Model Context Protocol (MCP) tool bridge that
  * lets the chatbot act on the pet. It is the <b>only</b> path by which the chat subsystem may
  * change pet state.
  *

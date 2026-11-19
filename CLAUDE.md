@@ -20,7 +20,7 @@ and acceptance criteria are in the section listed.
 | The task mentions… | Your role | Read | You mainly touch |
 |---|---|---|---|
 | pet rendering, sprites, animation, clothes/accessory art, assets, the pet viewport, `AccessoryCatalog`, "Maniengine" | **Maniengine Agent** | §4 `ManiengineAssetRenderer`, §5.1 | new package `com.example.tomodoom.maniengine`, `model/AccessoryCatalog`, assets |
-| chatbot, TruFar, LLM, backend, quizzes, MCP tools, chat networking | **TruFar/MCP Agent** | §4 `TruFarChatService` + `McpPetActionHandler`, §5.2 | new package `com.example.tomodoom.trufar` (and/or `.mcp`), manifest INTERNET permission, the relay backend in `backend/` |
+| chatbot, Gemini, LLM, personas, quizzes, MCP tools, chat networking | **Chat/MCP Agent** | §4 `ChatService` + `McpPetActionHandler`, §5.2 | new package `com.example.tomodoom.chat` (and/or `.mcp`), manifest INTERNET permission |
 | doomscroll detection, usage stats, accessibility service, screen-time tracking, monitoring permissions | **Doom Scroll Agent** | §4 `DoomScrollMonitor`, §5.3 | new package `com.example.tomodoom.doomscroll`, manifest, permission UI on Pets |
 | anything else: UI polish, new screens, bug fixes, refactors, tests, build config, docs | **Core Agent** | §2, §3, §6 | the existing packages, following the dependency rules in §2 |
 
@@ -86,12 +86,12 @@ virtual pet whose **HP** reflects your digital habits:
 | Event | Effect | Subsystem |
 |---|---|---|
 | A doom-scroll session is detected | Pet **loses** HP | Doom Scroll monitor |
-| You pass a quiz from the TruFar chatbot | Pet **gains** HP (applied via an MCP tool) | TruFar chat + MCP bridge |
+| You pass a quiz from the chatbot | Pet **gains** HP (applied via an MCP tool) | Gemini chat + MCP bridge |
 | You equip clothes or accessories | The pet's look changes | Maniengine renderer |
 
 The app has three bottom-navigation tabs, left to right: **Customise** (live pet preview + slot tabs
 and a grid of item circles), **Pets** (HP and the pet viewport; the default page on launch) and **Chat**
-(TruFar chatbot + quizzes). There is no action bar on any tab. The bottom bar shows icons only: the
+(Gemini chatbot + quizzes). There is no action bar on any tab. The bottom bar shows icons only: the
 open tab widens, shows its label and enlarges its icon.
 
 ### Tech stack (fixed — don't change it without updating this file)
@@ -116,7 +116,8 @@ Root package: `com.example.tomodoom`. Source root: `app/src/main/java/com/exampl
 
 ```
 com.example.tomodoom
-├── TomodoomApplication.java      Application subclass; owns the AppContainer; starts the monitor
+├── TomodoomApplication.java      Application subclass; owns the AppContainer; starts the monitor;
+│                                 counts started activities → ChatRepository background/foreground
 ├── MainActivity.java             Main activity (not exported); swipeable ViewPager2 (Customise | Pets | Chat) ↔ BottomNavigationView;
 │                                 starts on Pets; Back off Pets → Pets; no action bar (NoActionBar theme);
 │                                 hidden reset: long-press the Wardrobe tab → confirm → wipe all data
@@ -137,30 +138,34 @@ com.example.tomodoom
 │
 ├── contracts/                    Interfaces that downstream agents implement (see §4)
 │   ├── ManiengineAssetRenderer
-│   ├── TruFarChatService         (+ nested TruFarChatService.Listener)
+│   ├── ChatService         (+ nested ChatService.Listener)
 │   ├── McpPetActionHandler
 │   ├── DoomScrollMonitor
 │   └── DoomScrollListener
 │
 ├── repository/                   Reactive state holders and domain glue
 │   ├── PetStateRepository        SINGLE SOURCE OF TRUTH for pet state (SharedPreferences + LiveData)
-│   ├── ChatRepository            app-scoped chat transcript; routes TruFar events → MCP handler
+│   ├── ChatRepository            app-scoped chat transcript; routes chat events → MCP handler;
+│   │                             new conversation after 10 min in the background
+│   ├── BackgroundTimer           pure Java: how long the app was in the background
 │   └── DoomScrollHpBridge        DoomScrollListener → PetStateRepository.decreaseHp(...)
 │
 ├── stubs/                        Stubs and default implementations of the contracts
 │   ├── PlaceholderManiengineRenderer   text-only placeholder in the pet viewport
-│   ├── MockTruFarChatService           echo bot + scripted quiz flow + /tool debug command
+│   ├── MockChatService                 echo bot + scripted quiz flow + /tool debug command
 │   ├── DefaultMcpPetActionHandler      REAL implementation wired to PetStateRepository
 │   └── StubDoomScrollMonitor           no-op monitor with a debug trigger
 │
-├── trufar/                       TruFar/MCP Agent: real chat clients (§5.2)
-│   ├── OpenAiCompatibleChatService   runs the Kafka agent export on any OpenAI-compatible endpoint
-│   ├── AgentProfile, AgentProfileLoader   TruFar agent export (assets/trufar/*.json) → persona + model settings
+├── chat/                         Chat/MCP Agent: the Gemini chat client (§5.2)
+│   ├── GeminiChatService         runs the pet's personas on Gemini's OpenAI-compatible endpoint
+│   ├── AgentProfile, AgentProfileLoader   agent export (assets/agents/*.json) → persona + model settings;
+│   │                             withPetName() swaps the agent's name for the pet's
+│   ├── PersonaSelector           pure Java: Kafka (low HP) / Charon (high HP) with 40/60 hysteresis
+│   ├── PersonaPrompts            pure Java: the one-turn hidden mood-shift note after a switch
 │   ├── QuizMarkerParser          pure Java: strips [[CORRECT]]/[[WRONG]] grading markers from replies
 │   ├── ChatHistoryWindow         pure Java: last-N-turns conversation memory
-│   ├── HttpTruFarChatService     client for the /v1/chat/sessions event API (served by the backend/ relay)
 │   ├── ModelFallback             pure Java: model list parsing + retry/fallback policy for overloaded LLMs
-│   └── JsonHttpClient            package-private HTTPS + JSON helper shared by both clients;
+│   └── JsonHttpClient            package-private HTTPS + JSON helper used by GeminiChatService;
 │                                 non-2xx → HttpStatusException (an IOException with the status code)
 │
 ├── maniengine/                   Maniengine Agent: the HTML (3D) pet page in a WebView (§5.1)
@@ -215,26 +220,13 @@ launcher icon: `mipmap-anydpi-v26/ic_launcher{,_round}.xml` (adaptive: `@color/l
 `res/values/dimens.xml` (`pet_viewport_stroke`).
 `res/font/` + `res/font-v26/` (`playpen_sans`, `unkempt` families and their static TTFs; §6.3), with
 the font licences in `assets/licenses/`.
-Assets: `assets/trufar/kafka_agent.json` (the Kafka TruFar agent export, icon stripped; §5.2),
+Assets: `assets/agents/kafka_agent.json` and `charon_agent.json` (the two persona exports from the TruFar editor, icons stripped; §5.2),
 `assets/maniengine/index.html` (the pet page, §5.1), `pet-scene.js` (model setup + add-ons, shared with the
 thumbnail tool; `PETS` profiles per model), `models/rabbit.js` and `models/cat.js` (GENERATED from the scene-3
 and scene-5 exports) and `vendor/three/` (three.js 0.187.0).
 Tools: `tools/maniengine/extract_model.py` (+ `source/scene-3.html`, `source/scene-5.html`), `make_thumbnails.py` (+ `thumbnails.html`);
 `tools/launcher_icon/make_launcher_icon.py` (+ `logo.svg`, the app logo) regenerates every launcher-icon file
 listed above (needs `rsvg-convert` and Pillow; WSL has both). Edit the logo, then re-run it.
-
-Outside the app: **`backend/`** is the Python relay server that connects the app's chat to Kafka on
-trufar.cn. It's **currently parked**: the app runs Kafka on Gemini instead (§5.2). It's Flask, hosted on **Vercel** (free Hobby plan, no card), with Firestore on Firebase's
-free Spark plan. It's a flat folder of modules (`app.py` WSGI entry, `trufar_client.py`,
-`mcp_server.py`, `store.py`, `markers.py`, `config.py`) with pytest tests in `backend/tests/`.
-
-Deploy config:
-- Vercel: `vercel.json` (region `hkg1`) and `.vercelignore`. The Vercel project's Root Directory
-  is `backend`, and Vercel's zero-config Flask support finds `app.py` → `app`.
-- Shared: `.python-version` (3.12).
-- Cloud Run (needs a billing card, kept as an alternative): `Procfile` (gunicorn) and `.gcloudignore`.
-
-It isn't part of the Gradle build; see §5.2 and `backend/README.md`.
 
 ### Dependency direction (enforced by convention)
 
@@ -260,7 +252,7 @@ ui  ──►  viewmodel  ──►  repository  ──►  contracts  ◄──
                               ChatRepository.sendUserMessage()
                                          │  (active quiz? → submitQuizAnswer : sendMessage)
                                          ▼
-                              TruFarChatService  (Mock now, real TruFar later)
+                              ChatService  (Gemini, or the offline mock)
                                          │  Listener callbacks — ANY thread
                                          ▼
                               ChatRepository.onQuizEvaluated(passed)
@@ -318,7 +310,7 @@ ui  ──►  viewmodel  ──►  repository  ──►  contracts  ◄──
 | Repositories publish **only with `postValue()`, called while holding the repository lock**, and **never** call `setValue()` | Mixing the two lets an older pending `postValue` overwrite a newer `setValue`. With all posts under one lock, the last value delivered is always the newest snapshot |
 | A consequence of the above: right after a mutation, `getPetState().getValue()` may be one frame stale | Use `getCurrentState()` (or the mutator's return value) when you need the value straight away |
 | SharedPreferences writes use `apply()`, never `commit()` | `apply()` updates memory synchronously and writes to disk asynchronously, so the caller never blocks |
-| Contract callbacks (`TruFarChatService.Listener`, `DoomScrollListener`) **may arrive on any thread** | Consumers (repositories) are thread-safe. UI code only sees LiveData, which is always delivered on the main thread |
+| Contract callbacks (`ChatService.Listener`, `DoomScrollListener`) **may arrive on any thread** | Consumers (repositories) are thread-safe. UI code only sees LiveData, which is always delivered on the main thread |
 | `DoomScrollMonitor.startFromForeground()` is **main-thread only**, called while the app is visible | Android 12+ blocks starting a foreground service from the background |
 | `ManiengineAssetRenderer` methods are **main-thread only** | They touch views. Do decoding/loading on a background thread inside the implementation, then post back to the main thread |
 | Don't block the main thread: no network or disk I/O apart from the repositories' first prefs load | ANR safety |
@@ -327,7 +319,21 @@ ui  ──►  viewmodel  ──►  repository  ──►  contracts  ◄──
 ### 3.3 Other state
 
 - `ChatRepository` keeps the chat transcript **in memory only** (it survives tab switches and
-  rotation, but not process death). Persisting it is up to the TruFar agent, if needed.
+  rotation, but not process death). Persisting it is up to the Chat/MCP agent, if needed.
+- **New conversation after inactivity:** `TomodoomApplication` counts started activities. When
+  the count goes 1 → 0 it calls `ChatRepository.onAppBackgrounded`, and 0 → 1 calls
+  `onAppForegrounded`, both with `SystemClock.elapsedRealtime()`. If the app was away for
+  `ChatRepository.INACTIVITY_RESET_MILLIS` (10 minutes) or more and the chat had been opened,
+  `startNewConversation()` runs:
+  1. `ChatService.disconnect()`;
+  2. clear the transcript and the active quiz;
+  3. `connect()`, which sends a new greeting.
+
+  Rotation and switching between activities don't count. The doom-scroll foreground service
+  isn't an activity, so it doesn't keep the chat alive.
+- `GeminiChatService` saves the persona in use in its own prefs file **`tomodoom_chat`**, key
+  `persona` (`low_hp` | `high_hp`), so a new conversation or a cold start keeps the personality.
+  This is separate from `tomodoom_pet_state`, which only `PetStateRepository` touches.
 - ViewModels hold only UI state (e.g. the selected customisation tab). Domain state lives in
   repositories.
 
@@ -338,8 +344,8 @@ ui  ──►  viewmodel  ──►  repository  ──►  contracts  ◄──
 | Interface | Implementation (stub in `stubs`) | Owner agent | Where it's wired |
 |---|---|---|---|
 | `ManiengineAssetRenderer` | `maniengine.HtmlManiengineRenderer` (stub: `PlaceholderManiengineRenderer`) | **Maniengine Agent** | `AppContainer.createAssetRenderer()` (factory: one instance per `MainActivity`, held by `ui.PetStage`) |
-| `TruFarChatService` | `MockTruFarChatService` | **TruFar/MCP Agent** | `AppContainer` constructor, `// SWAP POINT (TruFar/MCP Agent)` |
-| `McpPetActionHandler` | `DefaultMcpPetActionHandler` (production-capable) | **TruFar/MCP Agent** | `AppContainer` constructor, `// SWAP POINT (TruFar/MCP Agent)` |
+| `ChatService` | `MockChatService` | **Chat/MCP Agent** | `AppContainer` constructor, `// SWAP POINT (Chat/MCP Agent)` |
+| `McpPetActionHandler` | `DefaultMcpPetActionHandler` (production-capable) | **Chat/MCP Agent** | `AppContainer` constructor, `// SWAP POINT (Chat/MCP Agent)` |
 | `DoomScrollMonitor` (+ `DoomScrollListener`) | `StubDoomScrollMonitor` | **Doom Scroll Agent** | `AppContainer` constructor, `// SWAP POINT (Doom Scroll Agent)` |
 
 The full Javadoc on each interface is normative. What follows is a summary.
@@ -370,7 +376,7 @@ The full Javadoc on each interface is normative. What follows is a summary.
 - The asset format is **HTML**: Maniengine exports a 3D scene as a web page, which
   `HtmlManiengineRenderer` shows (§5.1). Nothing outside the renderer may depend on that.
 
-### `TruFarChatService`
+### `ChatService`
 ```java
 void setListener(@Nullable Listener listener);
 void connect();      void disconnect();      boolean isConnected();
@@ -387,8 +393,10 @@ interface Listener {                                   // callbacks: ANY thread
 }
 ```
 - All methods return immediately. Results arrive asynchronously through the `Listener`.
-- `ChatRepository` is the only listener. It calls `connect()` once, the first time the Chat tab
-  opens. While a quiz is active, the user's next message goes to `submitQuizAnswer` instead of
+- `ChatRepository` is the only listener. It calls `connect()` the first time the Chat tab
+  opens, and `disconnect()` + `connect()` to start a new conversation after 10 minutes in the
+  background (§3.3). A new session starts fresh, and events still pending for the old one are
+  dropped. While a quiz is active, the user's next message goes to `submitQuizAnswer` instead of
   `sendMessage`.
 - `onToolCallRequested` is how the backend (acting as the MCP client) invokes the app's pet tools.
   It runs the tool **synchronously** on the calling thread and returns the result, which the
@@ -544,53 +552,53 @@ How the page is hosted (`HtmlManiengineRenderer`):
   or switching tabs doesn't leak views (`release` cleans up). Nothing happens off the main thread
   in `render`. The export loads offline from `assets/maniengine/` and reacts to `tomodoom:petstate`.
 
-### 5.2 TruFar/MCP Agent — chatbot backend & MCP tool bridge
-- **Implement:** `contracts.TruFarChatService` (network client) and, optionally, extend
+### 5.2 Chat/MCP Agent — Gemini chatbot & MCP tool bridge
+- **Implement:** `contracts.ChatService` (network client) and, optionally, extend
   `stubs.DefaultMcpPetActionHandler` or replace it with your own `contracts.McpPetActionHandler`.
-- **Replace:** `stubs.MockTruFarChatService` (and optionally the handler) in `AppContainer`.
+- **Replace:** `stubs.MockChatService` (and optionally the handler) in `AppContainer`.
 - **Must:** deliver `QuizPrompt`s via `onQuizPrompt`, evaluate answers from `submitQuizAnswer`
   and report the result via `onQuizEvaluated` (with `hpReward` set when passed). Advertise the
   tools in `getSupportedToolNames()` to the model, and forward model tool calls through
   `Listener.onToolCallRequested` (call it off the main thread), sending the returned
-  `McpToolResult` back to the backend.
+  `McpToolResult` back to the model.
 - **Must not:** call `PetStateRepository` directly from the chat service. HP changes always go
   through `McpPetActionHandler`, which keeps the anti-replay and award caps in one place.
 - **Network:** add `<uses-permission android:name="android.permission.INTERNET"/>` to the manifest
   when you add networking. Do I/O on your own executor.
-- **Acceptance:** the manual E2E script in §8 passes against the real backend. No main-thread
+- **Acceptance:** the manual E2E script in §8 passes against the real Gemini API. No main-thread
   network. Errors show up as SYSTEM messages via `onError`.
 
-#### Kafka agent (the chatbot in use)
+#### The pet's two personas (Kafka and Charon)
 
-The chatbot is **Kafka**, a TruFar agent exported from the TruFar editor as JSON. The export is
-bundled as `assets/trufar/kafka_agent.json`, a copy of the export without the base64 icon. To
-change the bot, edit or replace that file; no code change is needed. `AgentProfileLoader` reads:
+The chatbot is the pet itself, with two personalities exported from the TruFar editor as JSON
+and bundled without their base64 icons:
+- `assets/agents/kafka_agent.json`: **Kafka**, bitter and sarcastic, speaks while HP is **low**.
+- `assets/agents/charon_agent.json`: **Charon**, cheerful and encouraging, speaks while HP is
+  **high**.
+
+The originals (with icons) may sit untracked in the repo root (`Kafka.json`, `Charon.json`).
+To change a persona, edit or replace its asset; no code change is needed. `AgentProfileLoader`
+reads:
 - `agent_basic_info.name`
 - `config.pre_prompt` (the persona)
 - `config.model.name` (`deepseek-v4-pro`)
-- `config.model.params.temperature` (0.84)
+- `config.model.params.temperature` (Kafka 0.84, Charon 0.95)
 - `config.chat_memory_window.window_size` (5 turns)
 
 Everything else in the export (icon, tools, opening statement) is ignored.
 
 TruFar publishes no API for running an agent, and the export only names the model provider
-(`trufar_tokenhub`). There are two ways to run Kafka:
-- **In the app against an OpenAI-compatible LLM. This is the setup in use: Google's Gemini API,
-  free tier.** The app runs the persona itself with `trufar.OpenAiCompatibleChatService`
-  against **any OpenAI-compatible `POST {base}/chat/completions`**. No TruFar and no backend
-  are involved.
-- **On trufar.cn itself, through the relay backend** (*Relay backend* below; currently
-  **parked**). The app would use `HttpTruFarChatService` (`TRUFAR_API_URL`). It's parked because
-  every free, no-card host either blocks trufar.cn or is unconfirmed, and a model hosted on
-  PythonAnywhere free isn't viable (512 MB disk, one shared-CPU worker, no GPU).
+(`trufar_tokenhub`). So the app runs the persona itself against Google's **Gemini API** (free
+tier), through its OpenAI-compatible `POST {base}/chat/completions` endpoint. There is no
+TruFar server and no backend: the app calls Gemini directly.
 
 Set these Gradle properties in the untracked `~/.gradle/gradle.properties` (never in the repo):
 
 | Property | Meaning |
 |---|---|
-| `TRUFAR_LLM_URL` | HTTPS base URL; `/chat/completions` is appended. In use: `https://generativelanguage.googleapis.com/v1beta/openai` (Gemini) |
-| `TRUFAR_LLM_API_KEY` | bearer token. For Gemini, a free key from aistudio.google.com/apikey (no card). It's compiled into the APK: dev/testing only, same caveat as below |
-| `TRUFAR_LLM_MODEL` | optional; overrides the export's model name (`deepseek-v4-pro`). May be a **comma-separated list**: the primary first, then fallbacks for when it's overloaded. In use: `gemini-3.1-flash-lite,gemini-flash-lite-latest,gemini-3.5-flash` |
+| `GEMINI_API_URL` | HTTPS base URL; `/chat/completions` is appended. In use: `https://generativelanguage.googleapis.com/v1beta/openai` (Gemini) |
+| `GEMINI_API_KEY` | bearer token. For Gemini, a free key from aistudio.google.com/apikey (no card). It's compiled into the APK: dev/testing only; never ship a long-lived production key in a mobile app |
+| `GEMINI_MODELS` | optional; overrides the export's model name (`deepseek-v4-pro`). May be a **comma-separated list**: the primary first, then fallbacks for when it's overloaded. In use: `gemini-3.1-flash-lite,gemini-flash-lite-latest,gemini-3.5-flash` |
 
 Gemini was verified with the real persona (2026-11-19):
 - `gemini-3.1-flash-lite` answers in ~2 s. It greets in character and grades both ways
@@ -601,16 +609,42 @@ Gemini was verified with the real persona (2026-11-19):
   404 for this key.
 - List the models available to a key with `GET {base}/models`.
 
-`AppContainer` picks the first configured option: `TRUFAR_LLM_URL` → `OpenAiCompatibleChatService`,
-then `TRUFAR_API_URL` → `HttpTruFarChatService`, otherwise `MockTruFarChatService` (offline demo).
-So for the relay, leave `TRUFAR_LLM_URL` **unset**.
+`AppContainer` uses `GeminiChatService` when `GEMINI_API_URL` is set, otherwise
+`MockChatService` (offline demo).
 
-How `OpenAiCompatibleChatService` behaves:
-- `connect()` loads the asset on the worker thread. It then sends the hidden user turn `__START__`,
-  which the persona prompt answers with Kafka's greeting. `__START__` never appears in the transcript.
+**Persona selection (`PersonaSelector`, hysteresis 40 / 60):**
+- Before **every** request, `GeminiChatService` reads the pet through a read-only
+  `Supplier<PetState>` (`PetStateRepository::getCurrentState`) and picks the persona:
+  - no persona yet: HP ≥ 50 → Charon, otherwise Kafka (the default 50/100 pet starts with
+    Charon);
+  - while Charon: Kafka takes over once HP < 40;
+  - while Kafka: Charon returns once HP ≥ 60.
+- A choice is committed only when its reply succeeds, so a failed request doesn't swallow the
+  switch. Switches happen between turns, never mid-reply.
+- **Pet name:** `AgentProfile.withPetName` replaces every whole-word occurrence of the export's
+  own name in its prompt ("You are Kafka") with the onboarding name, so both personas speak as
+  the pet. It's read fresh for each request.
+- **Seamless switch:**
+  - both personas share one `ChatHistoryWindow`, session ID and quiz counter, so the topic and
+    the open question carry over;
+  - the first reply after a switch gets a hidden one-turn `PersonaPrompts.moodShiftNote`
+    ("…your mood has soured / brightened… don't greet again… open with one short in-character
+    line showing the change, then carry on").
+- Switches are logged under `GeminiChatService` (persona and HP only).
+
+How `GeminiChatService` behaves:
+- `connect()` loads both assets on the worker thread. It then sends the hidden user turn
+  `__START__`, which the current persona's prompt answers with its greeting. `__START__` never appears in the transcript.
   Only an asset-load failure leaves the service disconnected. If the greeting request fails, the
-  error is shown, but the session stays open (`ChatRepository` calls `connect()` only once), so
-  the user's next message starts the conversation.
+  error is shown, but the session stays open, so the user's next message starts the
+  conversation.
+- **New conversation** (`disconnect()` then `connect()`, §3.3):
+  - memory, session ID and quiz counter start fresh, and the greeting comes from the persona
+    `PersonaSelector` picks from the **saved** persona (`tomodoom_chat`/`persona`). So the
+    personality carries over unless HP crossed 40/60 meanwhile.
+  - A greeting never carries the mood-shift note.
+  - `disconnect()` bumps a generation counter at once. Queued or in-flight requests from the old
+    conversation drop their reply and errors, so nothing old lands in the new transcript.
 - Each request is `{model, temperature, stream:false, messages:[system, …last 5 turns, user]}`. A
   turn is remembered only if its request succeeds. Read timeout is 90 s.
 - **Retries and fallbacks (`ModelFallback`):** each turn tries the primary model twice, then each
@@ -619,137 +653,18 @@ How `OpenAiCompatibleChatService` behaves:
   - A timeout skips straight to the next model, because a hanging model costs a full 90 s read
     timeout per try.
   - 400/401/403/404 fail at once, so a bad key or model name is reported immediately.
-  - Retries are logged under `OpenAiChatService` (model and status only). The user sees an
+  - Retries are logged under `GeminiChatService` (model and status only). The user sees an
     error only if every attempt fails.
-- **HP / quiz protocol:** Kafka quizzes in free text, so the service never emits `QuizPrompt`s. The
+- **HP / quiz protocol:** both personas quiz in free text, so the service never emits `QuizPrompt`s. The
   app appends `APP_PROTOCOL_PROMPT` to the persona, which asks the model to end any reply that grades
   an answer with `[[CORRECT]]` or `[[WRONG]]`. `QuizMarkerParser` strips the markers (it's lenient
   about case and brackets, and the last marker wins). A graded reply is delivered as
-  `onQuizEvaluated(quizId = "trufar-agent:<session UUID>:<n>", hpReward = CORRECT_ANSWER_HP = 10)`.
+  `onQuizEvaluated(quizId = "gemini-chat:<session UUID>:<n>", hpReward = CORRECT_ANSWER_HP = 10)`.
   `ChatRepository` shows it as one bot bubble and, when it passed, calls `onQuizPassed`, so the
   replay guard and cap still apply. Ungraded replies arrive through `onBotMessage`. A marker in the
   greeting is ignored.
-- No MCP tools are advertised (the export has none). HTTP errors include the server's
+- No MCP tools are advertised (the exports have none). HTTP errors include the server's
   `error.message` and surface as SYSTEM messages via `onError`.
-
-#### Relay backend (`backend/`): Kafka on trufar.cn
-
-```
-app (HttpTruFarChatService) ──/v1/chat/sessions──► relay (Flask, Vercel)    ──► trufar.cn web chat
-          ▲  quiz_evaluated event                    ▲  POST /mcp award_hp               │ Kafka
-          └──────────────────────────────────────────┴───────────────────────────────────┘
-```
-The relay implements the session API below. Deployment, env vars and the TruFar-side setup are
-in `backend/README.md`.
-
-**Hosting: Vercel (primary; free Hobby plan, no card)**
-- The Vercel project's Root Directory is `backend`. Zero-config Flask runs `app.py` → `app`.
-  `vercel.json` pins functions to `hkg1` (Hong Kong), and functions may run up to 300 s.
-- Each request is its own function invocation, so state can't live in memory. The Firestore
-  store is **required** there: it holds the turn lease, which is how Kafka's mid-turn `/mcp`
-  call finds the turn. Firestore runs on Firebase's free Spark plan.
-- Env vars live in Vercel's *Settings → Environment Variables* (encrypted): `BACKEND_TOKEN`,
-  `MCP_KEY`, `TRUFAR_COOKIE`, `TRUFAR_CONVERSATION_ID`, and `FIREBASE_SERVICE_ACCOUNT` (the key
-  JSON). A change only applies after a redeploy. Pushes to `main` redeploy automatically.
-- The endpoints are public on purpose: the app and TruFar must reach them, and the app token
-  and MCP key are the protection.
-
-**Alternative: Cloud Run (needs a billing card)**
-- Service `tomodoom-relay` in `asia-east1`, deployed with `--allow-unauthenticated`.
-- gunicorn runs 1 worker with **8 threads** (`Procfile`), so `/mcp` is served while a
-  `/messages` request waits on TruFar.
-- Secrets come from **Secret Manager** as env vars: `backend-token` → `BACKEND_TOKEN`,
-  `mcp-key` → `MCP_KEY`, `trufar-cookie` → `TRUFAR_COOKIE`. `TRUFAR_CONVERSATION_ID` and
-  `GOOGLE_CLOUD_PROJECT` are plain env vars.
-
-**Credentials and store selection (all hosts)**
-- `Config.from_env()` picks the Firestore store automatically when `FIREBASE_SERVICE_ACCOUNT`,
-  `GOOGLE_APPLICATION_CREDENTIALS` or `K_SERVICE` (set by Cloud Run) is present, otherwise memory.
-  Firestore credentials, in order:
-  - `FIREBASE_SERVICE_ACCOUNT`: the whole service-account key JSON as one env var, for hosts
-    with no file system for a key file. It's validated by `store.parse_service_account`, whose
-    errors never contain the value.
-  - otherwise Application Default Credentials: a key file, or on Cloud Run the service's own
-    account, which needs `roles/secretmanager.secretAccessor` and `roles/datastore.user`.
-
-  A bad key doesn't crash the app: `GET /` reports it under `missing`. Secret fields of
-  `Config` are `repr=False`.
-- PythonAnywhere is still documented in the README, but its **free plan is confirmed to block
-  trufar.cn** (§6.2).
-
-**Captured TruFar web protocol** (undocumented; taken from the browser's DevTools, so it may change):
-- `POST https://trufar.cn/api/mashang/core/answer/{conversationId}` with body
-  `{"issue_content": text, "issue_config": {}, "entrance": "normal"}`. Auth is the browser
-  **login cookie** only (env `TRUFAR_COOKIE`). A new chat in TruFar gets a new `conversationId`;
-  the request that creates one hasn't been captured, so the relay uses one fixed
-  `TRUFAR_CONVERSATION_ID` for every app session.
-- The response is a stream of `data: {...}` events. Each event is a **cumulative snapshot**, not a
-  delta, and events are not always newline-separated (`}data: {`). `reply_config.replyAll[]` holds
-  components: `reasonContent` (thinking, dropped) and `replyContent` (the reply). The final text
-  is the last `replyContent.value`. A non-empty `reply_error` means failure. `trufar_client.StreamParser`
-  splits on the `}data:` boundary, because Kafka's own text may contain `data:`.
-
-**Turns and HP:**
-- `POST /v1/chat/sessions` creates a session and relays the hidden `__START__` turn; Kafka's
-  greeting comes back as a `message` event. The greeting never awards HP.
-- Each `/messages` call takes the **turn lease** (`store.begin_turn`), relays the text, and then
-  releases it. The lease lives in Firestore (`relay/current`), not in process memory, because
-  Cloud Run may run several instances (and PythonAnywhere several worker processes), and Kafka's
-  MCP call can land in a different one.
-  Only one turn runs at a time; a second gets HTTP 409 "Kafka is busy". The lease expires after
-  `TURN_LEASE_S` (300 s) if a worker dies.
-- HP: Kafka calls the MCP tool **`award_hp(amount 1–10, reason)`** on `POST /mcp` while it
-  answers, and the award attaches to the turn in flight. Fallback: a `[[CORRECT]]` marker in the
-  reply (`markers.py`, a port of `QuizMarkerParser`). Either signal produces **one**
-  `quiz_evaluated` event (`quiz_id = "trufar:<session>:<turn>"`, `hp_reward` ≤ 10, `feedback` =
-  the reply without markers). The app then applies the HP through `McpPetActionHandler.onQuizPassed`,
-  so the replay guard and cap stay on the device. The relay never sends `tool_call` events.
-- `/mcp` is a minimal **stateless Streamable-HTTP MCP server**: JSON responses only, with
-  `initialize`/`ping`/`tools/list`/`tools/call`; notifications get 202 and GET/DELETE get 405.
-  Auth is `X-MCP-Key`, a Bearer token or `?key=` (env `MCP_KEY`), separate from the app's
-  `BACKEND_TOKEN` (= the app's `TRUFAR_API_TOKEN`).
-- Errors come back as `{"error": {"message": …}}`, which `JsonHttpClient` shows in the app's
-  SYSTEM message: 401 bad token, 404 unknown/closed session, 409 busy, 502 TruFar failure,
-  503 expired cookie ("TruFar login expired: refresh TRUFAR_COOKIE") or relay not configured.
-- Firestore layout: `sessions/{id}` `{created, turn_count, closed}`,
-  `sessions/{id}/turns/{n}` `{awarded, amount, reason, at}` (audit; **no message text is stored**),
-  `relay/current` (the lease). The relay never logs message content.
-
-#### Session API contract (`HttpTruFarChatService`)
-
-The Android client is `trufar.HttpTruFarChatService`. Configure `TRUFAR_API_URL` and optionally
-`TRUFAR_API_TOKEN` as Gradle project properties (for example in an untracked `~/.gradle/gradle.properties`).
-The URL must be an HTTPS origin/base URL. With `TRUFAR_API_URL` unset or empty, `AppContainer`
-keeps `MockTruFarChatService` wired so the offline demo remains usable. A configured bearer token
-is compiled into the APK and is suitable only for local development/testing; do not put a
-long-lived production secret in a mobile app.
-
-The API is JSON over HTTPS. Every successful response uses an `events` array:
-
-| Request | JSON body | Response |
-|---|---|---|
-| `POST /v1/chat/sessions` | `{ "client": "tomodoom", "tools": [...] }` | `{ "session_id": "...", "events": [...] }` |
-| `POST /v1/chat/sessions/{id}/messages` | `{ "text": "..." }` | `{ "events": [...] }` |
-| `POST /v1/chat/sessions/{id}/quiz-answers` | `{ "quiz_id": "...", "answer": "..." }` | `{ "events": [...] }` |
-| `POST /v1/chat/sessions/{id}/tool-results` | `{ "call_id": "...", "result": { "success": true, "message": "...", "data": {} } }` | `{ "events": [...] }` |
-| `DELETE /v1/chat/sessions/{id}` | no body | any 2xx response |
-
-Supported event shapes are:
-
-```json
-{ "type": "message", "text": "..." }
-{ "type": "quiz_prompt", "quiz_id": "...", "question": "...", "options": [], "hp_reward": 10 }
-{ "type": "quiz_evaluated", "quiz_id": "...", "passed": true, "hp_reward": 10, "feedback": "..." }
-{ "type": "tool_call", "call_id": "...", "name": "get_pet_state", "arguments": {} }
-{ "type": "error", "message": "..." }
-```
-
-The client advertises the three `McpPetActionHandler` tools when creating a session, executes
-`tool_call` events synchronously on its serial background worker through the registered listener,
-and posts each result before processing returned events. Tool-call round trips are limited to eight
-per response to prevent a backend loop. An HTTP or protocol error is surfaced through `onError`.
-The read timeout is 120 s, because relayed Kafka turns are slow. `backend/` implements this contract.
-It accepts `quiz-answers` and `tool-results` but returns no events for them.
 
 ### 5.3 Doom Scroll Agent — doomscroll detection
 - **Implement:** `contracts.DoomScrollMonitor` (e.g. with `UsageStatsManager` polling or an
@@ -871,36 +786,22 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
   lint warnings.
 - **Gemini free tier (the LLM in use):**
   - Popular models often return **503 "high demand"** or simply hang. That's why
-    `TRUFAR_LLM_MODEL` lists fallbacks and `ModelFallback` retries automatically; a single 503
-    used to surface as `⚠ TruFar error … HTTP 503` and, on the greeting, left the chat
+    `GEMINI_MODELS` lists fallbacks and `ModelFallback` retries automatically; a single 503
+    used to surface as `⚠ Chat error … HTTP 503` and, on the greeting, left the chat
     "not connected" until restart (fixed).
   - The free tier has rate limits, and some projects report "free tier unavailable". If every
     listed model fails, change the list (`GET {base}/models` shows what the key can use), or use
     another free OpenAI-compatible provider. No code change is needed either way.
   - Worst case with all models hanging is about 3 × 90 s before the error appears. Fast-failing
     503s are retried within seconds.
-  - Changing any `TRUFAR_LLM_*` property needs a rebuild and reinstall, because they're compiled
+  - Changing any `GEMINI_*` property needs a rebuild and reinstall, because they're compiled
     into `BuildConfig`.
-- **LLM-graded HP is persuadable:** a user can talk Kafka into emitting `[[CORRECT]]`. Each award
-  is bounded by `OpenAiCompatibleChatService.CORRECT_ANSWER_HP` (10) and the per-award cap, but
+  - The properties used to be called `TRUFAR_LLM_URL` / `TRUFAR_LLM_API_KEY` /
+    `TRUFAR_LLM_MODEL`. The old names are ignored now, so a build with only the old names
+    silently falls back to the mock bot.
+- **LLM-graded HP is persuadable:** a user can talk either persona into emitting `[[CORRECT]]`. Each award
+  is bounded by `GeminiChatService.CORRECT_ANSWER_HP` (10) and the per-award cap, but
   there's no rate limit. Add one in the handler if it gets abused.
-- **PythonAnywhere free can't host the relay** (confirmed by a live test): its allowlist proxy
-  blocks trufar.cn, and the relay answers *"TruFar unreachable from host (PythonAnywhere free
-  allowlist?)"* instantly. With a single web worker, Kafka's `/mcp` call would also have to wait
-  for the turn to end. Kafka's prompt still asks for the `[[CORRECT]]` marker as an HP fallback.
-- **Hosting must be free with no card** (the user's requirement). Cloud Run, Koyeb and Hugging
-  Face Docker Spaces need payment details, so the relay runs on **Vercel Hobby**. Hobby is
-  non-commercial only, which is fine for a course project.
-- **Vercel notes:**
-  - Every request may run in a fresh function, so never set `TOMODOOM_STORE=memory` there.
-  - The first request after idle has a few seconds of cold start; the app's timeout is 120 s.
-  - Whether trufar.cn accepts requests from Vercel's Hong Kong addresses was still unconfirmed
-    when this was written.
-- **TruFar cookie expiry:** the relay authenticates with a copied cookie from a **separate TruFar
-  bot account**, so your own login is never exposed. When it expires, the app shows "TruFar
-  login expired: refresh TRUFAR_COOKIE". Update the `TRUFAR_COOKIE` env var in Vercel and
-  redeploy (on Cloud Run: add a new `trufar-cookie` secret version and run `gcloud run services
-  update`). Never commit it or paste it into chats.
 - **org.json in JVM tests:** android.jar only has throwing stubs, so `org.json:json` is a
   `testImplementation` dependency. Tests can then call `AgentProfileLoader.parse(JSONObject)` on the
   real asset (unit tests run with `app/` as the working directory).
@@ -995,7 +896,7 @@ Requires **JDK 17** (Android Studio's bundled JBR works) and the Android SDK wit
 (`sdk.dir` in `local.properties`, which Android Studio generates and which is never committed).
 Some machines have no Android Studio or SDK; one known example has only a standalone JDK at
 `C:\Program Files\Eclipse Adoptium\jdk-17.0.16.8-hotspot`. There Gradle can't build, so the most
-you can do is a `javac --release 8 -Xlint:all -Werror` check of pure-Java/`trufar` code against
+you can do is a `javac --release 8 -Xlint:all -Werror` check of pure-Java/`chat` code against
 stubs, plus running the JUnit tests directly. Say so in the report.
 
 **macOS / Linux (JDK 17 on PATH, Linux/macOS SDK):**
@@ -1017,15 +918,6 @@ Gradle 8.0 can't run on it and fails with just `What went wrong: 25.0.4`. On thi
 `C:\Users\jordi\.jdks\jbr-17.0.14` or `C:\Program Files\Eclipse Adoptium\jdk-17.0.16.8-hotspot`.
 In PowerShell: `$env:JAVA_HOME="C:\Users\jordi\.jdks\jbr-17.0.14"; .\gradlew.bat …`.
 
-**Relay backend (`backend/`, Python ≥ 3.10):** run this whenever you touch `backend/`. It isn't
-part of the Gradle build.
-```bash
-python -m venv <somewhere outside the repo> && <venv>/Scripts/pip install -r backend/requirements-dev.txt
-<venv>/Scripts/python -m pytest -q -p no:cacheprovider backend/tests
-```
-The tests fake TruFar and Firestore (`firebase-admin` isn't needed for them). The Firestore
-store itself is exercised only on the deployed server.
-
 **WSL on this machine:** WSL has no JDK and the SDK is a Windows install, so `./gradlew` won't work
 inside WSL. Run the Windows wrapper through interop from the repo root (`/mnt/c/...`), passing
 `JAVA_HOME` via `WSLENV`. Don't use `cmd.exe /c 'set "JAVA_HOME=..." && ...'`: WSL escapes the
@@ -1043,7 +935,7 @@ A change counts as verified when `assembleDebug` and `testDebugUnitTest` succeed
 `lintDebug` reports **0 errors**. The current lint baseline is **9 `GradleDependency` warnings**
 (newer AndroidX versions require compileSdk 35+ or a newer AGP). Some setups also report one
 accepted `OldTargetApi` warning (`targetSdk = 34` is fixed by the stack), for 10 in total.
-Changes to `backend/` must also keep `pytest backend/tests` green. Don't introduce new lint warnings. javac currently
+Don't introduce new lint warnings. javac currently
 builds with zero warnings, so keep it that way.
 
 ### 7.2 Unit tests
@@ -1074,7 +966,7 @@ Debug helpers available in the debug build:
 - **`StubDoomScrollMonitor.simulateDoomScroll(pkg, durationMs, penalty)`:** tests the
   monitor → listener path in code.
 - **Logcat tags:** `PetStateRepository` (every HP change with its reason), `ChatRepository`,
-  `DefaultMcpHandler`, `MockTruFarChatService`, `OpenAiChatService`, `StubDoomScrollMonitor`,
+  `DefaultMcpHandler`, `MockChatService`, `GeminiChatService`, `StubDoomScrollMonitor`,
   `HtmlManiengine` (WebView failures, missing assets).
 - **Maniengine page:** in a debug build, open `chrome://inspect` on a desktop Chrome with the
   device connected to inspect and live-edit the pet page.
@@ -1121,36 +1013,30 @@ Debug helpers available in the debug build:
    and confirm **Reset** (Cancel changes nothing): the app closes and the next launch shows onboarding
    again with HP 50 / 100 and nothing equipped. A plain tap on Wardrobe still just opens the page.
 
-**Kafka (real LLM, Gemini in use)**: build with `TRUFAR_LLM_URL`/`TRUFAR_LLM_API_KEY`/`TRUFAR_LLM_MODEL` set (§5.2):
+**Personas on Gemini (real LLM)**: build with `GEMINI_API_URL`/`GEMINI_API_KEY`/`GEMINI_MODELS` set (§5.2):
 
-9. Open **Chat**. Kafka sends a sarcastic three-sentence greeting asking for a topic. No `__START__` bubble appears.
-10. Name a topic and answer Kafka's question correctly. The reply shows no `[[…]]` marker, and a SYSTEM
-    message shows **"+10 HP awarded via MCP!"**. A wrong answer gets a roast and no HP.
-11. Use a bad key or URL. A SYSTEM `⚠ TruFar error: … HTTP 401…` message appears and the app doesn't crash.
+9. Fresh install at 50 HP, pet named `Mochi`. Open **Chat**: Charon's warm three-sentence greeting
+   appears, calling itself Mochi (never "Charon"). No `__START__` bubble appears.
+10. Name a topic and answer correctly. The reply shows no `[[…]]` marker, and a SYSTEM
+    message shows **"+10 HP awarded via MCP!"**. A first wrong answer gets a hint and no HP.
+11. Use a bad key or URL. A SYSTEM `⚠ Chat error: … HTTP 401…` message appears and the app doesn't crash.
+12. Doom-scroll until HP < 40, then send a message. The reply opens with one line showing a soured
+    mood, then continues the same topic in Kafka's sarcastic tone, still as Mochi. Between 40 and
+    59 HP the persona doesn't change. Earn HP back to ≥ 60: the next reply brightens, then Charon.
+13. With a conversation open, send the app to the background (Home) for under 10 minutes and
+    return: the transcript is still there. Leave it for over 10 minutes and return: the
+    transcript is cleared and a new greeting arrives from the **same** persona as before (unless
+    HP crossed 40/60 meanwhile, e.g. through doom-scrolling). Rotating never resets the chat, and
+    killing and relaunching the app keeps the persona.
 
 **Doom-scroll detection (real device, watched app installed):**
 
-12. Grant Usage Access and allow notifications. A low-priority "Tomodoom is watching over your pet" notification appears.
-13. Scroll Instagram or YouTube Shorts in portrait. HP drops by 1 each minute.
-14. Keep going to 10 and 20 minutes. A "Time to look up" notification appears each time.
-15. Play a fullscreen landscape YouTube video. HP stops dropping, then resumes when you return to portrait.
-16. Leave watched apps for over a minute, then return. The next warning comes 10 minutes into the new session.
-17. Revoke Usage Access. Monitoring stops and its notification disappears.
-
-**Kafka on trufar.cn via the relay**: deploy `backend/` (see its README), set `TRUFAR_API_URL`/`TRUFAR_API_TOKEN`
-and leave `TRUFAR_LLM_URL` unset:
-
-18. The relay URL (`https://<project>.vercel.app/`) returns `"ok": true`. Open **Chat** and wait
-    (up to about a minute): Kafka's TruFar greeting appears, with no `__START__` bubble.
-19. Answer Kafka's question correctly. The relay logs (*Vercel → project → Logs*) show
-    `MCP award_hp amount=10 -> ok` (or `award=10 via marker`), the reply shows no `[[…]]`
-    marker, and a SYSTEM message shows **"+10 HP awarded via MCP!"**. A wrong answer gets no HP.
-20. Send a message while another is still being answered (e.g. from a second device). That one
-    gets `⚠ TruFar error: … HTTP 409: Kafka is busy…`.
-21. Set a stale `TRUFAR_COOKIE` in Vercel and redeploy: the app shows
-    `HTTP 503: TruFar login expired: refresh TRUFAR_COOKIE`. A wrong
-    `TRUFAR_API_TOKEN` shows `HTTP 401`. `TruFar unreachable from host` means the host can't
-    reach trufar.cn (§6.2).
+14. Grant Usage Access and allow notifications. A low-priority "Tomodoom is watching over your pet" notification appears.
+15. Scroll Instagram or YouTube Shorts in portrait. HP drops by 1 each minute.
+16. Keep going to 10 and 20 minutes. A "Time to look up" notification appears each time.
+17. Play a fullscreen landscape YouTube video. HP stops dropping, then resumes when you return to portrait.
+18. Leave watched apps for over a minute, then return. The next warning comes 10 minutes into the new session.
+19. Revoke Usage Access. Monitoring stops and its notification disappears.
 
 ---
 
@@ -1168,19 +1054,12 @@ Update this table in the same commit when your task changes a subsystem's status
 | Chat UI | ✅ Skeleton done | `ChatFragment` / `ChatViewModel` / `ChatRepository` |
 | Pet rendering | ✅ scene-3 rabbit (default) and scene-5 cat (three.js, offline) via the HTML/WebView pipeline; add-ons are primitive placeholders | `HtmlManiengineRenderer` + `assets/maniengine/` |
 | Item catalog | ⏳ Placeholder (6 hard-coded items: hats and accessories) | `AccessoryCatalog` → Maniengine Agent |
-| TruFar backend | ✅ Kafka persona on Google's free Gemini API (`gemini-3.1-flash-lite` with fallbacks, retries on 503/429/timeouts) via the in-app OpenAI-compatible client. It's verified from a PC; on a device, the first build hit a 503, and the fix is not yet re-tested there. trufar.cn relay (`backend/`) **parked**: tested locally, PythonAnywhere free blocked, Vercel/Cloud Run configs kept. Mock when unconfigured | `OpenAiCompatibleChatService` (`TRUFAR_LLM_URL`) / `HttpTruFarChatService` (`TRUFAR_API_URL` → relay) / `MockTruFarChatService` |
+| Chatbot (Gemini) | ✅ Kafka (low HP) / Charon (high HP) personas, 40/60 hysteresis, speaking as the pet's name, new conversation after 10 min in the background, on Google's free Gemini API (`gemini-3.1-flash-lite` with fallbacks, retries on 503/429/timeouts) via the in-app OpenAI-compatible client. It's verified from a PC; on a device, the first build hit a 503, and the fix is not yet re-tested there. Mock when unconfigured | `GeminiChatService` (`GEMINI_API_URL`) / `MockChatService` |
 | Doom-scroll detection | ✅ Usage Access polling in a foreground service; portrait only, 1 HP per minute, warnings every 10 minutes (not yet tested on a device) | `UsageStatsDoomScrollMonitor` |
 
 Known gaps and TODOs (not assigned to anyone yet):
-- The relay (`backend/`) has been tested against a fake TruFar (pytest plus an HTTP smoke test)
-  and deployed once to PythonAnywhere free (it ran, but trufar.cn was blocked). Not yet tested:
-  - Vercel, Firestore, and a real trufar.cn reply
-  - which MCP transport TruFar's client uses (the relay speaks Streamable HTTP with JSON responses)
-  - how long the TruFar cookie lasts
-- All app sessions share one TruFar conversation (`TRUFAR_CONVERSATION_ID`). Per-user
-  conversations need the "new chat" request captured from trufar.cn.
-- The chat transcript isn't persisted, and quiz replay protection only lasts for the process
-  lifetime. Real backends must use globally unique quiz IDs.
+- The chat transcript isn't persisted (only the persona is), and quiz replay protection only lasts for the process
+  lifetime. Quiz IDs include a random session UUID, so they stay unique across sessions.
 - Non-UI user-facing text (MCP results, chat notices, mock bot) is inline English, not in `strings.xml`.
 - The pet species is chosen once, at onboarding; there's no way to change it later short of the
   hidden reset. Add-ons are positioned for the rabbit, so they may sit oddly on the cat.
@@ -1188,5 +1067,4 @@ Known gaps and TODOs (not assigned to anyone yet):
 - The app has no built-in way to lower HP for manual testing; use real doom-scroll detection. To
   start over, use the hidden reset (long-press the Wardrobe tab). Whether it keeps Usage Access and
   the notification permission hasn't been checked on a device.
-- No instrumented/UI tests yet. JVM tests only (`model`, `doomscroll`, `trufar`, `maniengine`),
-  plus pytest for `backend/`.
+- No instrumented/UI tests yet. JVM tests only (`model`, `doomscroll`, `chat`, `maniengine`).

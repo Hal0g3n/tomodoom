@@ -43,7 +43,7 @@
     <string name="onboarding_name_error">Enter a name (maximum length: %1$d)</string>
 
     <!-- Chat page -->
-    <string name="chat_input_hint">Message TruFar…</string>
+    <string name="chat_input_hint">Message your pet…</string>
     <string name="chat_input_hint_quiz">Type your answer…</string>
     <string name="chat_send">Send</string>
 

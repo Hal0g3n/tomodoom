@@ -21,7 +21,7 @@ public class ChatViewModel extends ViewModel {
 
     public ChatViewModel(@NonNull ChatRepository chatRepository) {
         this.chatRepository = chatRepository;
-        chatRepository.start(); // idempotent; connects the TruFar session the first time
+        chatRepository.start(); // idempotent; connects the chat session the first time
     }
 
     @NonNull

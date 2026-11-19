@@ -10,7 +10,7 @@ import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 
 import com.example.tomodoom.contracts.McpPetActionHandler;
-import com.example.tomodoom.contracts.TruFarChatService;
+import com.example.tomodoom.contracts.ChatService;
 import com.example.tomodoom.model.ChatMessage;
 import com.example.tomodoom.model.McpToolResult;
 import com.example.tomodoom.model.QuizEvaluation;
@@ -24,11 +24,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * App-scoped owner of the chat session. It keeps the transcript (in memory) and routes
- * {@link TruFarChatService} events, including passed quizzes and backend tool calls, to the
+ * {@link ChatService} events, including passed quizzes and backend tool calls, to the
  * {@link McpPetActionHandler}.
  *
  * <p>Because it is app-scoped, the transcript and quiz state survive tab switches and
- * configuration changes. It does <b>not</b> survive process death.</p>
+ * configuration changes. It does <b>not</b> survive process death, and after
+ * {@link #INACTIVITY_RESET_MILLIS} in the background the conversation starts over
+ * ({@link #onAppForegrounded}).</p>
  *
  * <h3>Threading</h3>
  * Service callbacks arrive on any thread. All mutable state is guarded by {@link #lock}, and
@@ -40,9 +42,11 @@ public final class ChatRepository {
     private static final String TAG = "ChatRepository";
     /** Oldest messages are dropped beyond this size to bound memory. */
     static final int MAX_TRANSCRIPT_SIZE = 500;
+    /** Time in the background after which the next foregrounding starts a new conversation. */
+    public static final long INACTIVITY_RESET_MILLIS = 10 * 60 * 1000L;
 
     @NonNull
-    private final TruFarChatService chatService;
+    private final ChatService chatService;
     @NonNull
     private final McpPetActionHandler mcpHandler;
 
@@ -54,8 +58,9 @@ public final class ChatRepository {
             new MutableLiveData<>(Collections.<ChatMessage>emptyList());
     private final MutableLiveData<QuizPrompt> activeQuizLiveData = new MutableLiveData<>(null);
     private final AtomicBoolean started = new AtomicBoolean(false);
+    private final BackgroundTimer backgroundTimer = new BackgroundTimer();
 
-    public ChatRepository(@NonNull TruFarChatService chatService, @NonNull McpPetActionHandler mcpHandler) {
+    public ChatRepository(@NonNull ChatService chatService, @NonNull McpPetActionHandler mcpHandler) {
         this.chatService = chatService;
         this.mcpHandler = mcpHandler;
         chatService.setListener(new ServiceListener());
@@ -67,6 +72,46 @@ public final class ChatRepository {
         if (started.compareAndSet(false, true)) {
             chatService.connect();
         }
+    }
+
+    /**
+     * The app went to the background (no activity started).
+     *
+     * @param nowMs monotonic time, e.g. {@code SystemClock.elapsedRealtime()}.
+     */
+    @AnyThread
+    public void onAppBackgrounded(long nowMs) {
+        backgroundTimer.onBackground(nowMs);
+    }
+
+    /**
+     * The app came back to the foreground. If it was away for at least
+     * {@link #INACTIVITY_RESET_MILLIS} and the chat had been opened, starts a new conversation.
+     *
+     * @param nowMs monotonic time on the same clock as {@link #onAppBackgrounded}.
+     */
+    @AnyThread
+    public void onAppForegrounded(long nowMs) {
+        if (backgroundTimer.onForeground(nowMs, INACTIVITY_RESET_MILLIS) && started.get()) {
+            startNewConversation();
+        }
+    }
+
+    /**
+     * Clears the transcript and any active quiz and opens a fresh session, which greets the user
+     * again. The service is disconnected first, so replies still on their way for the old
+     * conversation are dropped rather than landing in the new one.
+     */
+    @AnyThread
+    public void startNewConversation() {
+        Log.i(TAG, "starting a new conversation");
+        chatService.disconnect();
+        synchronized (lock) {
+            transcript.clear();
+            setActiveQuizLocked(null);
+            messagesLiveData.postValue(Collections.<ChatMessage>emptyList());
+        }
+        chatService.connect();
     }
 
     /** Immutable snapshots of the transcript, oldest first. */
@@ -143,7 +188,7 @@ public final class ChatRepository {
     }
 
     /** Receives service callbacks on arbitrary threads. */
-    private final class ServiceListener implements TruFarChatService.Listener {
+    private final class ServiceListener implements ChatService.Listener {
 
         @Override
         public void onBotMessage(@NonNull String text) {
@@ -186,8 +231,8 @@ public final class ChatRepository {
 
         @Override
         public void onError(@NonNull Throwable error) {
-            Log.w(TAG, "TruFar error", error);
-            append(ChatMessage.system("⚠ TruFar error: " + error.getMessage()));
+            Log.w(TAG, "chat error", error);
+            append(ChatMessage.system("⚠ Chat error: " + error.getMessage()));
         }
     }
 }

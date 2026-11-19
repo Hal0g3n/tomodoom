@@ -4,7 +4,7 @@ import androidx.annotation.NonNull;
 
 /**
  * Result of evaluating the user's answer to a {@link QuizPrompt}, delivered by
- * {@code TruFarChatService.Listener#onQuizEvaluated}.
+ * {@code ChatService.Listener#onQuizEvaluated}.
  *
  * <p>When {@link #isPassed()} is true, {@code ChatRepository} invokes
  * {@code McpPetActionHandler#onQuizPassed(quizId, hpReward)}.</p>

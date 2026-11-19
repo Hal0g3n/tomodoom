@@ -8,10 +8,10 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * A structured quiz question delivered by {@code TruFarChatService.Listener#onQuizPrompt}.
+ * A structured quiz question delivered by {@code ChatService.Listener#onQuizPrompt}.
  *
  * <p>While a prompt is active, the user's next chat message is sent to
- * {@code TruFarChatService#submitQuizAnswer(quizId, answer)}.</p>
+ * {@code ChatService#submitQuizAnswer(quizId, answer)}.</p>
  */
 public final class QuizPrompt {
 

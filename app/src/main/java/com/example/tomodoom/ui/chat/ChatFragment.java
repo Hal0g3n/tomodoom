@@ -22,7 +22,7 @@ import com.example.tomodoom.viewmodel.ChatViewModel;
 import java.util.List;
 
 /**
- * Chat page: the TruFar transcript (user, bot and system/MCP messages) plus an input bar.
+ * Chat page: the chat transcript (user, bot and system/MCP messages) plus an input bar.
  * While a quiz is active, the input hint asks for an answer.
  */
 public class ChatFragment extends Fragment {

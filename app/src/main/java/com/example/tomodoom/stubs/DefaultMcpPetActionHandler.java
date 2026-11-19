@@ -35,7 +35,7 @@ import java.util.Set;
  *     <li>{@code equip_item} only accepts slots and items from {@link AccessorySlot}/{@link AccessoryCatalog}.</li>
  * </ul>
  *
- * <p>The TruFar/MCP Agent may extend the tool set here or replace this class in
+ * <p>The Chat/MCP Agent may extend the tool set here or replace this class in
  * {@code AppContainer}.</p>
  */
 public final class DefaultMcpPetActionHandler implements McpPetActionHandler {
