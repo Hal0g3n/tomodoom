@@ -20,7 +20,6 @@ import com.example.tomodoom.repository.DoomScrollHpBridge;
 import com.example.tomodoom.repository.PetStateRepository;
 import com.example.tomodoom.stubs.DefaultMcpPetActionHandler;
 import com.example.tomodoom.stubs.MockTruFarChatService;
-import com.example.tomodoom.trufar.HttpTruFarChatService;
 import com.example.tomodoom.trufar.OpenAiCompatibleChatService;
 
 /**
@@ -61,14 +60,11 @@ public final class AppContainer {
         mcpPetActionHandler = new DefaultMcpPetActionHandler(petStateRepository);
 
         // SWAP POINT (TruFar/MCP Agent): the Kafka agent on an OpenAI-compatible endpoint, else the
-        // session API, else the offline mock (CLAUDE.md §5.2).
+        // offline mock (CLAUDE.md §5.2).
         if (!BuildConfig.TRUFAR_LLM_URL.trim().isEmpty()) {
             truFarChatService = new OpenAiCompatibleChatService(appContext, KAFKA_AGENT_ASSET,
                     BuildConfig.TRUFAR_LLM_URL, BuildConfig.TRUFAR_LLM_API_KEY,
                     BuildConfig.TRUFAR_LLM_MODEL);
-        } else if (!BuildConfig.TRUFAR_API_URL.trim().isEmpty()) {
-            truFarChatService = new HttpTruFarChatService(BuildConfig.TRUFAR_API_URL,
-                    BuildConfig.TRUFAR_API_TOKEN, mcpPetActionHandler.getSupportedToolNames());
         } else {
             truFarChatService = new MockTruFarChatService();
         }

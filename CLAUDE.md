@@ -20,7 +20,7 @@ and acceptance criteria are in the section listed.
 | The task mentions… | Your role | Read | You mainly touch |
 |---|---|---|---|
 | pet rendering, sprites, animation, clothes/accessory art, assets, the pet viewport, `AccessoryCatalog`, "Maniengine" | **Maniengine Agent** | §4 `ManiengineAssetRenderer`, §5.1 | new package `com.example.tomodoom.maniengine`, `model/AccessoryCatalog`, assets |
-| chatbot, TruFar, LLM, backend, quizzes, MCP tools, chat networking | **TruFar/MCP Agent** | §4 `TruFarChatService` + `McpPetActionHandler`, §5.2 | new package `com.example.tomodoom.trufar` (and/or `.mcp`), manifest INTERNET permission, the relay backend in `backend/` |
+| chatbot, TruFar, LLM, backend, quizzes, MCP tools, chat networking | **TruFar/MCP Agent** | §4 `TruFarChatService` + `McpPetActionHandler`, §5.2 | new package `com.example.tomodoom.trufar` (and/or `.mcp`), manifest INTERNET permission |
 | doomscroll detection, usage stats, accessibility service, screen-time tracking, monitoring permissions | **Doom Scroll Agent** | §4 `DoomScrollMonitor`, §5.3 | new package `com.example.tomodoom.doomscroll`, manifest, permission UI on Pets |
 | anything else: UI polish, new screens, bug fixes, refactors, tests, build config, docs | **Core Agent** | §2, §3, §6 | the existing packages, following the dependency rules in §2 |
 
@@ -156,7 +156,6 @@ com.example.tomodoom
 │   ├── AgentProfile, AgentProfileLoader   TruFar agent export (assets/trufar/*.json) → persona + model settings
 │   ├── QuizMarkerParser          pure Java: strips [[CORRECT]]/[[WRONG]] grading markers from replies
 │   ├── ChatHistoryWindow         pure Java: last-N-turns conversation memory
-│   ├── HttpTruFarChatService     client for the /v1/chat/sessions event API (served by the backend/ relay)
 │   ├── ModelFallback             pure Java: model list parsing + retry/fallback policy for overloaded LLMs
 │   └── JsonHttpClient            package-private HTTPS + JSON helper shared by both clients;
 │                                 non-2xx → HttpStatusException (an IOException with the status code)
@@ -210,19 +209,6 @@ Assets: `assets/trufar/kafka_agent.json` (the Kafka TruFar agent export, icon st
 `assets/maniengine/index.html` (the pet page, §5.1), `pet-scene.js` (model setup + add-ons, shared with the
 thumbnail tool), `pet-model.js` (GENERATED from the scene-3 export) and `vendor/three/` (three.js 0.187.0).
 Tools: `tools/maniengine/extract_model.py` (+ `source/scene-3.html`), `make_thumbnails.py` (+ `thumbnails.html`).
-
-Outside the app: **`backend/`** is the Python relay server that connects the app's chat to Kafka on
-trufar.cn. It's **currently parked**: the app runs Kafka on Gemini instead (§5.2). It's Flask, hosted on **Vercel** (free Hobby plan, no card), with Firestore on Firebase's
-free Spark plan. It's a flat folder of modules (`app.py` WSGI entry, `trufar_client.py`,
-`mcp_server.py`, `store.py`, `markers.py`, `config.py`) with pytest tests in `backend/tests/`.
-
-Deploy config:
-- Vercel: `vercel.json` (region `hkg1`) and `.vercelignore`. The Vercel project's Root Directory
-  is `backend`, and Vercel's zero-config Flask support finds `app.py` → `app`.
-- Shared: `.python-version` (3.12).
-- Cloud Run (needs a billing card, kept as an alternative): `Procfile` (gunicorn) and `.gcloudignore`.
-
-It isn't part of the Gradle build; see §5.2 and `backend/README.md`.
 
 ### Dependency direction (enforced by convention)
 
@@ -544,22 +530,16 @@ change the bot, edit or replace that file; no code change is needed. `AgentProfi
 Everything else in the export (icon, tools, opening statement) is ignored.
 
 TruFar publishes no API for running an agent, and the export only names the model provider
-(`trufar_tokenhub`). There are two ways to run Kafka:
-- **In the app against an OpenAI-compatible LLM. This is the setup in use: Google's Gemini API,
-  free tier.** The app runs the persona itself with `trufar.OpenAiCompatibleChatService`
-  against **any OpenAI-compatible `POST {base}/chat/completions`**. No TruFar and no backend
-  are involved.
-- **On trufar.cn itself, through the relay backend** (*Relay backend* below; currently
-  **parked**). The app would use `HttpTruFarChatService` (`TRUFAR_API_URL`). It's parked because
-  every free, no-card host either blocks trufar.cn or is unconfirmed, and a model hosted on
-  PythonAnywhere free isn't viable (512 MB disk, one shared-CPU worker, no GPU).
+(`trufar_tokenhub`). So the app runs the persona itself against Google's **Gemini API** (free
+tier), through its OpenAI-compatible `POST {base}/chat/completions` endpoint. There is no
+TruFar server and no backend: the app calls Gemini directly.
 
 Set these Gradle properties in the untracked `~/.gradle/gradle.properties` (never in the repo):
 
 | Property | Meaning |
 |---|---|
 | `TRUFAR_LLM_URL` | HTTPS base URL; `/chat/completions` is appended. In use: `https://generativelanguage.googleapis.com/v1beta/openai` (Gemini) |
-| `TRUFAR_LLM_API_KEY` | bearer token. For Gemini, a free key from aistudio.google.com/apikey (no card). It's compiled into the APK: dev/testing only, same caveat as below |
+| `TRUFAR_LLM_API_KEY` | bearer token. For Gemini, a free key from aistudio.google.com/apikey (no card). It's compiled into the APK: dev/testing only; never ship a long-lived production key in a mobile app |
 | `TRUFAR_LLM_MODEL` | optional; overrides the export's model name (`deepseek-v4-pro`). May be a **comma-separated list**: the primary first, then fallbacks for when it's overloaded. In use: `gemini-3.1-flash-lite,gemini-flash-lite-latest,gemini-3.5-flash` |
 
 Gemini was verified with the real persona (2026-11-19):
@@ -571,9 +551,8 @@ Gemini was verified with the real persona (2026-11-19):
   404 for this key.
 - List the models available to a key with `GET {base}/models`.
 
-`AppContainer` picks the first configured option: `TRUFAR_LLM_URL` → `OpenAiCompatibleChatService`,
-then `TRUFAR_API_URL` → `HttpTruFarChatService`, otherwise `MockTruFarChatService` (offline demo).
-So for the relay, leave `TRUFAR_LLM_URL` **unset**.
+`AppContainer` uses `OpenAiCompatibleChatService` when `TRUFAR_LLM_URL` is set, otherwise
+`MockTruFarChatService` (offline demo).
 
 How `OpenAiCompatibleChatService` behaves:
 - `connect()` loads the asset on the worker thread. It then sends the hidden user turn `__START__`,
@@ -601,125 +580,6 @@ How `OpenAiCompatibleChatService` behaves:
   greeting is ignored.
 - No MCP tools are advertised (the export has none). HTTP errors include the server's
   `error.message` and surface as SYSTEM messages via `onError`.
-
-#### Relay backend (`backend/`): Kafka on trufar.cn
-
-```
-app (HttpTruFarChatService) ──/v1/chat/sessions──► relay (Flask, Vercel)    ──► trufar.cn web chat
-          ▲  quiz_evaluated event                    ▲  POST /mcp award_hp               │ Kafka
-          └──────────────────────────────────────────┴───────────────────────────────────┘
-```
-The relay implements the session API below. Deployment, env vars and the TruFar-side setup are
-in `backend/README.md`.
-
-**Hosting: Vercel (primary; free Hobby plan, no card)**
-- The Vercel project's Root Directory is `backend`. Zero-config Flask runs `app.py` → `app`.
-  `vercel.json` pins functions to `hkg1` (Hong Kong), and functions may run up to 300 s.
-- Each request is its own function invocation, so state can't live in memory. The Firestore
-  store is **required** there: it holds the turn lease, which is how Kafka's mid-turn `/mcp`
-  call finds the turn. Firestore runs on Firebase's free Spark plan.
-- Env vars live in Vercel's *Settings → Environment Variables* (encrypted): `BACKEND_TOKEN`,
-  `MCP_KEY`, `TRUFAR_COOKIE`, `TRUFAR_CONVERSATION_ID`, and `FIREBASE_SERVICE_ACCOUNT` (the key
-  JSON). A change only applies after a redeploy. Pushes to `main` redeploy automatically.
-- The endpoints are public on purpose: the app and TruFar must reach them, and the app token
-  and MCP key are the protection.
-
-**Alternative: Cloud Run (needs a billing card)**
-- Service `tomodoom-relay` in `asia-east1`, deployed with `--allow-unauthenticated`.
-- gunicorn runs 1 worker with **8 threads** (`Procfile`), so `/mcp` is served while a
-  `/messages` request waits on TruFar.
-- Secrets come from **Secret Manager** as env vars: `backend-token` → `BACKEND_TOKEN`,
-  `mcp-key` → `MCP_KEY`, `trufar-cookie` → `TRUFAR_COOKIE`. `TRUFAR_CONVERSATION_ID` and
-  `GOOGLE_CLOUD_PROJECT` are plain env vars.
-
-**Credentials and store selection (all hosts)**
-- `Config.from_env()` picks the Firestore store automatically when `FIREBASE_SERVICE_ACCOUNT`,
-  `GOOGLE_APPLICATION_CREDENTIALS` or `K_SERVICE` (set by Cloud Run) is present, otherwise memory.
-  Firestore credentials, in order:
-  - `FIREBASE_SERVICE_ACCOUNT`: the whole service-account key JSON as one env var, for hosts
-    with no file system for a key file. It's validated by `store.parse_service_account`, whose
-    errors never contain the value.
-  - otherwise Application Default Credentials: a key file, or on Cloud Run the service's own
-    account, which needs `roles/secretmanager.secretAccessor` and `roles/datastore.user`.
-
-  A bad key doesn't crash the app: `GET /` reports it under `missing`. Secret fields of
-  `Config` are `repr=False`.
-- PythonAnywhere is still documented in the README, but its **free plan is confirmed to block
-  trufar.cn** (§6.2).
-
-**Captured TruFar web protocol** (undocumented; taken from the browser's DevTools, so it may change):
-- `POST https://trufar.cn/api/mashang/core/answer/{conversationId}` with body
-  `{"issue_content": text, "issue_config": {}, "entrance": "normal"}`. Auth is the browser
-  **login cookie** only (env `TRUFAR_COOKIE`). A new chat in TruFar gets a new `conversationId`;
-  the request that creates one hasn't been captured, so the relay uses one fixed
-  `TRUFAR_CONVERSATION_ID` for every app session.
-- The response is a stream of `data: {...}` events. Each event is a **cumulative snapshot**, not a
-  delta, and events are not always newline-separated (`}data: {`). `reply_config.replyAll[]` holds
-  components: `reasonContent` (thinking, dropped) and `replyContent` (the reply). The final text
-  is the last `replyContent.value`. A non-empty `reply_error` means failure. `trufar_client.StreamParser`
-  splits on the `}data:` boundary, because Kafka's own text may contain `data:`.
-
-**Turns and HP:**
-- `POST /v1/chat/sessions` creates a session and relays the hidden `__START__` turn; Kafka's
-  greeting comes back as a `message` event. The greeting never awards HP.
-- Each `/messages` call takes the **turn lease** (`store.begin_turn`), relays the text, and then
-  releases it. The lease lives in Firestore (`relay/current`), not in process memory, because
-  Cloud Run may run several instances (and PythonAnywhere several worker processes), and Kafka's
-  MCP call can land in a different one.
-  Only one turn runs at a time; a second gets HTTP 409 "Kafka is busy". The lease expires after
-  `TURN_LEASE_S` (300 s) if a worker dies.
-- HP: Kafka calls the MCP tool **`award_hp(amount 1–10, reason)`** on `POST /mcp` while it
-  answers, and the award attaches to the turn in flight. Fallback: a `[[CORRECT]]` marker in the
-  reply (`markers.py`, a port of `QuizMarkerParser`). Either signal produces **one**
-  `quiz_evaluated` event (`quiz_id = "trufar:<session>:<turn>"`, `hp_reward` ≤ 10, `feedback` =
-  the reply without markers). The app then applies the HP through `McpPetActionHandler.onQuizPassed`,
-  so the replay guard and cap stay on the device. The relay never sends `tool_call` events.
-- `/mcp` is a minimal **stateless Streamable-HTTP MCP server**: JSON responses only, with
-  `initialize`/`ping`/`tools/list`/`tools/call`; notifications get 202 and GET/DELETE get 405.
-  Auth is `X-MCP-Key`, a Bearer token or `?key=` (env `MCP_KEY`), separate from the app's
-  `BACKEND_TOKEN` (= the app's `TRUFAR_API_TOKEN`).
-- Errors come back as `{"error": {"message": …}}`, which `JsonHttpClient` shows in the app's
-  SYSTEM message: 401 bad token, 404 unknown/closed session, 409 busy, 502 TruFar failure,
-  503 expired cookie ("TruFar login expired: refresh TRUFAR_COOKIE") or relay not configured.
-- Firestore layout: `sessions/{id}` `{created, turn_count, closed}`,
-  `sessions/{id}/turns/{n}` `{awarded, amount, reason, at}` (audit; **no message text is stored**),
-  `relay/current` (the lease). The relay never logs message content.
-
-#### Session API contract (`HttpTruFarChatService`)
-
-The Android client is `trufar.HttpTruFarChatService`. Configure `TRUFAR_API_URL` and optionally
-`TRUFAR_API_TOKEN` as Gradle project properties (for example in an untracked `~/.gradle/gradle.properties`).
-The URL must be an HTTPS origin/base URL. With `TRUFAR_API_URL` unset or empty, `AppContainer`
-keeps `MockTruFarChatService` wired so the offline demo remains usable. A configured bearer token
-is compiled into the APK and is suitable only for local development/testing; do not put a
-long-lived production secret in a mobile app.
-
-The API is JSON over HTTPS. Every successful response uses an `events` array:
-
-| Request | JSON body | Response |
-|---|---|---|
-| `POST /v1/chat/sessions` | `{ "client": "tomodoom", "tools": [...] }` | `{ "session_id": "...", "events": [...] }` |
-| `POST /v1/chat/sessions/{id}/messages` | `{ "text": "..." }` | `{ "events": [...] }` |
-| `POST /v1/chat/sessions/{id}/quiz-answers` | `{ "quiz_id": "...", "answer": "..." }` | `{ "events": [...] }` |
-| `POST /v1/chat/sessions/{id}/tool-results` | `{ "call_id": "...", "result": { "success": true, "message": "...", "data": {} } }` | `{ "events": [...] }` |
-| `DELETE /v1/chat/sessions/{id}` | no body | any 2xx response |
-
-Supported event shapes are:
-
-```json
-{ "type": "message", "text": "..." }
-{ "type": "quiz_prompt", "quiz_id": "...", "question": "...", "options": [], "hp_reward": 10 }
-{ "type": "quiz_evaluated", "quiz_id": "...", "passed": true, "hp_reward": 10, "feedback": "..." }
-{ "type": "tool_call", "call_id": "...", "name": "get_pet_state", "arguments": {} }
-{ "type": "error", "message": "..." }
-```
-
-The client advertises the three `McpPetActionHandler` tools when creating a session, executes
-`tool_call` events synchronously on its serial background worker through the registered listener,
-and posts each result before processing returned events. Tool-call round trips are limited to eight
-per response to prevent a backend loop. An HTTP or protocol error is surfaced through `onError`.
-The read timeout is 120 s, because relayed Kafka turns are slow. `backend/` implements this contract.
-It accepts `quiz-answers` and `tool-results` but returns no events for them.
 
 ### 5.3 Doom Scroll Agent — doomscroll detection
 - **Implement:** `contracts.DoomScrollMonitor` (e.g. with `UsageStatsManager` polling or an
@@ -854,23 +714,6 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
 - **LLM-graded HP is persuadable:** a user can talk Kafka into emitting `[[CORRECT]]`. Each award
   is bounded by `OpenAiCompatibleChatService.CORRECT_ANSWER_HP` (10) and the per-award cap, but
   there's no rate limit. Add one in the handler if it gets abused.
-- **PythonAnywhere free can't host the relay** (confirmed by a live test): its allowlist proxy
-  blocks trufar.cn, and the relay answers *"TruFar unreachable from host (PythonAnywhere free
-  allowlist?)"* instantly. With a single web worker, Kafka's `/mcp` call would also have to wait
-  for the turn to end. Kafka's prompt still asks for the `[[CORRECT]]` marker as an HP fallback.
-- **Hosting must be free with no card** (the user's requirement). Cloud Run, Koyeb and Hugging
-  Face Docker Spaces need payment details, so the relay runs on **Vercel Hobby**. Hobby is
-  non-commercial only, which is fine for a course project.
-- **Vercel notes:**
-  - Every request may run in a fresh function, so never set `TOMODOOM_STORE=memory` there.
-  - The first request after idle has a few seconds of cold start; the app's timeout is 120 s.
-  - Whether trufar.cn accepts requests from Vercel's Hong Kong addresses was still unconfirmed
-    when this was written.
-- **TruFar cookie expiry:** the relay authenticates with a copied cookie from a **separate TruFar
-  bot account**, so your own login is never exposed. When it expires, the app shows "TruFar
-  login expired: refresh TRUFAR_COOKIE". Update the `TRUFAR_COOKIE` env var in Vercel and
-  redeploy (on Cloud Run: add a new `trufar-cookie` secret version and run `gcloud run services
-  update`). Never commit it or paste it into chats.
 - **org.json in JVM tests:** android.jar only has throwing stubs, so `org.json:json` is a
   `testImplementation` dependency. Tests can then call `AgentProfileLoader.parse(JSONObject)` on the
   real asset (unit tests run with `app/` as the working directory).
@@ -967,15 +810,6 @@ Gradle 8.0 can't run on it and fails with just `What went wrong: 25.0.4`. On thi
 `C:\Users\jordi\.jdks\jbr-17.0.14` or `C:\Program Files\Eclipse Adoptium\jdk-17.0.16.8-hotspot`.
 In PowerShell: `$env:JAVA_HOME="C:\Users\jordi\.jdks\jbr-17.0.14"; .\gradlew.bat …`.
 
-**Relay backend (`backend/`, Python ≥ 3.10):** run this whenever you touch `backend/`. It isn't
-part of the Gradle build.
-```bash
-python -m venv <somewhere outside the repo> && <venv>/Scripts/pip install -r backend/requirements-dev.txt
-<venv>/Scripts/python -m pytest -q -p no:cacheprovider backend/tests
-```
-The tests fake TruFar and Firestore (`firebase-admin` isn't needed for them). The Firestore
-store itself is exercised only on the deployed server.
-
 **WSL on this machine:** WSL has no JDK and the SDK is a Windows install, so `./gradlew` won't work
 inside WSL. Run the Windows wrapper through interop from the repo root (`/mnt/c/...`), passing
 `JAVA_HOME` via `WSLENV`. Don't use `cmd.exe /c 'set "JAVA_HOME=..." && ...'`: WSL escapes the
@@ -993,7 +827,7 @@ A change counts as verified when `assembleDebug` and `testDebugUnitTest` succeed
 `lintDebug` reports **0 errors**. The current lint baseline is **9 `GradleDependency` warnings**
 (newer AndroidX versions require compileSdk 35+ or a newer AGP). Some setups also report one
 accepted `OldTargetApi` warning (`targetSdk = 34` is fixed by the stack), for 10 in total.
-Changes to `backend/` must also keep `pytest backend/tests` green. Don't introduce new lint warnings. javac currently
+Don't introduce new lint warnings. javac currently
 builds with zero warnings, so keep it that way.
 
 ### 7.2 Unit tests
@@ -1082,21 +916,6 @@ Debug helpers available in the debug build:
 16. Leave watched apps for over a minute, then return. The next warning comes 10 minutes into the new session.
 17. Revoke Usage Access. Monitoring stops and its notification disappears.
 
-**Kafka on trufar.cn via the relay**: deploy `backend/` (see its README), set `TRUFAR_API_URL`/`TRUFAR_API_TOKEN`
-and leave `TRUFAR_LLM_URL` unset:
-
-18. The relay URL (`https://<project>.vercel.app/`) returns `"ok": true`. Open **Chat** and wait
-    (up to about a minute): Kafka's TruFar greeting appears, with no `__START__` bubble.
-19. Answer Kafka's question correctly. The relay logs (*Vercel → project → Logs*) show
-    `MCP award_hp amount=10 -> ok` (or `award=10 via marker`), the reply shows no `[[…]]`
-    marker, and a SYSTEM message shows **"+10 HP awarded via MCP!"**. A wrong answer gets no HP.
-20. Send a message while another is still being answered (e.g. from a second device). That one
-    gets `⚠ TruFar error: … HTTP 409: Kafka is busy…`.
-21. Set a stale `TRUFAR_COOKIE` in Vercel and redeploy: the app shows
-    `HTTP 503: TruFar login expired: refresh TRUFAR_COOKIE`. A wrong
-    `TRUFAR_API_TOKEN` shows `HTTP 401`. `TruFar unreachable from host` means the host can't
-    reach trufar.cn (§6.2).
-
 ---
 
 ## 9. Project status & known gaps
@@ -1113,22 +932,14 @@ Update this table in the same commit when your task changes a subsystem's status
 | Chat UI | ✅ Skeleton done | `ChatFragment` / `ChatViewModel` / `ChatRepository` |
 | Pet rendering | ✅ scene-3 rabbit (three.js, offline) via the HTML/WebView pipeline; add-ons are primitive placeholders | `HtmlManiengineRenderer` + `assets/maniengine/` |
 | Item catalog | ⏳ Placeholder (6 hard-coded items: hats and accessories) | `AccessoryCatalog` → Maniengine Agent |
-| TruFar backend | ✅ Kafka persona on Google's free Gemini API (`gemini-3.1-flash-lite` with fallbacks, retries on 503/429/timeouts) via the in-app OpenAI-compatible client. It's verified from a PC; on a device, the first build hit a 503, and the fix is not yet re-tested there. trufar.cn relay (`backend/`) **parked**: tested locally, PythonAnywhere free blocked, Vercel/Cloud Run configs kept. Mock when unconfigured | `OpenAiCompatibleChatService` (`TRUFAR_LLM_URL`) / `HttpTruFarChatService` (`TRUFAR_API_URL` → relay) / `MockTruFarChatService` |
+| TruFar backend | ✅ Kafka persona on Google's free Gemini API (`gemini-3.1-flash-lite` with fallbacks, retries on 503/429/timeouts) via the in-app OpenAI-compatible client. It's verified from a PC; on a device, the first build hit a 503, and the fix is not yet re-tested there. Mock when unconfigured | `OpenAiCompatibleChatService` (`TRUFAR_LLM_URL`) / `MockTruFarChatService` |
 | Doom-scroll detection | ✅ Usage Access polling in a foreground service; portrait only, 1 HP per minute, warnings every 10 minutes (not yet tested on a device) | `UsageStatsDoomScrollMonitor` |
 
 Known gaps and TODOs (not assigned to anyone yet):
-- The relay (`backend/`) has been tested against a fake TruFar (pytest plus an HTTP smoke test)
-  and deployed once to PythonAnywhere free (it ran, but trufar.cn was blocked). Not yet tested:
-  - Vercel, Firestore, and a real trufar.cn reply
-  - which MCP transport TruFar's client uses (the relay speaks Streamable HTTP with JSON responses)
-  - how long the TruFar cookie lasts
-- All app sessions share one TruFar conversation (`TRUFAR_CONVERSATION_ID`). Per-user
-  conversations need the "new chat" request captured from trufar.cn.
 - The chat transcript isn't persisted, and quiz replay protection only lasts for the process
-  lifetime. Real backends must use globally unique quiz IDs.
+  lifetime. Quiz IDs include a random session UUID, so they stay unique across sessions.
 - Non-UI user-facing text (MCP results, chat notices, mock bot) is inline English, not in `strings.xml`.
 - Nothing happens yet when HP reaches 0 beyond the "Fainted" status label.
 - The app has no built-in way to lower HP or reset the pet for manual testing. Use real doom-scroll
   detection, or clear the app's data to start over.
-- No instrumented/UI tests yet. JVM tests only (`model`, `doomscroll`, `trufar`, `maniengine`),
-  plus pytest for `backend/`.
+- No instrumented/UI tests yet. JVM tests only (`model`, `doomscroll`, `trufar`, `maniengine`).
