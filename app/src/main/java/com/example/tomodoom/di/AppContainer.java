@@ -18,6 +18,8 @@ import com.example.tomodoom.maniengine.HtmlManiengineRenderer;
 import com.example.tomodoom.repository.ChatRepository;
 import com.example.tomodoom.repository.DoomScrollHpBridge;
 import com.example.tomodoom.repository.PetStateRepository;
+import com.example.tomodoom.repository.StatsRecordingDoomScrollListener;
+import com.example.tomodoom.repository.StatsRepository;
 import com.example.tomodoom.stubs.DefaultMcpPetActionHandler;
 import com.example.tomodoom.stubs.MockChatService;
 import com.example.tomodoom.chat.GeminiChatService;
@@ -41,6 +43,8 @@ public final class AppContainer {
     @NonNull
     private final PetStateRepository petStateRepository;
     @NonNull
+    private final StatsRepository statsRepository;
+    @NonNull
     private final McpPetActionHandler mcpPetActionHandler;
     @NonNull
     private final ChatService chatService;
@@ -57,6 +61,10 @@ public final class AppContainer {
         // Single source of truth for pet state. Never replace or duplicate it.
         petStateRepository = new PetStateRepository(appContext);
 
+        // Stats page history: HP changes, LLM tokens and doom-scrolling are recorded here.
+        statsRepository = new StatsRepository(appContext, petStateRepository.getCurrentState());
+        petStateRepository.setHpChangeListener(statsRepository::recordHpChange);
+
         // SWAP POINT (Chat/MCP Agent): MCP pet tool bridge (the default is production-capable).
         mcpPetActionHandler = new DefaultMcpPetActionHandler(petStateRepository);
 
@@ -66,7 +74,7 @@ public final class AppContainer {
             chatService = new GeminiChatService(appContext, KAFKA_AGENT_ASSET,
                     CHARON_AGENT_ASSET, petStateRepository::getCurrentState,
                     BuildConfig.GEMINI_API_URL, BuildConfig.GEMINI_API_KEY,
-                    BuildConfig.GEMINI_MODELS);
+                    BuildConfig.GEMINI_MODELS, statsRepository::recordTokens);
         } else {
             chatService = new MockChatService();
         }
@@ -78,7 +86,8 @@ public final class AppContainer {
 
         // Doom-scroll detections → HP loss. Keep this wiring when swapping the monitor.
         doomScrollHpBridge = new DoomScrollHpBridge(petStateRepository);
-        doomScrollMonitor.setListener(new DoomScrollNotifier(appContext, doomScrollHpBridge));
+        doomScrollMonitor.setListener(new DoomScrollNotifier(appContext,
+                new StatsRecordingDoomScrollListener(statsRepository, doomScrollHpBridge)));
     }
 
     /** @return the process-wide container held by {@link TomodoomApplication}. */
@@ -103,6 +112,11 @@ public final class AppContainer {
     @NonNull
     public PetStateRepository getPetStateRepository() {
         return petStateRepository;
+    }
+
+    @NonNull
+    public StatsRepository getStatsRepository() {
+        return statsRepository;
     }
 
     @NonNull

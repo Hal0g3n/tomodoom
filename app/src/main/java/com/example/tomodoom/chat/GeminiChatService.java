@@ -11,6 +11,7 @@ import androidx.annotation.WorkerThread;
 
 import com.example.tomodoom.chat.PersonaSelector.Persona;
 import com.example.tomodoom.contracts.ChatService;
+import com.example.tomodoom.contracts.TokenUsageListener;
 import com.example.tomodoom.model.PetState;
 import com.example.tomodoom.model.QuizEvaluation;
 
@@ -103,6 +104,9 @@ public final class GeminiChatService implements ChatService {
     private final List<String> fallbackModels;
     @NonNull
     private final JsonHttpClient http;
+    /** Told the tokens of every successful request (Stats page); may be null. */
+    @Nullable
+    private final TokenUsageListener tokenUsageListener;
     @NonNull
     private final ExecutorService worker = Executors.newSingleThreadExecutor(r -> {
         Thread thread = new Thread(r, "gemini-chat");
@@ -142,6 +146,8 @@ public final class GeminiChatService implements ChatService {
      * @param modelOverride    model to use instead of the export's, or a comma-separated list
      *                         (primary first, then fallbacks for when it is overloaded); empty
      *                         keeps the export's model.
+     * @param tokenUsage       told the token usage of every successful request (any thread);
+     *                         may be null.
      */
     public GeminiChatService(@NonNull Context context,
                              @NonNull String lowHpAgentAsset,
@@ -149,7 +155,9 @@ public final class GeminiChatService implements ChatService {
                              @NonNull Supplier<PetState> petState,
                              @NonNull String baseUrl,
                              @NonNull String apiKey,
-                             @NonNull String modelOverride) {
+                             @NonNull String modelOverride,
+                             @Nullable TokenUsageListener tokenUsage) {
+        this.tokenUsageListener = tokenUsage;
         this.appContext = context.getApplicationContext();
         this.lowHpAgentAsset = lowHpAgentAsset;
         this.highHpAgentAsset = highHpAgentAsset;
@@ -303,6 +311,8 @@ public final class GeminiChatService implements ChatService {
             try {
                 JSONObject response = http.requestJson("POST", COMPLETIONS_PATH,
                         buildRequest(currentProfile, moodShift, model, currentHistory, userText));
+                // Tokens were spent even if the reply turns out stale or malformed.
+                reportTokenUsage(model, response);
                 reply = extractReply(response);
                 if (attempt > 0) {
                     Log.i(TAG, "attempt " + (attempt + 1) + " succeeded with " + model);
@@ -334,6 +344,15 @@ public final class GeminiChatService implements ChatService {
     }
 
     @AnyThread
+    private void reportTokenUsage(@NonNull String model, @NonNull JSONObject response) {
+        TokenUsageListener usageListener = tokenUsageListener;
+        TokenUsageParser.Usage usage = TokenUsageParser.parse(response);
+        if (usageListener != null && usage != null) {
+            usageListener.onTokensUsed(model, usage.promptTokens, usage.completionTokens,
+                    usage.totalTokens);
+        }
+    }
+
     private boolean isStale(int gen) {
         return gen != generation.get();
     }
