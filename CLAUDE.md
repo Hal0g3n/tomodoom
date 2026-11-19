@@ -365,6 +365,8 @@ The full Javadoc on each interface is normative. What follows is a summary.
 @MainThread void release(@NonNull ViewGroup container);
 @MainThread default void pause(@NonNull ViewGroup container) {}    // page onPause() via PetStage
 @MainThread default void resume(@NonNull ViewGroup container) {}   // page onResume() via PetStage
+@MainThread default boolean supportsFramedTransition() { return false; }
+@MainThread default void setFrame(@NonNull ViewGroup container, @Nullable RectF frame, float cornerRadiusPx) {}
 ```
 - **One renderer per `MainActivity`**, so only one pet is rendered at a time. `ui.PetStage` owns it
   and lends it to whichever page is resumed (Customise or Pets): the page calls
@@ -382,6 +384,11 @@ The full Javadoc on each interface is normative. What follows is a summary.
   afterwards (the new activity gets a new instance).
 - `pause`/`resume` bracket the time the current container's page is visible (pages stay alive,
   `STARTED`, while hidden). Stop per-frame work while paused. Both are optional default no-ops.
+- `setFrame` (only if `supportsFramedTransition()`): draw the pet only inside `frame` (container px,
+  rounded corners), framed as in a viewport of that size, the rest transparent; `null` = the whole
+  container. `container` may be the one the next `render` will move the pet to (a frame can be sent
+  first). Called every animation frame of a page transition, so keep it cheap.
+  `HtmlManiengineRenderer` forwards it as `ManiengineProtocol.frameScript` (deduplicated).
 - The asset format is **HTML**: Maniengine exports a 3D scene as a web page, which
   `HtmlManiengineRenderer` shows (§5.1). Nothing outside the renderer may depend on that.
 

@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.res.AssetManager;
 import android.graphics.Color;
+import android.graphics.RectF;
 import android.net.Uri;
 import android.os.Build;
 import android.util.AttributeSet;
@@ -82,6 +83,9 @@ public final class HtmlManiengineRenderer implements ManiengineAssetRenderer {
     /** Last model box script sent to the loaded page. */
     @Nullable
     private String deliveredTouchBox;
+    /** Last transition frame script sent to the loaded page, or null while it has none. */
+    @Nullable
+    private String deliveredFrame;
 
     @MainThread
     @Override
@@ -121,6 +125,43 @@ public final class HtmlManiengineRenderer implements ManiengineAssetRenderer {
         if (webView != null) {
             webView.onResume();
         }
+    }
+
+    @MainThread
+    @Override
+    public boolean supportsFramedTransition() {
+        return true;
+    }
+
+    @MainThread
+    @Override
+    public void setFrame(@NonNull ViewGroup container, @Nullable RectF frame,
+                         float cornerRadiusPx) {
+        PetWebView view = webView;
+        if (view == null || !pageReady) {
+            return; // nothing to frame; the page starts unframed
+        }
+        String script;
+        if (frame == null) {
+            if (deliveredFrame == null) {
+                return;
+            }
+            script = ManiengineProtocol.CLEAR_FRAME_SCRIPT;
+        } else {
+            // The WebView fills the container minus webViewParams' inset; the page counts CSS px.
+            int inset = insetFor(container);
+            float density = container.getResources().getDisplayMetrics().density;
+            script = ManiengineProtocol.frameScript((frame.left - inset) / density,
+                    (frame.top - inset) / density, frame.width() / density,
+                    frame.height() / density, cornerRadiusPx / density,
+                    (container.getWidth() - 2 * inset) / density,
+                    (container.getHeight() - 2 * inset) / density);
+            if (script.equals(deliveredFrame)) {
+                return;
+            }
+        }
+        view.evaluateJavascript(script, null);
+        deliveredFrame = frame == null ? null : script;
     }
 
     @MainThread
@@ -183,6 +224,7 @@ public final class HtmlManiengineRenderer implements ManiengineAssetRenderer {
         pageReady = false;
         deliveredJson = null;
         deliveredTouchBox = null;
+        deliveredFrame = null;
         loadedSpecies = species;
         view.loadUrl(ManiengineAssets.entryUrl(species));
     }
@@ -208,12 +250,17 @@ public final class HtmlManiengineRenderer implements ManiengineAssetRenderer {
      */
     @NonNull
     private static FrameLayout.LayoutParams webViewParams(@NonNull ViewGroup container) {
-        int inset = container.getBackground() == null ? 0
-                : container.getResources().getDimensionPixelSize(R.dimen.pet_viewport_stroke);
+        int inset = insetFor(container);
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
         params.setMargins(inset, inset, inset, inset);
         return params;
+    }
+
+    /** The WebView's margin inside {@code container}: the border's width if it has one. */
+    private static int insetFor(@NonNull ViewGroup container) {
+        return container.getBackground() == null ? 0
+                : container.getResources().getDimensionPixelSize(R.dimen.pet_viewport_stroke);
     }
 
     @MainThread
@@ -223,6 +270,7 @@ public final class HtmlManiengineRenderer implements ManiengineAssetRenderer {
         pageReady = false;
         deliveredJson = null;
         deliveredTouchBox = null;
+        deliveredFrame = null;
         loadedSpecies = null;
         if (view == null) {
             return;
