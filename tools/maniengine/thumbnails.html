@@ -12,7 +12,7 @@
 </script>
 <script type="module">
 import * as THREE from 'three';
-import { buildPetScene } from '/app/src/main/assets/maniengine/pet-scene.js';
+import { buildPetScene, loadPetModel, DEFAULT_PET } from '/app/src/main/assets/maniengine/pet-scene.js';
 
 const SIZE = 384, VIEW = new THREE.Vector3(.45, .35, 1).normalize();
 const scene = new THREE.Scene();
@@ -21,7 +21,8 @@ scene.add(camera);
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
 renderer.setPixelRatio(1);
 renderer.setSize(SIZE, SIZE);
-const { ADDONS } = buildPetScene(THREE, scene, renderer);
+const { id: petId, model } = await loadPetModel(DEFAULT_PET);  // thumbnails show the default pet's fit
+const { ADDONS } = buildPetScene(THREE, scene, renderer, model, petId);
 scene.background = null;
 scene.fog = null;
 renderer.setClearColor(0x000000, 0);

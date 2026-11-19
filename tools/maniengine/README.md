@@ -1,6 +1,6 @@
 # Maniengine scene extraction
 
-A Maniengine export (`source/scene-3.html`) is a single HTML file:
+A Maniengine export (`source/scene-3.html` = the rabbit, `source/scene-5.html` = the cat) is a single HTML file:
 
 | Part | What it is | Kept? |
 |---|---|---|
@@ -10,21 +10,21 @@ A Maniengine export (`source/scene-3.html`) is a single HTML file:
 
 No mesh data is embedded: the model is code. `extract_model.py` cuts out the model-building code
 (from `function m3dSkyDomeTexture` to `__walk.refresh();`) and writes it, with the override
-table, to `app/src/main/assets/maniengine/pet-model.js` as `buildModel(THREE, scene, renderer)`.
+table, to `app/src/main/assets/maniengine/models/<pet>.js` as `buildModel(THREE, scene, renderer)`.
 It also downloads the matching three.js build into `assets/maniengine/vendor/three/` (once).
-`assets/maniengine/pet-scene.js` calls `buildModel`, applies `OVERRIDES` and builds the add-ons.
-The app page `assets/maniengine/index.html` uses it and handles the camera, animation and
-`tomodoom:petstate`.
+`assets/maniengine/pet-scene.js` loads a pet's module (`loadPetModel`), calls `buildModel`, applies
+`OVERRIDES` and builds the add-ons. The app page `assets/maniengine/index.html` uses it (`?pet=<id>`
+picks the pet, default `rabbit`) and handles the camera, animation and `tomodoom:petstate`.
 
 ```bash
-python3 tools/maniengine/extract_model.py                    # default: source/scene-3.html
-python3 tools/maniengine/extract_model.py path/to/new.html   # a newer export
+python3 tools/maniengine/extract_model.py                                   # source/scene-3.html → models/rabbit.js
+python3 tools/maniengine/extract_model.py source/scene-5.html --pet cat     # → models/cat.js
 ```
 
 Stdlib only (Python 3.8+). The script fails loudly if an anchor is missing (the export format changed)
 or if the extracted code still uses editor-only names (`camera`, `controls`, `__walk`).
-`pet-scene.js` looks meshes up by name (`Rabbit cream flocked head`, eye names, `rug`…), so a new
-export with renamed parts needs those lookups updated too.
+`pet-scene.js` looks meshes up by name (head, eyes, body, rug), so each pet needs an entry in its
+`PETS` table; a new export with renamed parts needs that entry updated too.
 
 ## Item thumbnails
 

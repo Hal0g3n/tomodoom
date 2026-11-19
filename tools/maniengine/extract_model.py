@@ -4,13 +4,15 @@
 A Maniengine export has no model file inside it: the model is three.js code that builds meshes at
 runtime, wrapped in editor plumbing (a live-edit loader, WASD camera controls, a CDN importmap).
 This script keeps only the model-building code and the editor's override table, and writes them
-as an ES module the app page imports:
+as an ES module the app page imports, one per pet:
 
-    pet-model.js   export const OVERRIDES = [...];
-                   export function buildModel(THREE, scene, renderer) { ...; return {...}; }
-    vendor/three/  three.js at the export's version, so the page works offline
+    models/<pet>.js  export const OVERRIDES = [...];
+                     export function buildModel(THREE, scene, renderer) { ... }
+    vendor/three/    three.js at the export's version, so the page works offline
 
-Usage: python3 tools/maniengine/extract_model.py [scene.html] [--out DIR]
+Usage: python3 tools/maniengine/extract_model.py [scene.html --pet NAME] [--out DIR]
+(no arguments: source/scene-3.html → models/rabbit.js). A new pet also needs a PETS profile in
+assets/maniengine/pet-scene.js.
 """
 import argparse
 import json
@@ -21,6 +23,7 @@ import urllib.request
 
 HERE = pathlib.Path(__file__).resolve().parent
 DEFAULT_SRC = HERE / "source" / "scene-3.html"
+DEFAULT_PET = "rabbit"
 DEFAULT_OUT = HERE.parents[1] / "app" / "src" / "main" / "assets" / "maniengine"
 
 MODEL_START = "function m3dSkyDomeTexture"  # first line after camera/renderer/WASD boilerplate
@@ -43,8 +46,12 @@ def between(text, start, end, what):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("src", nargs="?", type=pathlib.Path, default=DEFAULT_SRC)
+    ap.add_argument("--pet", help="model name, e.g. cat (required with a non-default source)")
     ap.add_argument("--out", type=pathlib.Path, default=DEFAULT_OUT)
     args = ap.parse_args()
+    pet = args.pet or (DEFAULT_PET if args.src == DEFAULT_SRC else fail("pass --pet NAME for this export"))
+    if not re.fullmatch(r"[a-z][a-z0-9_]*", pet):
+        fail(f"--pet must be lowercase letters, digits or _, got {pet!r}")
     html = args.src.read_text(encoding="utf-8")
 
     table = re.search(r"/\*O\*/(.*?)/\*O\*/", html, re.S) or fail("no /*O*/ override table")
@@ -63,10 +70,11 @@ def main():
         f"export const OVERRIDES = {json.dumps(overrides, indent=1)};\n\n"
         "export function buildModel(THREE, scene, renderer) {\n"
         + "\n".join("  " + line if line.strip() else "" for line in body.splitlines())
-        + "\n  return { rabbitParts, visibleSubjects, dress };\n}\n"
+        + "\n}\n"
     )
-    args.out.mkdir(parents=True, exist_ok=True)
-    (args.out / "pet-model.js").write_text(module, encoding="utf-8", newline="\n")
+    target = args.out / "models" / f"{pet}.js"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(module, encoding="utf-8", newline="\n")
 
     vendor = args.out / "vendor" / "three"
     vendor.mkdir(parents=True, exist_ok=True)
@@ -77,7 +85,7 @@ def main():
             urllib.request.urlretrieve(url, vendor / f)
 
     print(f"three.js {version[1]}, {len(meshes)} named objects, {len(overrides)} overrides")
-    print(f"wrote {args.out / 'pet-model.js'} ({len(module)} bytes)")
+    print(f"wrote {target} ({len(module)} bytes)")
 
 
 if __name__ == "__main__":

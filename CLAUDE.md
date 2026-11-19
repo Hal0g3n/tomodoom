@@ -199,7 +199,7 @@ Resources: `res/values/colors.xml` + `res/values/themes.xml` (palette and theme,
 `values-night/`), `res/layout/fragment_pets.xml` (a `ConstraintLayout`: a borderless `pet_viewport` fills the page, with
 `usage_access_card` (Usage Access prompt, §5.3) at the top and `hp_card` (the health bar) at the bottom
 floating over it; both cards are transparent),
-`fragment_customise.xml` (`customise_header`, `pet_viewport` at 40% of the page height, `slot_tabs`,
+`fragment_customise.xml` (`pet_viewport` at 40% of the page height, at the top with no title, `slot_tabs`,
 `item_grid` RecyclerView), `fragment_chat.xml`, `item_chat_{user,bot,system}.xml`,
 `item_accessory_circle.xml`, `res/drawable/bg_accessory_circle.xml`, `ic_item_none_24dp.xml`,
 `res/drawable-nodpi/thumb_<itemId>.png` (GENERATED item thumbnails, §5.1),
@@ -209,8 +209,9 @@ floating over it; both cards are transparent),
 `res/values/dimens.xml` (`pet_viewport_stroke`).
 Assets: `assets/trufar/kafka_agent.json` (the Kafka TruFar agent export, icon stripped; §5.2),
 `assets/maniengine/index.html` (the pet page, §5.1), `pet-scene.js` (model setup + add-ons, shared with the
-thumbnail tool), `pet-model.js` (GENERATED from the scene-3 export) and `vendor/three/` (three.js 0.187.0).
-Tools: `tools/maniengine/extract_model.py` (+ `source/scene-3.html`), `make_thumbnails.py` (+ `thumbnails.html`).
+thumbnail tool; `PETS` profiles per model), `models/rabbit.js` and `models/cat.js` (GENERATED from the scene-3
+and scene-5 exports) and `vendor/three/` (three.js 0.187.0).
+Tools: `tools/maniengine/extract_model.py` (+ `source/scene-3.html`, `source/scene-5.html`), `make_thumbnails.py` (+ `thumbnails.html`).
 
 Outside the app: **`backend/`** is the Python relay server that connects the app's chat to Kafka on
 trufar.cn. It's **currently parked**: the app runs Kafka on Gemini instead (§5.2). It's Flask, hosted on **Vercel** (free Hobby plan, no card), with Firestore on Firebase's
@@ -450,14 +451,21 @@ Maniengine's output is a single `.html` file (an "m3d" export). It holds **no me
 model is three.js code building named meshes from primitives, wrapped in editor plumbing (the
 `m3dLoader` live-edit runtime with a `/*O*/[...]/*O*/` override table, WASD camera controls, and a
 CDN importmap). So the export isn't dropped in as is. Put it in `tools/maniengine/source/` and run
-**`python3 tools/maniengine/extract_model.py [export.html]`** (stdlib only; see its README). It
-writes `assets/maniengine/pet-model.js` (`buildModel(THREE, scene, renderer)` + `OVERRIDES`) and
-vendors the matching three.js into `assets/maniengine/vendor/three/`. Never edit `pet-model.js` by
-hand. `assets/maniengine/pet-scene.js` is hand-written: it builds the model, applies `OVERRIDES`,
-drops the hidden room meshes and builds primitive add-ons for the `AccessoryCatalog` IDs. It looks
-parts up by mesh name, so a new export with renamed parts needs those lookups updated.
-`assets/maniengine/index.html` (also hand-written) frames the camera on the rabbit, animates by
-`mood` and toggles the add-ons. Other asset types (`.glb`, textures, `.wasm`) can
+**`python3 tools/maniengine/extract_model.py export.html --pet <id>`** (stdlib only; see its README;
+no arguments regenerates the rabbit). It writes `assets/maniengine/models/<id>.js`
+(`buildModel(THREE, scene, renderer)` + `OVERRIDES`) and vendors the matching three.js into
+`assets/maniengine/vendor/three/`. Never edit `models/*.js` by hand. Pets so far: `rabbit` (scene-3,
+the default) and `cat` (scene-5).
+
+`assets/maniengine/pet-scene.js` is hand-written. `loadPetModel(id)` imports `models/<id>.js` (an
+unknown id falls back to `DEFAULT_PET` = `rabbit`); `buildPetScene(THREE, scene, renderer, model, id)`
+builds it, applies `OVERRIDES`, drops the hidden room meshes plus `sky`/`ground`, and builds primitive
+add-ons for the `AccessoryCatalog` IDs. Mesh names differ per export, so each pet has a **`PETS`
+profile** (head, eyes, body, rug pattern, head-part pattern): a new pet needs a model file **and** a
+profile. `assets/maniengine/index.html` (also hand-written) picks the pet from its `?pet=<id>` query
+parameter (the app loads it without one, so it shows the rabbit), frames the camera on it, animates
+by `mood` and toggles the add-ons. Choosing the pet in the app isn't built yet (§9). The item
+thumbnails are always drawn on the default pet. Other asset types (`.glb`, textures, `.wasm`) can
 still sit beside it with relative URLs.
 
 The Customise circles are PNGs of those add-ons. After changing an add-on, run
@@ -498,12 +506,12 @@ How the page is hosted (`HtmlManiengineRenderer`):
   *starts* on the viewport. `centre` (used by `index.html`) keeps drags starting in the **model box**.
   `HtmlManiengineRenderer` works the box out and publishes it as `window.tomodoomTouchBox`
   (`{left, top, right, bottom}`, viewport fractions): on Pets its left, right and bottom line up with
-  `hp_card`, so the transparent health bar below the rabbit is inside it, and its top is
+  `hp_card`, so the transparent health bar below the pet is inside it, and its top is
   `@dimen/pet_model_box_inset` from the page top. Without a health bar (Customise) it starts at the top
   with that side inset and ends 20% above the viewport's bottom.
   Drags starting outside the box change tab at any speed. Inside it, a horizontal flick reaching
   `ManiengineProtocol.TAB_FLICK_MIN_DP_PER_SEC` within `TAB_FLICK_WINDOW_MS` of touch-down also changes
-  tab (`isTabFlick`). Other drags turn the `rabbit` group (`rotation.y`): `index.html` measures finger
+  tab (`isTabFlick`). Other drags turn the `pet` group (`rotation.y`): `index.html` measures finger
   speed over the last 100 ms, so slow drags are precise, fast ones turn further and the release speed
   sets how far it coasts. The rug stays still. A second finger always keeps the gesture in the page (`PetWebView` blocks the pager on
   `ACTION_POINTER_DOWN`), which is how `index.html` pinch-zooms (`camera.zoom`, 0.75x to 3x).
@@ -511,7 +519,7 @@ How the page is hosted (`HtmlManiengineRenderer`):
   extend `ManiengineProtocol` and this section together.
 - **Layout note:** there is **one** WebView, moved (not reloaded) between two viewports: the large
   one on Pets and a preview at 40% of the page height on Customise, above the slot tabs and item
-  circles. On Pets the cards float over the pet, so `fit()` sits the rabbit higher in tall viewports,
+  circles. On Pets the cards float over the pet, so `fit()` sits the pet higher in tall viewports,
   clear of the health bar below it. The page is resized on each move, so it must refit to any size without distorting the
   model (`index.html` does, with a `ResizeObserver` calling `fit()`). The page that isn't shown has an empty viewport, and
   while you drag between pages the incoming viewport stays empty until the swipe settles.
@@ -816,7 +824,7 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
   The app is **light only**: don't add `values-night/` resources. Colours follow §6.3.
 - **No action bar:** the theme is `NoActionBar`, so `getSupportActionBar()` returns `null`; don't
   rely on it. Each page draws its own header
-  (the health bar below the pet on Pets, a title on Customise); content starts right under the status bar.
+  (the health bar below the pet on Pets; Customise has no title, its preview starts at the top); content starts right under the status bar.
 - **Top-level pages (`ViewPager2`):** there is no Jetpack Navigation. `MainActivity` hosts the pages
   in `main_pager` and keeps it in sync with `nav_view` both ways. `viewpager2` (1.1.0-beta02) comes
   in transitively from Material, like drawerlayout, so don't pin it. Rules:
@@ -1043,7 +1051,7 @@ Debug helpers available in the debug build:
 1. Launch the app. The **Pets** tab has **no action bar** and no debug buttons. The health bar sits below
    the rabbit and shows `Tomo`, **HP 50 / 100** and status "Okay". Until Usage Access is granted, a Usage Access card with an **Enable** button
    sits at the top of the page (it disappears once access is granted). The bottom bar shows three icons (Customise, Pets, Chat). Pets is open: its tile is wider, its icon is larger and only it shows a label.
-2. Swipe right (or tap **Customise**). The Customise page shows "Customise pet", a pet preview and
+2. Swipe right (or tap **Customise**). The Customise page shows no title: a pet preview at the top and
    full-width Hat / Accessory tabs above a two-column grid of circles showing each item's model
    (None first). Tap the **Cap** circle on the Hat tab: its ring darkens and the preview (the 3D
    cream rabbit in a floral dress, on a rug) gains a blue cap at once. Swipe back to Pets: the large
@@ -1118,7 +1126,7 @@ Update this table in the same commit when your task changes a subsystem's status
 | Customise UI (pet preview, slot tabs, item circle grid) | ✅ Skeleton done | `CustomiseFragment` / `CustomiseViewModel` |
 | Onboarding (name the pet) | ✅ Done | `OnboardingActivity` / `OnboardingViewModel` |
 | Chat UI | ✅ Skeleton done | `ChatFragment` / `ChatViewModel` / `ChatRepository` |
-| Pet rendering | ✅ scene-3 rabbit (three.js, offline) via the HTML/WebView pipeline; add-ons are primitive placeholders | `HtmlManiengineRenderer` + `assets/maniengine/` |
+| Pet rendering | ✅ scene-3 rabbit (default) and scene-5 cat (three.js, offline) via the HTML/WebView pipeline; add-ons are primitive placeholders | `HtmlManiengineRenderer` + `assets/maniengine/` |
 | Item catalog | ⏳ Placeholder (6 hard-coded items: hats and accessories) | `AccessoryCatalog` → Maniengine Agent |
 | TruFar backend | ✅ Kafka persona on Google's free Gemini API (`gemini-3.1-flash-lite` with fallbacks, retries on 503/429/timeouts) via the in-app OpenAI-compatible client. It's verified from a PC; on a device, the first build hit a 503, and the fix is not yet re-tested there. trufar.cn relay (`backend/`) **parked**: tested locally, PythonAnywhere free blocked, Vercel/Cloud Run configs kept. Mock when unconfigured | `OpenAiCompatibleChatService` (`TRUFAR_LLM_URL`) / `HttpTruFarChatService` (`TRUFAR_API_URL` → relay) / `MockTruFarChatService` |
 | Doom-scroll detection | ✅ Usage Access polling in a foreground service; portrait only, 1 HP per minute, warnings every 10 minutes (not yet tested on a device) | `UsageStatsDoomScrollMonitor` |
@@ -1134,6 +1142,9 @@ Known gaps and TODOs (not assigned to anyone yet):
 - The chat transcript isn't persisted, and quiz replay protection only lasts for the process
   lifetime. Real backends must use globally unique quiz IDs.
 - Non-UI user-facing text (MCP results, chat notices, mock bot) is inline English, not in `strings.xml`.
+- Pet selection: the cat model exists (`index.html?pet=cat`), but there's no UI to pick a pet and
+  no persisted choice. It needs a `PetState` field + prefs key and a way to pass it to the page
+  (`ManiengineProtocol` state JSON).
 - Nothing happens yet when HP reaches 0 beyond the "Fainted" status label.
 - The app has no built-in way to lower HP for manual testing; use real doom-scroll detection. To
   start over, use the hidden reset (long-press the Wardrobe tab). Whether it keeps Usage Access and

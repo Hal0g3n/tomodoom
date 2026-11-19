@@ -546,5 +546,4 @@ export function buildModel(THREE, scene, renderer) {
   scene.traverse(object => {
     if (object.isMesh && !visibleSubjects.has(object)) object.visible = false;
   });
-  return { rabbitParts, visibleSubjects, dress };
 }

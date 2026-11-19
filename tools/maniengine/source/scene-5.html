@@ -1,0 +1,975 @@
+<!DOCTYPE html>
+<html>
+<head><!--__M3D_LIVE__--><script>(function m3dLoader(O, domFactory, identityFactory) {
+  var W = window;
+  W.__m3dScenes = W.__m3dScenes || [];
+    var identity=identityFactory && (W.__m3dImportedIdentity ||= identityFactory());
+  W.__THREE_DEVTOOLS__ = W.__THREE_DEVTOOLS__ || new EventTarget();
+  var U = O.filter(function (d) { return d.ui; });
+  O = O.filter(function (d) { return !d.ui; });
+  var uiDone=new Set(), reasons=new Map(), openedAt=Date.now();
+  function report() {
+    var entries=U.map(function(d){return {type:'ui',label:d.ref?.parameter || d.ref?.id || d.ref?.tag,status:uiDone.has(d)?'applied':Date.now()-openedAt>10000?'missing':'waiting'};});
+    O.forEach(function(d,i) {
+      var done=D?.[i]&&(!d.pa||d.o||d.x||d.ord||D['p'+i])&&(d.n===undefined||d.o||d.x||D['n'+i]);
+      entries.push({type:d.ms?'material':d.ord?'order':d.x?'remove':d.o?'create':d.rt?'runtime':'object',
+        label:d.name || d.objectRef || d.path,id:d.objectRef,scene:d.sceneRef,
+        slots:d.ms?Object.keys(d.slots||{}):undefined,
+        status:done?'applied':reasons.get(i)||(Date.now()-openedAt>10000?'missing':'waiting')});
+    });
+    var next={entries:entries.slice(0,100),total:entries.length,applied:entries.filter(function(e){return e.status==='applied';}).length};
+    if(JSON.stringify(next)!==JSON.stringify(W.__m3dRestoreStatus)) {
+      W.__m3dRestoreStatus=next;
+      W.dispatchEvent(new Event('m3d:restore-status'));
+    }
+  }
+  if (U.length) {
+    var dom = domFactory(document), pending = U.slice(), attempt = 0;
+    function applyUI() {
+      pending = pending.filter(function (d) {
+        if(!dom.apply(d.ref,d.values))return true;
+        uiDone.add(d);
+        return false;
+      });
+      report();
+      if (pending.length && ++attempt < 40) setTimeout(applyUI,250);
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded',applyUI,{once:true});
+    else applyUI();
+  }
+  if (!O.length) {report();return;}
+  var R = [], D = {}, N = {}, C = {}, need = 0, busy = false, fin = false, frames = 0;
+  O.forEach(function (d) { need++; if (d.ord) return; if (!d.o && !d.x && d.pa) need++; if (!d.o && !d.x && d.n !== undefined) need++; });
+  W.__m3dLivePending = true;
+  setTimeout(function () { W.__m3dLivePending = false; }, 4000);
+  W.__THREE_DEVTOOLS__.addEventListener('observe', function (e) {
+    var o = e.detail;
+    if (o && o.isScene && W.__m3dScenes.indexOf(o) < 0) W.__m3dScenes.push(o);
+    if (o && o.isWebGLRenderer) {
+      var f = o.render.bind(o), r = { o: o, s: null, c: null };
+      R.push(r);
+      o.render = function (s, c) {
+        if (!o.getRenderTarget || !o.getRenderTarget()) {
+          r.s = s; r.c = c;
+          if (!busy && !fin && frames < 1500 && (++frames <= 120 || frames % 10 === 0)) { busy = true; try { apply(true); } catch (_) {} busy = false; }
+        }
+        return f(s, c);
+      };
+    }
+  });
+  function pick() {
+    var b = null, n = 0;
+    var scenes=W.__m3dScenes.slice();
+    if(Array.isArray(W.AFRAME?.scenes))W.AFRAME.scenes.forEach(function (el) {
+      if(el?.object3D && scenes.indexOf(el.object3D)<0)scenes.push(el.object3D);
+    });
+    scenes.forEach(function (s) {
+      var c=0;
+      try {s.traverse(function (o) {if(o!==s)c+=o.geometry?4:1;});} catch (_) {return;}
+      if(c>n){n=c;b=s;}
+    });
+    return b;
+  }
+  function at(s, path) {
+    var cur = s, ix = String(path).split('/');
+    for (var i = 0; i < ix.length; i++) { cur = cur && cur.children && cur.children[+ix[i]]; if (!cur) return null; }
+    return cur;
+  }
+  function within(o, root) { for (var c = o; c; c = c.parent) if (c === root) return true; return false; }
+  function mark(t) {
+    t.traverse(function (n) { n.__m3dGone = true; });
+    var l = (W.__m3dScenes || []).concat(W.__M3D_SCENE ? [W.__M3D_SCENE] : []);
+    l.forEach(function (sc) {
+      if (!sc || sc.__m3dG) return;
+      sc.__m3dG = 1;
+      var oa = sc.add;
+      sc.add = function () { var a = [], i; for (i = 0; i < arguments.length; i++) if (!(arguments[i] && arguments[i].__m3dGone)) a.push(arguments[i]); return a.length ? oa.apply(this, a) : this; };
+    });
+  }
+  var identityIndexes=new Map();
+  var legacyIdentityIndexes=new Map();
+  function find(s, all, ref, strict) {
+    if (!ref) return null;
+    if (!ref.sceneRef && Number.isSafeInteger(ref.sc) && W.__m3dScenes[ref.sc]!==s) return null;
+    if (ref.root) return s;
+    if (ref.o) return N[ref.o] || null;
+    if (ref.objectRef && identity && ref.sceneRef) {
+      var entry=identityIndexes.get(s);
+      if(!entry) {entry=identity.index(s,ref.sceneRef);identityIndexes.set(s,entry);}
+      if(entry.byId.has(ref.objectRef))return entry.byId.get(ref.objectRef)||null;
+      var previous=legacyIdentityIndexes.get(s);
+      if(!previous) {
+        previous=[identity.index(s,ref.sceneRef,12),identity.index(s,ref.sceneRef,11)];
+        legacyIdentityIndexes.set(s,previous);
+      }
+      var first=previous[0].byId.get(ref.objectRef), second=previous[1].byId.get(ref.objectRef);
+      if(first===null||second===null)return null;
+      return first&&second&&first!==second ? null : first||second||null;
+    }
+    var hasPath = ref.path !== undefined && ref.path !== '';
+    var key = s.uuid + '|' + (strict ? 'S' : 'L') + (ref.name || '') + '|' + (hasPath ? ref.path : '');
+    if (C[key]) return C[key];
+    var t = null, c;
+    var q = hasPath ? at(s, ref.path) : null;
+    if (ref.name) {
+      c = all.filter(function (o) { return o.parent && o.__m3dN0 === ref.name; });
+      if (!c.length) c = all.filter(function (o) { return o.parent && o.name === ref.name; });
+      if (c.length === 1 || (c.length && !strict && !ref.sg)) t = c[0];
+      else if (c.length > 1) t = one(c, ref) || (q && c.indexOf(q) >= 0 && fits(q, ref) ? q : null);
+    } else if (hasPath) {
+      // No name. Old tables (no fingerprint): the child index, as before. New ones: the index only if that object still looks like
+      // the one the entry was made for; otherwise the one unnamed object with this shape at this original position; otherwise nothing.
+      if (!ref.sg) t = q;
+      else if (q && !q.__m3dN0 && fits(q, ref) && home(q, ref)) t = q;
+      else t = one(all.filter(function (o) { return o.parent && !o.__m3dN0; }), ref) || (q && !q.__m3dN0 && fits(q, ref) ? q : null);
+    }
+    if (t) C[key] = t;
+    return t;
+  }
+  // Fingerprint of an object: sg = type + vertex count, b = its position before any manual change (setProps keeps it in __m3dP0).
+  function fits(o, ref) { if (!ref.sg) return true; var g=o.geometry, a=g&&g.attributes&&g.attributes.position, count=a&&a.count||g&&g.vertices&&g.vertices.length; return (o.type || 'Object3D') + (count ? ':' + count : '') === ref.sg; }
+  function home(o, ref) { var b = ref.b, p = o.__m3dP0 || o.position; return !b || Math.abs(p.x - b[0]) + Math.abs(p.y - b[1]) + Math.abs(p.z - b[2]) < 0.002; }
+  function one(c, ref) { if (!ref.sg || !ref.b) return null; var m = c.filter(function (o) { return fits(o, ref) && home(o, ref); }); return m.length === 1 ? m[0] : null; }
+  function setProps(t, d) {
+    if (d.ms) {
+      var slots = Array.isArray(t.material) ? t.material : Array.isArray(t.material?.materials) ? t.material.materials : [t.material];
+      var slotRefs=identity && identity.slotRefs(t), edits=[];
+      for (var key in d.slots) {
+        var spec=d.slots[key], index=spec.slotRef&&slotRefs ? slotRefs.indexOf(spec.slotRef) : Number(key), mat=slots[index];
+        if (mat?.type!==spec.type || mat.isShaderMaterial || mat.isRawShaderMaterial || !mat.color?.setHex ||
+          !Number.isInteger(spec.color) || spec.color<0 || spec.color>0xffffff) return false;
+        edits.push([mat,spec.color]);
+      }
+      edits.forEach(function(edit){edit[0].color.setHex(edit[1]);});
+      return true;
+    }
+    if (d.p) { if (!t.__m3dP0) t.__m3dP0 = { x: t.position.x, y: t.position.y, z: t.position.z }; t.position.set(d.p[0], d.p[1], d.p[2]); t.rotation.set(d.r[0], d.r[1], d.r[2]); t.scale.set(d.s[0], d.s[1], d.s[2]); }
+    if (d.v !== undefined) t.visible = d.v;
+    if (d.cs !== undefined) t.castShadow = !!d.cs;
+    if (d.rs !== undefined) t.receiveShadow = !!d.rs;
+    if (d.m && t.material && !Array.isArray(t.material)) putMat(t.material, d.m);
+    if (d.lt && (t.isLight || /Light$/.test(t.type))) putLt(t, d.lt);
+    t.updateMatrixWorld(true);
+    var app=W.__M3D_EDITOR__;if(app&&app.onEditorObjectChange)app.onEditorObjectChange(t,d);
+  }
+  // map 贴图：值是 JSON 字符串 {u,rp,of,c,ro}；'' 只清掉编辑器自己贴的图（带 __m3dMap 标记），脚本自己的贴图不碰
+  function putMap(mt, s) {
+    if (typeof s !== 'string' || !('map' in mt)) return;
+    var cur = mt.map;
+    if (!s) { mt.__m3dMapWant = ''; if (cur && cur.__m3dMap) { try { if (cur.image && cur.image.pause) cur.image.pause(); } catch (_) {} mt.map = null; mt.needsUpdate = true; } return; }
+    if (cur && cur.__m3dMap === s) return;
+    var d; try { d = JSON.parse(s); } catch (_) { return; }
+    if (!d || !d.u) return;
+    function tf(t) { if (d.rp) t.repeat.set(d.rp[0], d.rp[1]); if (d.of) t.offset.set(d.of[0], d.of[1]); if (d.c) t.center.set(d.c[0], d.c[1]); t.rotation = d.ro || 0; t.__m3dMap = s; }
+    mt.__m3dMapWant = s;   // 同步记下：贴图类要等 import('three')，场景快照可能先发出去
+    if (cur && cur.__m3dMap && cur.__m3dU === d.u) { tf(cur); return; }
+    function go(T) {
+      if (!T || !T.Texture || mt.__m3dMapWant !== s) return;
+      var t;
+      if (d.v) {   // 视频贴图
+        if (!T.VideoTexture) return;
+        var el = document.createElement('video');
+        el.crossOrigin = 'anonymous'; el.loop = true; el.muted = true; el.playsInline = true; el.src = d.u;
+        var pl = el.play(); if (pl && pl.catch) pl.catch(function () {});
+        t = new T.VideoTexture(el);
+      } else {
+        var im = new Image(); t = new T.Texture(im);
+        im.crossOrigin = 'anonymous';
+        im.onload = function () { t.needsUpdate = true; };
+        im.src = d.u;
+      }
+      t.colorSpace = 'srgb'; t.wrapS = t.wrapT = 1000; t.__m3dU = d.u; tf(t);
+      var old = mt.map; mt.map = t; mt.needsUpdate = true;
+      if (old && old.__m3dMap) { try { if (old.image && old.image.pause) old.image.pause(); } catch (_) {} if (old.dispose) old.dispose(); }
+    }
+    if (W.__m3dT) go(W.__m3dT);
+    else try { import('three').then(function (T) { W.__m3dT = T; go(T); }, function () {}); } catch (_) {}
+  }
+  function putMat(mt, p) {
+    for (var k in p) {
+      if (!Object.prototype.hasOwnProperty.call(p, k) || k === 'type') continue;
+      var v = p[k];
+      if (k === 'map') { putMap(mt, v); continue; }
+      if (mt[k] && typeof mt[k].setHex==='function') mt[k].setHex(v); else if (typeof mt[k] === typeof v) mt[k] = v;
+    }
+    mt.needsUpdate = true;
+  }
+  function putLt(l, p) {
+    if ('c' in p && l.color && l.color.isColor && isFinite(p.c)) l.color.setHex(p.c);
+    if ('g' in p && l.groundColor && l.groundColor.isColor && isFinite(p.g)) l.groundColor.setHex(p.g);
+    var m = { i: 'intensity', d: 'distance', de: 'decay', a: 'angle', p: 'penumbra' };
+    for (var k in m) if (k in p && typeof l[m[k]] === 'number' && isFinite(p[k])) l[m[k]] = Number(p[k]);
+    if (l.shadow) { var sm = { b: 'bias', nb: 'normalBias', rd: 'radius' }; for (var j in sm) if (j in p && typeof l.shadow[sm[j]] === 'number' && isFinite(p[j])) l.shadow[sm[j]] = Number(p[j]); }
+  }
+  var T0 = null;
+  function lightCtor(all, ty) {
+    var f = null;
+    all.forEach(function (o) { if (!f && o.isLight && o.type === ty) f = o.constructor; });
+    if (f) return f;
+    if (T0 === null) { T0 = 0; try { import('three').then(function (m) { T0 = m; }, function () { T0 = false; }); } catch (_) { T0 = false; } }
+    return T0 && typeof T0[ty] === 'function' ? T0[ty] : null;
+  }
+  function d64(x, T) { var b = atob(x), u = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return new T(u.buffer); }
+  var K0 = null;
+  // 2026-11-10: borrow the BASE class. The first Mesh in a scene is often a subclass (three's Sky / Water extend Mesh, build their own
+  // 1x1x1 box + ShaderMaterial and ignore the constructor arguments): every primitive added from the editor came out as a locked sky box.
+  function baseOf(C, ok) {
+    for (var i = 0; i < 4; i++) { var P = Object.getPrototypeOf(C), t = null; if (typeof P !== 'function') break; try { t = new P(); } catch (_) {} if (t && ok(t)) C = P; else break; }
+    return C;
+  }
+  function kit(s, all) {
+    if (K0) return K0;
+    var K = { mats: {}, obj: Object.getPrototypeOf(s.constructor) };
+    all.forEach(function (o) {
+      var pos = o.geometry && o.geometry.attributes && o.geometry.attributes.position;
+      if (!K.mesh && o.type === 'Mesh' && pos && !pos.isInterleavedBufferAttribute) {
+        K.mesh = baseOf(o.constructor, function (t) { return !!t.isMesh; }); K.attr = pos.constructor;
+        var C = o.geometry.constructor;
+        for (var i = 0; i < 4; i++) { var P = Object.getPrototypeOf(C), t = null; try { t = new P(); } catch (_) {} if (t && t.isBufferGeometry) C = P; else break; }
+        K.geo = C;
+      }
+      var mt = o.material;
+      if (mt && !Array.isArray(mt) && /^Mesh.*Material$/.test(mt.type) && !K.mats[mt.type]) K.mats[mt.type] = baseOf(mt.constructor, function (t) { return t.type === mt.type && !t.isShaderMaterial; });
+    });
+    return K.mesh && K.geo && K.attr ? (K0 = K) : null;
+  }
+  function mkGeo(K, d) {
+    var g = new K.geo();
+    g.setAttribute('position', new K.attr(d64(d.pos, Float32Array), 3));
+    if (d.nor) g.setAttribute('normal', new K.attr(d64(d.nor, Float32Array), 3));
+    if (d.uv) g.setAttribute('uv', new K.attr(d64(d.uv, Float32Array), 2));
+    if (d.idx) g.setIndex(Array.prototype.slice.call(d64(d.idx, d.ix === 32 ? Uint32Array : Uint16Array)));
+    g.computeBoundingSphere(); g.computeBoundingBox();
+    return g;
+  }
+  function mkMat(K, d) {
+    var C = K.mats[d.type] || K.mats.MeshStandardMaterial || K.mats.MeshPhysicalMaterial || K.mats.MeshBasicMaterial || K.mats[Object.keys(K.mats)[0]];
+    var m = new C(); putMat(m, d); return m;
+  }
+  function apply(inFrame) {
+    var app=W.__M3D_EDITOR__;if(document.querySelector('meta[name="mani-garden-template"]')&&(!app||!app.ready))return false;
+    var s = app&&app.scene||pick(), groups = new Map();
+    var candidates=W.__m3dScenes.slice();
+    if(s&&!candidates.includes(s))candidates.push(s);
+    var ids=identity&&identity.sceneMatches(candidates);
+    identityIndexes.clear();
+    legacyIdentityIndexes.clear();
+    O.forEach(function(d,i) {
+      var scope=Number.isSafeInteger(d.sc) ? d.sc : d.pa?.sc;
+      var stable=d.sceneRef||d.pa?.sceneRef;
+      var scene=stable&&ids ? ids.get(stable)
+        : Number.isSafeInteger(scope) ? candidates[scope] : s;
+      if (!scene || !(scene.isScene || scene.type==='Scene')) return;
+      if (!groups.has(scene)) groups.set(scene,[]);
+      groups.get(scene).push([d,i]);
+    });
+    groups.forEach(function(entries,scene){applyScene(scene,entries,inFrame);});
+    if (W.__m3dLivePending && groups.size) { W.__m3dLivePending = false; try { W.dispatchEvent(new Event('m3d:live-applied')); } catch (_) {} }
+    fin = Object.keys(D).length >= need;
+    report();
+    return fin;
+  }
+  function applyScene(s, entries, inFrame) {
+    function each(fn) { entries.forEach(function(entry){fn(entry[0],entry[1]);}); }
+    var all = []; s.traverse(function (o) { all.push(o); });
+    all.forEach(function (o) { if (o.__m3dN0 === undefined) o.__m3dN0 = o.name; });
+    function own(d) { return d.targetOid ? N[d.targetOid] || null : find(s, all, d, !!(d.x || d.pa)); }
+    each(function (d) {
+      if (d.ord) { if (d.ids && d.ids.length > 1) { find(s, all, d.pa, true); d.ids.forEach(function (r) { find(s, all, r, true); }); } return; }
+      if (d.o) { if (d.c) find(s, all, d.c, true); if (d.pa) find(s, all, d.pa, true); return; }
+      if(d.rt)return;own(d); if (d.pa) find(s, all, d.pa, true);
+    });
+    var hit = 0, prog = true;
+    var app=W.__M3D_EDITOR__, edits=new Set();
+    each(function(d,i){if(!D[i]&&d.rt&&app&&app.setProjectState){app.setProjectState(d.state);D[i]=1;hit++;}});
+    while (prog) {
+      prog = false;
+      each(function (d, i) {
+        if (D[i] || !d.o) return;
+        if (d.x) { D[i] = 1; return; }
+        var par = find(s, all, d.pa, true); if (!par) return;
+        var t;
+        if (d.g) { var Base = Object.getPrototypeOf(s.constructor); t = new Base(); }
+        else if (d.nm) {
+          var K = kit(s, all); if (!K) return;
+          t = new K.mesh(mkGeo(K, d.geo), mkMat(K, d.mt));
+        } else if (d.lt) {
+          var LC = lightCtor(all, d.lt.t); if (!LC) return;
+          t = new LC();
+        } else {
+          var src = find(s, all, d.c, true); if (!src) return;
+          t = src.clone(false);
+          if (t.material) t.material = Array.isArray(t.material) ? t.material.map(function (m) { return m.clone(); }) : t.material.clone();
+        }
+        t.name = d.name || ''; t.__m3dN0 = t.name; setProps(t, d); par.add(t);
+        N[d.o] = t; t.userData = t.userData || {}; t.userData.__m3dO = d.o; D[i] = 1; hit++; prog = true; all.push(t); edits.add('structure');
+      });
+    }
+    [false,true].forEach(function (slots) {
+      each(function (d,i) {
+        if (!!d.ms !== slots || D[i] || d.o || d.x || d.ord || d.rt) return;
+        var t = own(d);
+        if(!t) {
+          if(d.objectRef&&identityIndexes.get(s)?.byId.has(d.objectRef))reasons.set(i,'conflict');
+          return;
+        }
+        if (typeof d.v==='boolean' && d.v!==t.visible) edits.add('structure');
+        if(d.p&&identity?.objectAuthority(t)) {reasons.set(i,'project-controlled');return;}
+        if(setProps(t,d)===false) {reasons.set(i,'material-mismatch');return;}
+        D[i] = 1; hit++;reasons.delete(i);
+        if (d.p) edits.add(t.isLight?'lights':'transforms');
+        if (d.ms || d.m) edits.add('materials');
+        if (d.lt) edits.add('lights');
+      });
+    });
+    each(function (d, i) {
+      if (D['p' + i] || d.o || d.x || d.ord || !d.pa) return;
+      var t = own(d), np = find(s, all, d.pa, true); if (!t || !np) return;
+      D['p' + i] = 1;
+      if (t !== np && !within(np, t)) { np.add(t); t.updateMatrixWorld(true); hit++; edits.add('structure'); }
+    });
+    each(function (d, i) {
+      if (D['n' + i] || d.o || d.x || d.n === undefined) return;
+      var t = own(d); if (!t) return;
+      t.name = d.n; D['n' + i] = 1; hit++;
+    });
+    each(function (d, i) {
+      if (D[i] || !d.ord) return;
+      if (!d.ids || d.ids.length < 2) { D[i] = 1; return; }
+      var par = find(s, all, d.pa, true); if (!par) return;
+      var ks = [], ok = true;
+      d.ids.forEach(function (r) { var t = find(s, all, r, true); if (!t) ok = false; else if (t.parent === par && ks.indexOf(t) < 0) ks.push(t); });
+      if (!ok) return;
+      var kids = par.children, slots = [];
+      for (var k = 0; k < kids.length; k++) if (ks.indexOf(kids[k]) >= 0) slots.push(k);
+      for (var j = 0; j < slots.length; j++) kids[slots[j]] = ks[j];
+      D[i] = 1; hit++;
+    });
+    var rm = [];
+    each(function (d, i) { if (D[i] || d.o || d.ord || !d.x) return; var t = own(d); if (t && t.parent) rm.push([i, t]); });
+    rm.forEach(function (e) { var t = e[1]; if (!t.parent) return; D[e[0]] = 1; hit++; t.visible = false; mark(t); t.parent.remove(t); edits.add('structure'); });
+    edits.forEach(function(kind){W.dispatchEvent(new CustomEvent('m3d:scene-edited',{detail:{scene:s,kind:kind}}));});
+    if (hit) {
+      var a = W.__M3D_EDITOR__; if (a && a.invalidate) a.invalidate();
+      if (!inFrame) R.forEach(function (r) { if (r.s === s && r.c && (!r.o.getRenderTarget || !r.o.getRenderTarget())) r.o.render(r.s, r.c); });
+    }
+  }
+  var n = 0, iv = setInterval(function () {
+    // A locked display or a cold WebGPU pipeline can wait for longer than a minute.
+    // Count retries only after the explicit garden runtime is ready.
+    if(document.querySelector('meta[name="mani-garden-template"]')&&(!W.__M3D_EDITOR__||!W.__M3D_EDITOR__.ready))return;
+    if (apply() || ++n > 300) { fin = true; clearInterval(iv); }
+  }, 200);
+  report();
+  W.addEventListener('m3d:scene-ready',function(){if(!fin)apply();});
+})(/*O*/[{"name":"ground","path":"4","sg":"Mesh:4","b":[0,0,0],"p":[0.0055,0,0],"r":[-1.5708,0,0],"s":[1,1,1],"v":true},{"name":"Cat left pink ear inset","path":"23","sg":"Mesh:15","b":[-0.37,1.7995,0.09],"p":[-0.37,1.7995,0.0417],"r":[0,0,0.16],"s":[0.79,0.4,0.12],"v":true},{"name":"Cat right pink ear inset","path":"24","sg":"Mesh:15","b":[0.37,1.7995,0.09],"p":[0.3776,1.7995,0.0282],"r":[0,0,-0.16],"s":[0.79,0.4,0.12],"v":true}]/*O*/, null)</script>
+<meta charset="utf-8">
+<style>html,body{margin:0;height:100%;overflow:hidden}canvas{display:block}</style>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.187.0/examples/jsm/"}}</script>
+</head>
+<body>
+<script type="module">
+import * as THREE from 'three';
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x000000);
+
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.01, 2000);
+camera.name = "Camera";
+camera.position.set(0, 1.7, 6);
+camera.quaternion.set(-0.0416, 0, 0, 0.9991);
+camera.userData = {"__m3d_viewcam":1,"__m3d_id":"9f1zt63twm77","__m3d_cam_nav":"wasd"};
+camera.userData.__m3d_viewcam = 1;
+camera.userData.__m3d_cam_nav = 'wasd';
+scene.add(camera);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.9;
+document.body.appendChild(renderer.domElement);
+const canvas = renderer.domElement;
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+/* __M3D_WASD_BEGIN__ */
+const __createWalkCollision = function createWalkCollision(THREE, scene, options = {}) {
+  const radius = Math.max(.05, Number(options.radius) || .25);
+  const eyeHeight = Math.max(.5, Number(options.eyeHeight) || 1.6);
+  const stepHeight = Math.max(0, Number(options.stepHeight) || .25);
+  const eps = 1e-6, colliders = [];
+  const v0 = new THREE.Vector3(), v1 = new THREE.Vector3();
+  const bounds = new THREE.Box3(), localSize = new THREE.Vector3();
+  let lastRefresh = 0;
+
+  function shown(object) {
+    for (let p = object; p; p = p.parent) if (!p.visible) return false;
+    return true;
+  }
+  function isWall(object, size) {
+    const data = object.userData || {};
+    if (data.__m3d_walk_collision === false) return false;
+    if (data.__m3d_walk_collision === 'wall' || data.__m3d_walk_collision === true) return true;
+    const name = object.name || '';
+    if (/(^|[\s_-])wall([\s_-]|$)/i.test(name) && !/(cabinet|outlet|shelf|light|sconce|art|switch|mirror|decor)/i.test(name)) return true;
+    // Preserve existing authored collision boxes when their proportions
+    // describe a wall. Floors, steps and ordinary furniture are not walls.
+    const phys = data.__m3d_phys;
+    return !!phys?.collider && size.y >= 1.2 && Math.min(size.x, size.z) <= .3 && Math.max(size.x, size.z) >= .5;
+  }
+  function refresh() {
+    colliders.length = 0; scene.updateMatrixWorld(true);
+    scene.traverse(object => {
+      if (!object.isMesh || !object.geometry || !shown(object)) return;
+      const geo = object.geometry;
+      if (!geo.boundingBox) geo.computeBoundingBox();
+      if (!geo.boundingBox || geo.boundingBox.isEmpty()) return;
+      geo.boundingBox.getSize(localSize);
+      const matrix = object.matrixWorld;
+      const sx = new THREE.Vector3().setFromMatrixColumn(matrix, 0).length();
+      const sy = new THREE.Vector3().setFromMatrixColumn(matrix, 1).length();
+      const sz = new THREE.Vector3().setFromMatrixColumn(matrix, 2).length();
+      if (Math.min(sx, sy, sz) < eps) return;
+      bounds.copy(geo.boundingBox).applyMatrix4(matrix);
+      if (bounds.isEmpty() || !Number.isFinite(bounds.min.x + bounds.max.x + bounds.min.y + bounds.max.y + bounds.min.z + bounds.max.z)) return;
+      const size = new THREE.Vector3(localSize.x * sx, bounds.max.y - bounds.min.y, localSize.z * sz);
+      if (!isWall(object, size)) return;
+      const inverse = matrix.clone().invert(), local = geo.boundingBox;
+      colliders.push({ object, inverse, matrix: matrix.clone(), minY: bounds.min.y, maxY: bounds.max.y,
+        minX: local.min.x - radius / sx, maxX: local.max.x + radius / sx,
+        minZ: local.min.z - radius / sz, maxZ: local.max.z + radius / sz });
+    });
+    lastRefresh = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    return colliders.length;
+  }
+  function hit(c, start, move) {
+    v0.set(start.x, start.y, start.z).applyMatrix4(c.inverse);
+    v1.set(start.x + move.x, start.y, start.z + move.z).applyMatrix4(c.inverse);
+    const px = v0.x, pz = v0.z, dx = v1.x - px, dz = v1.z - pz;
+    let enter = -Infinity, exit = Infinity, nx = 0, nz = 0;
+    const inside = px > c.minX + eps && px < c.maxX - eps && pz > c.minZ + eps && pz < c.maxZ - eps;
+    if (inside) {
+      const faces = [[px - c.minX, -1, 0], [c.maxX - px, 1, 0], [pz - c.minZ, 0, -1], [c.maxZ - pz, 0, 1]];
+      faces.sort((a, b) => a[0] - b[0]);
+      nx = faces[0][1]; nz = faces[0][2];
+      // A camera starting inside a collision margin must be able to leave.
+      if (dx * nx + dz * nz >= -eps) return null;
+      enter = 0;
+    } else {
+      for (const [p, d, min, max, axis] of [[px, dx, c.minX, c.maxX, 'x'], [pz, dz, c.minZ, c.maxZ, 'z']]) {
+        if (Math.abs(d) < eps) { if (p < min || p > max) return null; continue; }
+        let near = (min - p) / d, far = (max - p) / d, normal = -1;
+        if (near > far) { const tmp = near; near = far; far = tmp; normal = 1; }
+        if (near > enter) { enter = near; nx = axis === 'x' ? normal : 0; nz = axis === 'z' ? normal : 0; }
+        exit = Math.min(exit, far); if (enter > exit) return null;
+      }
+      if (enter < -eps || enter > 1 || exit < 0) return null;
+      enter = Math.max(0, enter);
+    }
+    const normal = new THREE.Vector3(nx, 0, nz).transformDirection(c.matrix);
+    normal.y = 0; if (normal.lengthSq() < eps) return null; normal.normalize();
+    return { time: enter, normal };
+  }
+  function move(position, dx, dz) {
+    if (!Number.isFinite(dx) || !Number.isFinite(dz)) return;
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    if (now - lastRefresh > 1000) refresh();
+    const remaining = new THREE.Vector3(dx, 0, dz), feet = position.y - eyeHeight;
+    for (let pass = 0; pass < 3 && remaining.lengthSq() > eps * eps; pass++) {
+      let first = null;
+      for (const c of colliders) {
+        if (!shown(c.object) || c.maxY <= feet + stepHeight || c.minY >= feet + eyeHeight - .05) continue;
+        const current = hit(c, position, remaining);
+        if (current && (!first || current.time < first.time)) first = current;
+      }
+      if (!first) { position.x += remaining.x; position.z += remaining.z; break; }
+      const t = Math.max(0, first.time - .0001);
+      position.x += remaining.x * t; position.z += remaining.z * t;
+      remaining.multiplyScalar(1 - t);
+      const inward = remaining.dot(first.normal);
+      if (inward < 0) remaining.addScaledVector(first.normal, -inward);
+      else break;
+    }
+  }
+  refresh();
+  return { move, refresh, get count() { return colliders.length; } };
+};
+const keys = {};
+let yaw = 0, pitch = 0, velY = 0, onFloor = false, look = false, lx = 0, ly = 0, last = performance.now();
+const eu = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
+yaw = eu.y; pitch = Math.max(-1.2, Math.min(1.2, eu.x));
+addEventListener('keydown', (e) => {
+  if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+  if (controls.enabled === false) return;
+  keys[e.code] = true; if (e.code === 'Space') e.preventDefault();
+});
+addEventListener('keyup', (e) => { keys[e.code] = false; });
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+canvas.addEventListener('pointerdown', (e) => { if (e.button !== 2 || controls.enabled === false) return; look = true; lx = e.clientX; ly = e.clientY; });
+addEventListener('pointerup', (e) => { if (e.button === 2) look = false; });
+addEventListener('pointermove', (e) => {
+  if (!look || controls.enabled === false) return;
+  yaw -= (e.clientX - lx) * 0.004; pitch -= (e.clientY - ly) * 0.004;
+  pitch = Math.max(-1.2, Math.min(1.2, pitch)); lx = e.clientX; ly = e.clientY;
+});
+const _ray = new THREE.Raycaster(), _down = new THREE.Vector3(0, -1, 0);
+const __walk = __createWalkCollision(THREE, scene, { radius: 0.25, eyeHeight: 1.6, stepHeight: 0.25 });
+const controls = { enabled: true, update() {
+  const now = performance.now(); const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (this.enabled === false) { for (const code in keys) keys[code] = false; look = false; return; }
+  const speed = (keys.ShiftLeft || keys.ShiftRight) ? 9 : 4.5;
+  const f = (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0);
+  const s = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0);
+  const moveX = (-Math.sin(yaw) * f + Math.cos(yaw) * s) * speed * dt;
+  const moveZ = (-Math.cos(yaw) * f - Math.sin(yaw) * s) * speed * dt;
+  __walk.move(camera.position, moveX, moveZ);
+  if (keys.Space && onFloor) { velY = 6.5; onFloor = false; }
+  velY -= 22 * dt; camera.position.y += velY * dt;
+  _ray.set(camera.position, _down);
+  const hits = _ray.intersectObjects(scene.children, true);
+  let floor = null;
+  for (const h of hits) {
+    if (!h.object || !h.object.isMesh || h.object.name === 'sky') continue;
+    if (h.distance > 0.05 && h.distance < 2.05) { floor = h; break; }
+  }
+  if (floor && velY <= 0) { camera.position.y = floor.point.y + 1.6; velY = 0; onFloor = true; }
+  else onFloor = false;
+  camera.quaternion.setFromEuler(new THREE.Euler(pitch, yaw, 0, 'YXZ'));
+} };
+addEventListener('blur', () => { for (const code in keys) keys[code] = false; look = false; });
+addEventListener('m3d:edit-mode', (e) => { controls.enabled = !e.detail?.editing; for (const code in keys) keys[code] = false; look = false; last = performance.now(); });
+/* __M3D_WASD_END__ */
+
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+
+
+
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+
+
+
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+
+
+
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+
+
+
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+
+
+
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+
+
+
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+
+
+
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+
+
+
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+
+
+
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+
+
+
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+
+
+
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+
+
+
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+
+
+
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+
+
+
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+
+
+
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+
+
+
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+
+
+
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+
+
+
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+
+
+
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+
+
+
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+
+
+
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+
+
+
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+
+
+
+camera.name ||= "Camera";
+camera.userData = { ...camera.userData, ...{"__m3d_viewcam":1,"__m3d_id":"9f1zt63twm77","__m3d_cam_nav":"wasd"}, __m3d_viewcam: 1, __m3d_cam_nav: 'wasd' };
+{ const existing = scene.children.find(o => o.isCamera && o.userData?.__m3d_viewcam); if(existing) existing.userData.__m3d_cam_nav = 'wasd'; else if(camera.parent !== scene) scene.add(camera); }
+
+
+
+
+
+
+
+function m3dSkyDomeTexture() {
+  const c = document.createElement('canvas'); c.width = 2; c.height = 512;
+  const g = c.getContext('2d');
+  const gr = g.createLinearGradient(0, 0, 0, 512);
+  gr.addColorStop(0, '#b8d4ff'); gr.addColorStop(0.5, '#d3e2f7'); gr.addColorStop(1, '#e8eef5');
+  g.fillStyle = gr; g.fillRect(0, 0, 2, 512);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+function m3dCheckerTexture() {
+  const c = document.createElement('canvas'); c.width = 4; c.height = 4;
+  const g = c.getContext('2d');
+  g.fillStyle = '#f2f2f2'; g.fillRect(0, 0, 4, 4);
+  g.fillStyle = '#d9d9de'; g.fillRect(0, 0, 2, 2); g.fillRect(2, 2, 2, 2);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(25, 25);
+  t.magFilter = THREE.NearestFilter; t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+const AmbientLight = new THREE.AmbientLight(0xdce6ff, 0.35);
+AmbientLight.name = "AmbientLight";
+AmbientLight.userData.__m3d_default = 1;
+AmbientLight.userData.__m3d_id = "t2s2y6z694kq";
+scene.add(AmbientLight);
+
+const DirectionalLight = new THREE.DirectionalLight(0xffefd9, 3.2);
+DirectionalLight.name = "DirectionalLight";
+DirectionalLight.position.set(-3, 5, 4);
+DirectionalLight.castShadow = true;
+DirectionalLight.shadow.mapSize.set(2048, 2048);
+DirectionalLight.shadow.camera.left = -4;
+DirectionalLight.shadow.camera.right = 4;
+DirectionalLight.shadow.camera.top = 4;
+DirectionalLight.shadow.camera.bottom = -4;
+DirectionalLight.shadow.camera.near = 0.5;
+DirectionalLight.shadow.camera.far = 15;
+DirectionalLight.shadow.normalBias = 0.02;
+DirectionalLight.shadow.bias = -0.0002;
+DirectionalLight.shadow.camera.updateProjectionMatrix();
+DirectionalLight.userData.__m3d_default = 1;
+DirectionalLight.userData.__m3d_id = "ye8840fdkb3z";
+scene.add(DirectionalLight);
+
+const studioFill = new THREE.DirectionalLight(0xb7d3ff, 1.1);
+studioFill.name = 'Studio cool fill';
+studioFill.position.set(4, 2.5, 3);
+scene.add(studioFill);
+const studioRim = new THREE.DirectionalLight(0xe4edff, 2.5);
+studioRim.name = 'Studio soft rim';
+studioRim.position.set(2, 4, -3);
+scene.add(studioRim);
+
+const sky = new THREE.Mesh(new THREE.SphereGeometry(400, 32, 15, 0, 6.2832, 0, 3.1416), new THREE.MeshBasicMaterial({ color: 0xffffff, side: 1, depthWrite: false, toneMapped: false, map: m3dSkyDomeTexture() }));
+sky.name = "sky";
+sky.visible = false;
+sky.userData.__m3d_id = "mr00f8e17za2";
+scene.add(sky);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(100, 100, 1, 1), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, metalness: 0, side: 2, map: m3dCheckerTexture() }));
+ground.name = "ground";
+ground.material.map = null;
+ground.material.color.setHex(0x12151a);
+ground.receiveShadow = true;
+ground.rotation.set(-1.5708, 0, 0);
+ground.userData.__m3d_phys = {"collider":"mesh"};
+ground.userData.__m3d_id = "z339180dnz81";
+scene.add(ground);
+
+// A soft, scalloped-looking woven rug and a miniature flocked woodland cat.
+const carpet = new THREE.Mesh(new THREE.CylinderGeometry(1.58, 1.58, 0.05, 96), new THREE.MeshStandardMaterial({ color: 0x819f94, roughness: 1, metalness: 0 }));
+carpet.name = 'Sage oval carpet'; carpet.position.set(0, 0.025, 0); carpet.scale.set(1.48, 1, 0.95); scene.add(carpet);
+const carpetBorder = new THREE.Mesh(new THREE.TorusGeometry(1.43, 0.035, 8, 96), new THREE.MeshStandardMaterial({ color: 0xe9d7b4, roughness: 1 }));
+carpetBorder.name = 'Carpet cream stitched border'; carpetBorder.rotation.set(-Math.PI / 2, 0, 0); carpetBorder.position.set(0, 0.067, 0); carpetBorder.scale.set(1.48, 0.95, 1); scene.add(carpetBorder);
+const carpetInset = new THREE.Mesh(new THREE.CircleGeometry(1.28, 96), new THREE.MeshStandardMaterial({ color: 0x9ab3a1, roughness: 1, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }));
+carpetInset.name = 'Carpet woven center'; carpetInset.rotation.set(-Math.PI / 2, 0, 0); carpetInset.position.set(0, 0.082, 0); carpetInset.scale.set(1.48, 0.95, 1); scene.add(carpetInset);
+
+const catLeftFoot = new THREE.Mesh(new THREE.SphereGeometry(0.23, 32, 24), new THREE.MeshStandardMaterial({ color: 0xf5e6cf, roughness: 1 }));
+catLeftFoot.name = 'Cat left paw'; catLeftFoot.position.set(-0.26, 0.24, 0.12); catLeftFoot.scale.set(0.9, 0.68, 1.2); scene.add(catLeftFoot);
+const catRightFoot = new THREE.Mesh(new THREE.SphereGeometry(0.23, 32, 24), new THREE.MeshStandardMaterial({ color: 0xf5e6cf, roughness: 1 }));
+catRightFoot.name = 'Cat right paw'; catRightFoot.position.set(0.26, 0.24, 0.12); catRightFoot.scale.set(0.9, 0.68, 1.2); scene.add(catRightFoot);
+const catDress = new THREE.Mesh(new THREE.CylinderGeometry(0.31, 0.39, 0.49, 64), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, metalness: 0 }));
+catDress.name = 'Cat honey cotton shirt'; catDress.position.set(0, 0.96, 0); scene.add(catDress);
+const catJeansWaist = new THREE.Mesh(new THREE.CylinderGeometry(0.37, 0.39, 0.19, 48), new THREE.MeshStandardMaterial({ color: 0x41678e, roughness: 1, metalness: 0 }));
+catJeansWaist.name = 'Cat denim jeans waistband'; catJeansWaist.position.set(0, 0.65, 0); scene.add(catJeansWaist);
+const catLeftJeansLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.205, 0.19, 0.34, 32), new THREE.MeshStandardMaterial({ color: 0x4b739b, roughness: 1, metalness: 0 }));
+catLeftJeansLeg.name = 'Cat left jeans leg'; catLeftJeansLeg.position.set(-0.205, 0.425, 0); scene.add(catLeftJeansLeg);
+const catRightJeansLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.205, 0.19, 0.34, 32), new THREE.MeshStandardMaterial({ color: 0x4b739b, roughness: 1, metalness: 0 }));
+catRightJeansLeg.name = 'Cat right jeans leg'; catRightJeansLeg.position.set(0.205, 0.425, 0); scene.add(catRightJeansLeg);
+const catLeftShirtSleeve = new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.19, 8, 32), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0 }));
+catLeftShirtSleeve.name = 'Cat left short shirt sleeve'; catLeftShirtSleeve.position.set(-0.335, 1.095, 0.02); catLeftShirtSleeve.rotation.set(0, 0, -0.65); scene.add(catLeftShirtSleeve);
+const catRightShirtSleeve = new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.19, 8, 32), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0 }));
+catRightShirtSleeve.name = 'Cat right short shirt sleeve'; catRightShirtSleeve.position.set(0.335, 1.095, 0.02); catRightShirtSleeve.rotation.set(0, 0, 0.65); scene.add(catRightShirtSleeve);
+const catHem = new THREE.Mesh(new THREE.TorusGeometry(0.595, 0.045, 12, 64), new THREE.MeshStandardMaterial({ color: 0xffe8cd, roughness: 1 }));
+catHem.visible = false;
+catHem.name = 'Dress ivory hem'; catHem.position.set(0, 0.395, 0); catHem.rotation.set(Math.PI / 2, 0, 0); scene.add(catHem);
+const catLeftArm = new THREE.Mesh(new THREE.CapsuleGeometry(0.115, 0.18, 8, 24), new THREE.MeshStandardMaterial({ color: 0xf5e6cf, roughness: 1 }));
+catLeftArm.name = 'Cat left arm'; catLeftArm.position.set(-0.49, 0.89, 0.02); catLeftArm.rotation.set(0, 0, -0.65); scene.add(catLeftArm);
+const catRightArm = new THREE.Mesh(new THREE.CapsuleGeometry(0.115, 0.18, 8, 24), new THREE.MeshStandardMaterial({ color: 0xf5e6cf, roughness: 1 }));
+catRightArm.name = 'Cat right arm'; catRightArm.position.set(0.49, 0.89, 0.02); catRightArm.rotation.set(0, 0, 0.65); scene.add(catRightArm);
+const catTail = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([
+  new THREE.Vector3(0, 0, 0),
+  new THREE.Vector3(0.24, -0.06, -0.06),
+  new THREE.Vector3(0.52, 0.02, -0.06),
+  new THREE.Vector3(0.66, 0.26, -0.04),
+  new THREE.Vector3(0.61, 0.48, 0),
+  new THREE.Vector3(0.44, 0.53, 0.03),
+  new THREE.Vector3(0.36, 0.42, 0.04)
+]), 80, 0.105, 16, false), new THREE.MeshStandardMaterial({ color: 0x858a92, roughness: 1, metalness: 0 }));
+catTail.name = 'Cat curled tail'; catTail.position.set(0.19, 0.64, -0.24); catTail.rotation.set(0, 0, 0); scene.add(catTail);
+const catHead = new THREE.Mesh(new THREE.SphereGeometry(0.57, 48, 32), new THREE.MeshStandardMaterial({ color: 0xf5e6cf, roughness: 1, metalness: 0 }));
+catHead.name = 'Cat soft cream head'; catHead.position.set(0, 1.65, 0); catHead.scale.set(1.05, 0.9, 0.86); scene.add(catHead);
+const catLeftEar = new THREE.Mesh(new THREE.ConeGeometry(0.235, 0.56, 3, 1), new THREE.MeshStandardMaterial({ color: 0xf5e6cf, roughness: 1 }));
+catLeftEar.name = 'Cat left pointed ear'; catLeftEar.position.set(-0.37, 2.035, -0.015); catLeftEar.rotation.set(0, Math.PI, 0.16); catLeftEar.scale.set(1.28, 0.64, 0.7); scene.add(catLeftEar);
+const catRightEar = new THREE.Mesh(new THREE.ConeGeometry(0.235, 0.56, 3, 1), new THREE.MeshStandardMaterial({ color: 0xf5e6cf, roughness: 1 }));
+catRightEar.name = 'Cat right pointed ear'; catRightEar.position.set(0.37, 2.035, -0.015); catRightEar.rotation.set(0, Math.PI, -0.16); catRightEar.scale.set(1.28, 0.64, 0.7); scene.add(catRightEar);
+const catLeftInnerEar = new THREE.Mesh(new THREE.SphereGeometry(0.13, 24, 16), new THREE.MeshStandardMaterial({ color: 0xe6aea7, roughness: 1 }));
+catLeftInnerEar.name = 'Cat left pink ear inset'; catLeftInnerEar.geometry.dispose(); catLeftInnerEar.geometry = new THREE.ConeGeometry(0.235, 0.56, 3, 1);
+catLeftInnerEar.position.set(-0.37, 2.045, 0.11); catLeftInnerEar.scale.set(0.79, 0.4, 0.12); catLeftInnerEar.rotation.set(0, Math.PI, 0.16); scene.add(catLeftInnerEar);
+const catRightInnerEar = new THREE.Mesh(new THREE.SphereGeometry(0.13, 24, 16), new THREE.MeshStandardMaterial({ color: 0xe6aea7, roughness: 1 }));
+catRightInnerEar.name = 'Cat right pink ear inset'; catRightInnerEar.geometry.dispose(); catRightInnerEar.geometry = new THREE.ConeGeometry(0.235, 0.56, 3, 1);
+catRightInnerEar.position.set(0.37, 2.045, 0.11); catRightInnerEar.scale.set(0.79, 0.4, 0.12); catRightInnerEar.rotation.set(0, Math.PI, -0.16); scene.add(catRightInnerEar);
+const catLeftEye = new THREE.Mesh(new THREE.SphereGeometry(0.065, 24, 20), new THREE.MeshStandardMaterial({ color: 0x251c18, roughness: 0.16 }));
+catLeftEye.material.color.setHex(0x000000); catLeftEye.material.roughness = 1;
+catLeftEye.name = 'Cat left glossy bead eye'; catLeftEye.position.set(-0.235, 1.72, 0.447); scene.add(catLeftEye);
+const catRightEye = new THREE.Mesh(new THREE.SphereGeometry(0.065, 24, 20), new THREE.MeshStandardMaterial({ color: 0x251c18, roughness: 0.16 }));
+catRightEye.material.color.setHex(0x000000); catRightEye.material.roughness = 1;
+catRightEye.name = 'Cat right glossy bead eye'; catRightEye.position.set(0.235, 1.72, 0.447); scene.add(catRightEye);
+const catLeftGlint = new THREE.Mesh(new THREE.SphereGeometry(0.010, 16, 12), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+catLeftGlint.visible = false;
+catLeftGlint.name = 'Cat left eye sparkle'; catLeftGlint.position.set(-0.252, 1.743, 0.503); scene.add(catLeftGlint);
+const catRightGlint = new THREE.Mesh(new THREE.SphereGeometry(0.010, 16, 12), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+catRightGlint.visible = false;
+catRightGlint.name = 'Cat right eye sparkle'; catRightGlint.position.set(0.218, 1.743, 0.503); scene.add(catRightGlint);
+const catLeftMuzzle = new THREE.Mesh(new THREE.SphereGeometry(0.15, 32, 20), new THREE.MeshStandardMaterial({ color: 0xfff3df, roughness: 1 }));
+catLeftMuzzle.name = 'Cat left muzzle'; catLeftMuzzle.position.set(-0.102, 1.51, 0.456); catLeftMuzzle.scale.set(1, 0.72, 0.65); scene.add(catLeftMuzzle);
+const catRightMuzzle = new THREE.Mesh(new THREE.SphereGeometry(0.15, 32, 20), new THREE.MeshStandardMaterial({ color: 0xfff3df, roughness: 1 }));
+catRightMuzzle.name = 'Cat right muzzle'; catRightMuzzle.position.set(0.102, 1.51, 0.456); catRightMuzzle.scale.set(1, 0.72, 0.65); scene.add(catRightMuzzle);
+const catNose = new THREE.Mesh(new THREE.SphereGeometry(0.057, 24, 16), new THREE.MeshStandardMaterial({ color: 0xc98985, roughness: 0.7 }));
+catNose.name = 'Cat tiny pink nose'; catNose.position.set(0, 1.565, 0.555); catNose.scale.set(1, 0.65, 0.65); scene.add(catNose);
+const catMouth = new THREE.Mesh(new THREE.TorusGeometry(0.055, 0.009, 8, 24, Math.PI), new THREE.MeshStandardMaterial({ color: 0x825e50, roughness: 1 }));
+catMouth.name = 'Cat little smile'; catMouth.position.set(0, 1.475, 0.552); catMouth.rotation.set(0, 0, Math.PI); scene.add(catMouth);
+const catCollarLeft = new THREE.Mesh(new THREE.SphereGeometry(0.16, 24, 16), new THREE.MeshStandardMaterial({ color: 0xfff2da, roughness: 1 }));
+catCollarLeft.name = 'Dress left petal collar'; catCollarLeft.position.set(-0.13, 1.21, 0.27); catCollarLeft.scale.set(1, 0.55, 0.35); catCollarLeft.rotation.z = -0.35; scene.add(catCollarLeft);
+const catCollarRight = new THREE.Mesh(new THREE.SphereGeometry(0.16, 24, 16), new THREE.MeshStandardMaterial({ color: 0xfff2da, roughness: 1 }));
+catCollarRight.name = 'Dress right petal collar'; catCollarRight.position.set(0.13, 1.21, 0.27); catCollarRight.scale.set(1, 0.55, 0.35); catCollarRight.rotation.z = 0.35; scene.add(catCollarRight);
+const catButton = new THREE.Mesh(new THREE.SphereGeometry(0.037, 16, 12), new THREE.MeshStandardMaterial({ color: 0xffd88c, roughness: 0.55 }));
+catButton.name = 'Dress honey button'; catButton.position.set(0, 1.03, 0.367); catButton.scale.set(1, 1, 0.45); scene.add(catButton);
+
+// Restore the earlier cone-shaped ears and their original pink inserts.
+catLeftEar.rotation.set(0, 0, 0.16);
+catRightEar.rotation.set(0, 0, -0.16);
+catLeftInnerEar.position.set(-0.37, 2.045, 0.09);
+catLeftInnerEar.rotation.set(0, 0, 0.16);
+catRightInnerEar.position.set(0.37, 2.045, 0.09);
+catRightInnerEar.rotation.set(0, 0, -0.16);
+
+// Grey-and-white tabby coat; preserve the original character and clothing.
+catHead.material.color.setHex(0x999da3);
+catLeftEar.material.color.setHex(0x999da3);
+catRightEar.material.color.setHex(0x999da3);
+catLeftArm.material.color.setHex(0xb3b6bb);
+catRightArm.material.color.setHex(0xb3b6bb);
+catTail.material.color.setHex(0x858a92);
+catLeftFoot.material.color.setHex(0xf8f7f2);
+catRightFoot.material.color.setHex(0xf8f7f2);
+catLeftMuzzle.material.color.setHex(0xfaf9f5);
+catRightMuzzle.material.color.setHex(0xfaf9f5);
+catLeftMuzzle.scale.set(1.12, 0.78, 0.85);
+catRightMuzzle.scale.set(1.12, 0.78, 0.85);
+catNose.geometry.dispose();
+catNose.geometry = new THREE.ConeGeometry(0.055, 0.065, 3);
+catNose.rotation.set(0, 0, Math.PI);
+catNose.scale.set(1, 1, 0.55);
+catNose.position.set(0, 1.565, 0.596);
+
+const catWhiteBib = new THREE.Mesh(new THREE.SphereGeometry(0.22, 32, 24), new THREE.MeshStandardMaterial({color:0xfaf9f5, roughness:1}));
+catWhiteBib.visible = false;
+catWhiteBib.name = 'Cat white chin and bib'; catWhiteBib.position.set(0, 1.37, 0.32); catWhiteBib.scale.set(1, 0.78, 0.63); scene.add(catWhiteBib);
+const catWhiteBlaze = new THREE.Mesh(new THREE.SphereGeometry(0.14, 32, 24), new THREE.MeshStandardMaterial({color:0xfaf9f5, roughness:1}));
+catWhiteBlaze.name = 'Cat white nose blaze'; catWhiteBlaze.position.set(0, 1.64, 0.465); catWhiteBlaze.scale.set(0.62, 1.35, 0.4); scene.add(catWhiteBlaze);
+const tabbyForeheadCenter = new THREE.Mesh(new THREE.CapsuleGeometry(0.034, 0.16, 6, 16), new THREE.MeshStandardMaterial({color:0x535b65, roughness:1}));
+tabbyForeheadCenter.name = 'Tabby central forehead stripe'; tabbyForeheadCenter.position.set(0, 1.971, 0.359); tabbyForeheadCenter.rotation.set(-0.8, 0, 0); scene.add(tabbyForeheadCenter);
+const tabbyForeheadLeft = new THREE.Mesh(new THREE.CapsuleGeometry(0.033, 0.17, 6, 16), new THREE.MeshStandardMaterial({color:0x535b65, roughness:1}));
+tabbyForeheadLeft.name = 'Tabby left forehead stripe'; tabbyForeheadLeft.position.set(-0.14, 1.957, 0.36); tabbyForeheadLeft.rotation.set(-0.8, 0, -0.3); scene.add(tabbyForeheadLeft);
+const tabbyForeheadRight = new THREE.Mesh(new THREE.CapsuleGeometry(0.033, 0.17, 6, 16), new THREE.MeshStandardMaterial({color:0x535b65, roughness:1}));
+tabbyForeheadRight.name = 'Tabby right forehead stripe'; tabbyForeheadRight.position.set(0.14, 1.957, 0.36); tabbyForeheadRight.rotation.set(-0.8, 0, 0.3); scene.add(tabbyForeheadRight);
+const tabbyLeftCheekUpper = new THREE.Mesh(new THREE.CapsuleGeometry(0.028, 0.14, 6, 16), new THREE.MeshStandardMaterial({color:0x535b65, roughness:1}));
+tabbyLeftCheekUpper.name = 'Tabby left upper cheek stripe'; tabbyLeftCheekUpper.position.set(-0.438, 1.71, 0.326); tabbyLeftCheekUpper.rotation.set(0, -0.55, 1.2); scene.add(tabbyLeftCheekUpper);
+const tabbyRightCheekUpper = new THREE.Mesh(new THREE.CapsuleGeometry(0.028, 0.14, 6, 16), new THREE.MeshStandardMaterial({color:0x535b65, roughness:1}));
+tabbyRightCheekUpper.name = 'Tabby right upper cheek stripe'; tabbyRightCheekUpper.position.set(0.438, 1.71, 0.326); tabbyRightCheekUpper.rotation.set(0, 0.55, -1.2); scene.add(tabbyRightCheekUpper);
+const tabbyLeftCheekLower = new THREE.Mesh(new THREE.CapsuleGeometry(0.025, 0.12, 6, 16), new THREE.MeshStandardMaterial({color:0x535b65, roughness:1}));
+tabbyLeftCheekLower.name = 'Tabby left lower cheek stripe'; tabbyLeftCheekLower.position.set(-0.425, 1.59, 0.327); tabbyLeftCheekLower.rotation.set(0, -0.55, 1.5); scene.add(tabbyLeftCheekLower);
+const tabbyRightCheekLower = new THREE.Mesh(new THREE.CapsuleGeometry(0.025, 0.12, 6, 16), new THREE.MeshStandardMaterial({color:0x535b65, roughness:1}));
+tabbyRightCheekLower.name = 'Tabby right lower cheek stripe'; tabbyRightCheekLower.position.set(0.425, 1.59, 0.327); tabbyRightCheekLower.rotation.set(0, 0.55, -1.5); scene.add(tabbyRightCheekLower);
+
+const catLeftWhiskers = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints([
+  new THREE.Vector3(-0.15,1.55,0.596), new THREE.Vector3(-0.76,1.67,0.55),
+  new THREE.Vector3(-0.17,1.51,0.596), new THREE.Vector3(-0.8,1.51,0.57),
+  new THREE.Vector3(-0.15,1.48,0.59), new THREE.Vector3(-0.72,1.36,0.55)
+]), new THREE.LineBasicMaterial({color:0x454a52}));
+catLeftWhiskers.name = 'Cat left three whiskers'; catLeftWhiskers.position.set(0,0,0); scene.add(catLeftWhiskers);
+const catRightWhiskers = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints([
+  new THREE.Vector3(0.15,1.55,0.596), new THREE.Vector3(0.76,1.67,0.55),
+  new THREE.Vector3(0.17,1.51,0.596), new THREE.Vector3(0.8,1.51,0.57),
+  new THREE.Vector3(0.15,1.48,0.59), new THREE.Vector3(0.72,1.36,0.55)
+]), new THREE.LineBasicMaterial({color:0x454a52}));
+catRightWhiskers.name = 'Cat right three whiskers'; catRightWhiskers.position.set(0,0,0); scene.add(catRightWhiskers);
+
+// Painted fur markings complement the raised forehead and cheek stripes.
+function tabbyCoatTexture(tail = false) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512; canvas.height = 256;
+  const context = canvas.getContext('2d');
+  context.fillStyle = '#ffffff'; context.fillRect(0, 0, 512, 256);
+  context.fillStyle = '#59616d';
+  if (tail) {
+    for (let i = 0; i < 5; i++) context.fillRect(45 + i * 100, 0, 44, 256);
+    context.fillRect(474, 0, 38, 256);
+  } else {
+    for (let i = 0; i < 10; i++) {
+      const x = i * 54;
+      context.beginPath(); context.moveTo(x - 10, 0);
+      context.bezierCurveTo(x + 24, 42, x - 22, 90, x + 9, 156);
+      context.bezierCurveTo(x - 5, 99, x + 5, 44, x + 12, 0);
+      context.closePath(); context.fill();
+    }
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+// Broad charcoal rings wrap cleanly around the connected curled tail.
+catTail.material.map = tabbyCoatTexture(true);
+catTail.material.needsUpdate = true;
+// Keep the earlier grey-and-white coat without the added painted stripes.
+catCollarLeft.material.color.setHex(0xffffff);
+catCollarRight.material.color.setHex(0xffffff);
+
+// Align the outer leg edges with the waistband and meet at the center seam.
+catLeftJeansLeg.scale.set(0.195 / 0.205, 1, 1);
+catRightJeansLeg.scale.set(0.195 / 0.205, 1, 1);
+catLeftJeansLeg.position.x = -0.195;
+catRightJeansLeg.position.x = 0.195;
+catLeftFoot.position.x = -0.195;
+catRightFoot.position.x = 0.195;
+catLeftFoot.scale.x = 0.74;
+catRightFoot.scale.x = 0.74;
+
+// Shorter, wider proportions, keeping the paws anchored above the rug.
+const catProportionAnchor = 0.084;
+const catParts = scene.children.filter(object => /^(Cat |Tabby |Dress )/.test(object.name));
+catParts.forEach(object => {
+  object.position.set(object.position.x * 1.12, catProportionAnchor + (object.position.y - catProportionAnchor) * 0.78, object.position.z * 1.08);
+  object.scale.set(object.scale.x * 1.12, object.scale.y * 0.78, object.scale.z * 1.08);
+});
+
+// Restore the head's original proportions while keeping the stubby body.
+const catHeadParts = [catHead, catLeftEar, catRightEar, catLeftInnerEar, catRightInnerEar, catLeftEye, catRightEye, catLeftGlint, catRightGlint, catLeftMuzzle, catRightMuzzle, catNose, catMouth, catWhiteBib, catWhiteBlaze, tabbyForeheadCenter, tabbyForeheadLeft, tabbyForeheadRight, tabbyLeftCheekUpper, tabbyRightCheekUpper, tabbyLeftCheekLower, tabbyRightCheekLower, catLeftWhiskers, catRightWhiskers];
+const catNeckHeight = catProportionAnchor + (1.2 - catProportionAnchor) * 0.78;
+catHeadParts.forEach(object => {
+  object.position.set(object.position.x / 1.12, catNeckHeight + (object.position.y - catNeckHeight) / 0.78, object.position.z / 1.08);
+  object.scale.set(object.scale.x / 1.12, object.scale.y / 0.78, object.scale.z / 1.08);
+});
+
+
+scene.traverse(object => {
+  if (object.isMesh && object !== sky && object !== ground) {
+    object.castShadow = true;
+    object.receiveShadow = true;
+  }
+});
+__walk.refresh();
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+window.__M3D_EDITOR__ = { scene, camera, renderer, controls, ready: true, invalidate() { renderer.render(scene, camera); } };
+window.dispatchEvent(new Event('m3d:scene-ready'));
+renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+</script>
+</body>
+</html>
+<!--__M3D_SINGLEFILE__-->

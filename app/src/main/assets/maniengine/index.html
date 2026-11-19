@@ -1,12 +1,13 @@
 <!doctype html>
 <!--
-  Tomodoom pet page (CLAUDE.md §5.1). The rabbit comes from the Maniengine export scene-3.html:
-  pet-model.js is GENERATED from it by tools/maniengine/extract_model.py (don't edit it by hand).
+  Tomodoom pet page (CLAUDE.md §5.1). Each pet comes from a Maniengine export: models/<pet>.js is
+  GENERATED from it by tools/maniengine/extract_model.py (don't edit it by hand). ?pet=<id> picks the
+  pet (a PETS id in pet-scene.js); without it the page shows DEFAULT_PET (the rabbit).
   This page owns the camera, lighting loop and the app contract:
     - reads window.tomodoomPetState at startup and listens for "tomodoom:petstate";
     - mood drives the idle animation, equipped items toggle the add-ons below.
   tomodoom-touch "centre": one-finger drags starting in the model box (window.tomodoomTouchBox, set by
-  the host) turn the rabbit. Fast flicks and drags starting outside the box swipe between tabs. Two
+  the host) turn the pet. Fast flicks and drags starting outside the box swipe between tabs. Two
   fingers pinch-zoom (the host keeps multi-touch gestures away from the tab pager).
 -->
 <html lang="en">
@@ -27,7 +28,7 @@
 <div id="error"></div>
 <script type="module">
 import * as THREE from 'three';
-import { buildPetScene } from './pet-scene.js';
+import { buildPetScene, loadPetModel } from './pet-scene.js';
 
 // --- Scene, built exactly as the export does it (camera first, so override child paths match) ---
 const scene = new THREE.Scene();
@@ -38,7 +39,8 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 
-const { rabbit, head, rabbitBox, ADDONS } = buildPetScene(THREE, scene, renderer);
+const { id: petId, model } = await loadPetModel(new URLSearchParams(location.search).get('pet'));
+const { pet, head, petBox, ADDONS } = buildPetScene(THREE, scene, renderer, model, petId);
 
 // --- App contract: tomodoom:petstate ---
 let mood = 'okay';
@@ -52,19 +54,19 @@ function applyState(s) {
 addEventListener('tomodoom:petstate', e => applyState(e.detail));
 applyState(window.tomodoomPetState);
 
-// --- Camera: frame the rabbit (+ the near rug) for whatever aspect the viewport has ---
+// --- Camera: frame the pet (+ the near rug) for whatever aspect the viewport has ---
 const TALL_ASPECT = .8, TALL_LIFT = .08, MIN_ZOOM = .75, MAX_ZOOM = 3;
 function fit() {
   const w = document.documentElement.clientWidth, h = document.documentElement.clientHeight;
   if (!w || !h) return;  // detached while moving between pages: keep the last good framing
-  const size = rabbitBox.getSize(new THREE.Vector3()), centre = rabbitBox.getCenter(new THREE.Vector3());
+  const size = petBox.getSize(new THREE.Vector3()), centre = petBox.getCenter(new THREE.Vector3());
   camera.aspect = w / h;
   const vFov = THREE.MathUtils.degToRad(camera.fov) / 2;
   const fitH = (size.y * .75) / Math.tan(vFov), fitW = (size.x * 1.1) / (Math.tan(vFov) * camera.aspect);
   const dist = Math.max(fitH, fitW, 2.5);
   camera.position.set(0, centre.y + dist * .18, centre.z + dist);
   camera.lookAt(0, centre.y - size.y * .08, centre.z);
-  // Tall (full-page) viewports: sit the rabbit higher, clear of the health bar floating below it.
+  // Tall (full-page) viewports: sit the pet higher, clear of the health bar floating below it.
   if (camera.aspect < TALL_ASPECT) camera.setViewOffset(w, h, 0, h * TALL_LIFT, w, h);
   else camera.clearViewOffset();
   camera.updateProjectionMatrix();
@@ -74,7 +76,7 @@ function fit() {
 new ResizeObserver(fit).observe(document.documentElement);
 fit();
 
-// --- Touch: one finger in the model box turns the rabbit; two fingers pinch to zoom ---
+// --- Touch: one finger in the model box turns the pet; two fingers pinch to zoom ---
 // camera.zoom scales the picture uniformly, so the model is never distorted.
 // Speeds are in viewport widths per second, so a swipe feels the same on any screen size.
 const SPEED_WINDOW_MS = 100, SLOW_SPEED = .5, FAST_SPEED = 3, SLOW_GAIN = .75, FAST_GAIN = 1.75;
@@ -101,7 +103,7 @@ canvas.addEventListener('pointerdown', e => {
   startPinch();
   spinVelocity = 0;
   spin = pointers.size === 1 && inModelBox(e)  // a second finger ends the turn
-    ? { id: e.pointerId, x: e.clientX, start: e.timeStamp, startYaw: rabbit.rotation.y, samples: [{ x: e.clientX, time: e.timeStamp }] } : null;
+    ? { id: e.pointerId, x: e.clientX, start: e.timeStamp, startYaw: pet.rotation.y, samples: [{ x: e.clientX, time: e.timeStamp }] } : null;
 });
 canvas.addEventListener('pointermove', e => {
   if (!pointers.has(e.pointerId)) return;
@@ -109,7 +111,7 @@ canvas.addEventListener('pointermove', e => {
   if (spin && spin.id === e.pointerId) {
     spin.samples.push({ x: e.clientX, time: e.timeStamp });
     const widths = (e.clientX - spin.x) / Math.max(canvas.clientWidth, 1);
-    rabbit.rotation.y += widths * Math.PI * 2 * swipeGain(swipeSpeed(e.timeStamp));
+    pet.rotation.y += widths * Math.PI * 2 * swipeGain(swipeSpeed(e.timeStamp));
     spin.x = e.clientX;
   }
   if (!pinch) return;
@@ -121,7 +123,7 @@ for (const type of ['pointerup', 'pointercancel']) canvas.addEventListener(type,
   startPinch();
   if (!spin || spin.id !== e.pointerId) return;
   if (type === 'pointercancel') {  // a quick flick went to the tab pager: undo its small nudge
-    if (e.timeStamp - spin.start < TAB_HANDOVER_MS) rabbit.rotation.y = spin.startYaw;
+    if (e.timeStamp - spin.start < TAB_HANDOVER_MS) pet.rotation.y = spin.startYaw;
   } else {
     const speed = swipeSpeed(e.timeStamp), release = speed * Math.PI * 2 * swipeGain(speed);
     spinVelocity = Math.abs(release) < MIN_FLING ? 0 : THREE.MathUtils.clamp(release, -MAX_FLING, MAX_FLING);
@@ -136,7 +138,7 @@ function frame(now) {
   const t = now / 1000, dt = Math.max(0, Math.min(now - last, 100)) / 1000, k = 1 - Math.exp(-dt * 6);  // a slow first render can leave now < last
   last = now;
   if (!spin && spinVelocity) {  // coast after a flick
-    rabbit.rotation.y += spinVelocity * dt;
+    pet.rotation.y += spinVelocity * dt;
     spinVelocity *= Math.exp(-dt * FLING_DECAY);
     if (Math.abs(spinVelocity) < .02) spinVelocity = 0;
   }
@@ -144,9 +146,9 @@ function frame(now) {
   else if (mood === 'struggling') Object.assign(goal, { y: Math.sin(t * .9) * .01, tip: 0, droop: .3, squash: .97 });
   else if (mood === 'fainted') Object.assign(goal, { y: 0, tip: 1.35, droop: .4, squash: 1 });
   else Object.assign(goal, { y: 0, tip: 0, droop: Math.sin(t * 1.3) * .03, squash: 1 + Math.sin(t * 2) * .012 });
-  rabbit.position.y = THREE.MathUtils.lerp(rabbit.position.y, rabbitBox.min.y + goal.y, mood === 'thriving' ? 1 : k);
-  rabbit.rotation.z = THREE.MathUtils.lerp(rabbit.rotation.z, goal.tip, k * .5);
-  rabbit.scale.y = THREE.MathUtils.lerp(rabbit.scale.y, goal.squash, k);
+  pet.position.y = THREE.MathUtils.lerp(pet.position.y, petBox.min.y + goal.y, mood === 'thriving' ? 1 : k);
+  pet.rotation.z = THREE.MathUtils.lerp(pet.rotation.z, goal.tip, k * .5);
+  pet.scale.y = THREE.MathUtils.lerp(pet.scale.y, goal.squash, k);
   head.rotation.x = THREE.MathUtils.lerp(head.rotation.x, goal.droop, k);
   renderer.render(scene, camera);
 }
