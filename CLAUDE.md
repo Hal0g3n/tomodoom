@@ -207,6 +207,9 @@ floating over it; both cards are transparent),
 `res/drawable-nodpi/thumb_<itemId>.png` and `thumb_pet_<speciesId>.png` (GENERATED item thumbnails and
 pet portraits, §5.1), `item_pet_choice.xml` + `res/drawable/bg_pet_choice.xml` (onboarding pet cards),
 `res/drawable/ic_hanger_24dp.xml` (Customise tab icon),
+launcher icon: `mipmap-anydpi-v26/ic_launcher{,_round}.xml` (adaptive: `@color/launcher_background`
++ GENERATED `drawable/ic_launcher_foreground.xml` / `ic_launcher_monochrome.xml`) and GENERATED legacy
+`mipmap-*/ic_launcher{,_round}.webp` for API 24–25,
 `activity_main.xml` (`main_pager` ViewPager2 + `nav_view`), `activity_onboarding.xml` (title,
 `pet_choices` grid, `pet_name_layout`/`pet_name_input`, `start_button`), `res/menu/bottom_nav_menu.xml`.
 `res/values/dimens.xml` (`pet_viewport_stroke`).
@@ -216,7 +219,9 @@ Assets: `assets/trufar/kafka_agent.json` (the Kafka TruFar agent export, icon st
 `assets/maniengine/index.html` (the pet page, §5.1), `pet-scene.js` (model setup + add-ons, shared with the
 thumbnail tool; `PETS` profiles per model), `models/rabbit.js` and `models/cat.js` (GENERATED from the scene-3
 and scene-5 exports) and `vendor/three/` (three.js 0.187.0).
-Tools: `tools/maniengine/extract_model.py` (+ `source/scene-3.html`, `source/scene-5.html`), `make_thumbnails.py` (+ `thumbnails.html`).
+Tools: `tools/maniengine/extract_model.py` (+ `source/scene-3.html`, `source/scene-5.html`), `make_thumbnails.py` (+ `thumbnails.html`);
+`tools/launcher_icon/make_launcher_icon.py` (+ `logo.svg`, the app logo) regenerates every launcher-icon file
+listed above (needs `rsvg-convert` and Pillow; WSL has both). Edit the logo, then re-run it.
 
 Outside the app: **`backend/`** is the Python relay server that connects the app's chat to Kafka on
 trufar.cn. It's **currently parked**: the app runs Kafka on Gemini instead (§5.2). It's Flask, hosted on **Vercel** (free Hobby plan, no card), with Firestore on Firebase's
@@ -956,7 +961,11 @@ Rules:
   uses `jet`.
 - Renderers (Maniengine) may use their own art colours inside the viewport, but the chrome around
   it follows this palette.
-- Launcher icon colours (`ic_launcher_*`) are still the template defaults and are outside the palette.
+- The launcher icon comes from `tools/launcher_icon/logo.svg`, which uses only palette colours.
+  `make_launcher_icon.py` writes them as `@color/<token>` references (it fails on a non-palette
+  colour). On API 26+ the launcher mask stands in for the logo's eggshell emblem square: the adaptive
+  background is `launcher_background` (→ `eggshell`) and the foreground is the phone, scaled so the
+  emblem fills the 72dp visible area. The monochrome (themed-icon) layer keeps only the `jet` line work.
 
 **Typography.** All UI text is **Playpen Sans**; user and bot chat bubbles use **Unkempt**
 (`TextAppearance.Tomodoom.ChatBubble`, 17sp). SYSTEM chat notices stay in Playpen Sans.
@@ -1075,7 +1084,8 @@ Debug helpers available in the debug build:
    at 20. Type `Mochi` and tap **Start** (or the keyboard's Done): the Pets tab opens and its
    health bar shows `Mochi`. Rotation keeps the typed text. Relaunching skips onboarding. (The steps
    below assume you kept `Tomo` and the Rabbit.)
-1. Launch the app. The **Pets** tab has **no action bar** and no debug buttons. The health bar sits below
+1. The home-screen icon is the phone with a pet peeking out of its pocket, on eggshell (with any
+   mask shape; on Android 13+ with themed icons on, a tinted line drawing). Launch the app. The **Pets** tab has **no action bar** and no debug buttons. The health bar sits below
    the rabbit and shows `Tomo`, **HP 50 / 100** and status "Okay". Until Usage Access is granted, a Usage Access card with an **Enable** button
    sits at the top of the page (it disappears once access is granted). The bottom bar shows three icons (Customise, Pets, Chat). Pets is open: its tile is wider, its icon is larger and only it shows a label.
 2. Swipe right (or tap **Customise**). The Customise page shows no title: a pet preview at the top and

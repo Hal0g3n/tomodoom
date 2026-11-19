@@ -19,4 +19,7 @@
     <color name="accessory_circle_background">@color/floral_white</color>
     <color name="accessory_circle_stroke">@color/eggshell</color>
     <color name="accessory_circle_stroke_selected">@color/charcoal</color>
+
+    <!-- Launcher icon (adaptive background; the foreground is generated from the logo) -->
+    <color name="launcher_background">@color/eggshell</color>
 </resources>

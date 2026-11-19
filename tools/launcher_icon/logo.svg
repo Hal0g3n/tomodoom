@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Clip path for the inner smartphone screen -->
+    <clipPath id="phone-screen-clip">
+      <rect x="206" y="174" width="100" height="164" rx="13" />
+    </clipPath>
+  </defs>
+
+  <!-- Background: Floral White (#FBF7EF) -->
+  <rect width="512" height="512" fill="#FBF7EF" />
+
+  <!-- Centered Rounded Square Emblem: Eggshell (#F7F0DE) with crisp border -->
+  <rect x="140" y="140" width="232" height="232" rx="48" fill="#F7F0DE" stroke="#FFFFFF" stroke-width="10" />
+
+  <!-- Smartphone Screen Interior -->
+  <g clip-path="url(#phone-screen-clip)">
+    <!-- Upper Screen Backdrop -->
+    <rect x="206" y="174" width="100" height="140" fill="#FBF7EF" />
+
+    <!-- Right Inner Bezel Shading (#8C8F92) -->
+    <rect x="296" y="174" width="10" height="140" fill="#8C8F92" />
+
+    <!-- Pet Head Dome -->
+    <path d="M 218 262 C 218 208, 294 208, 294 262 Z" fill="#FBF7EF" />
+    <!-- Pet Head Right-Side Shading (#8C8F92) -->
+    <path d="M 268 216 C 284 223, 291 239, 291 262 L 281 262 C 281 242, 275 226, 262 217 Z" fill="#8C8F92" />
+    <!-- Pet Head Outline (#383A3D) -->
+    <path d="M 218 262 C 218 208, 294 208, 294 262" fill="none" stroke="#383A3D" stroke-width="6" stroke-linecap="round" />
+
+    <!-- Pet Face Details -->
+    <!-- Eyes -->
+    <circle cx="240" cy="236" r="5.5" fill="#383A3D" />
+    <circle cx="238.5" cy="234.5" r="1.8" fill="#FBF7EF" />
+    <circle cx="272" cy="236" r="5.5" fill="#383A3D" />
+    <circle cx="270.5" cy="234.5" r="1.8" fill="#FBF7EF" />
+
+    <!-- Cheeks (#8C8F92) -->
+    <ellipse cx="232.5" cy="246" rx="4.2" ry="2.4" fill="#8C8F92" />
+    <ellipse cx="279.5" cy="246" rx="4.2" ry="2.4" fill="#8C8F92" />
+
+    <!-- Nose & Mouth -->
+    <ellipse cx="256" cy="242" rx="2.8" ry="2" fill="#383A3D" />
+    <path d="M 249 245 Q 252.5 249 256 245 Q 259.5 249 263 245" fill="none" stroke="#383A3D" stroke-width="3.2" stroke-linecap="round" />
+
+    <!-- Lower Screen Pocket (Covers bottom of pet body) -->
+    <path d="M 205 254 Q 256 274 307 254 L 307 314 L 205 314 Z" fill="#FBF7EF" />
+    <!-- Right Bezel Shading on Lower Pocket -->
+    <rect x="296" y="254" width="10" height="60" fill="#8C8F92" />
+    <!-- Pocket Curve Line -->
+    <path d="M 205 254 Q 256 274 307 254" fill="none" stroke="#383A3D" stroke-width="6" stroke-linecap="round" />
+
+    <!-- Pet Paws Peeking Over Pocket -->
+    <!-- Paw Shadows (#8C8F92) -->
+    <path d="M 227 263 C 227 279, 243 279, 243 264" fill="none" stroke="#8C8F92" stroke-width="5" stroke-linecap="round" />
+    <path d="M 271 264 C 271 279, 287 279, 287 263" fill="none" stroke="#8C8F92" stroke-width="5" stroke-linecap="round" />
+    <!-- Left Paw -->
+    <path d="M 226 258 C 226 275, 242 275, 242 260" fill="#FBF7EF" stroke="#383A3D" stroke-width="5.5" stroke-linecap="round" />
+    <!-- Right Paw -->
+    <path d="M 270 260 C 270 275, 286 275, 286 258" fill="#FBF7EF" stroke="#383A3D" stroke-width="5.5" stroke-linecap="round" />
+
+    <!-- Heart Icon -->
+    <path d="M 256 303 C 256 303, 243.5 294.5, 243.5 287 C 243.5 282.8, 247 279.5, 251 279.5 C 253.5 279.5, 255.2 280.9, 256 282.5 C 256.8 280.9, 258.5 279.5, 261 279.5 C 265 279.5, 268.5 282.8, 268.5 287 C 268.5 294.5, 256 303, 256 303 Z" fill="#383A3D" />
+
+    <!-- Top Speaker Notch -->
+    <rect x="234" y="172" width="44" height="9" rx="4.5" fill="#383A3D" />
+
+    <!-- Bottom Phone Chin (#8C8F92) & Home Button (#383A3D) -->
+    <rect x="206" y="314" width="100" height="24" fill="#8C8F92" />
+    <circle cx="256" cy="326" r="6.5" fill="#383A3D" />
+  </g>
+
+  <!-- Smartphone Outer Frame (#383A3D) -->
+  <rect x="202" y="170" width="108" height="172" rx="18" fill="none" stroke="#383A3D" stroke-width="7" />
+</svg>
