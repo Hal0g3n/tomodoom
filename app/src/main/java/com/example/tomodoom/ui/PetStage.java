@@ -30,9 +30,9 @@ import com.example.tomodoom.model.PetState;
  * live in the {@link PetLayer} behind the pager for good: they are never moved, resized, hidden or
  * paused while the activity is in the foreground ({@link #onHostResume}/{@link #onHostPause}),
  * which is what keeps the pet from jumping or flashing. The stage tells them where to draw instead:
- * every page has a pet area (a viewport, or a backdrop from {@link #registerBackdrop} at
- * {@link PetTransitionMath#BACKDROP_PET_ALPHA}), and the frame morphs from one page's area to its
- * neighbour's with the pager's scroll offset. While the pager is idle the layer stays behind the
+ * every page has a pet area (a viewport, or a backdrop from {@link #registerBackdrop}: translucent
+ * behind Chat, invisible on Stats and Settings), and the frame, alpha included, morphs from one
+ * page's area to its neighbour's with the pager's scroll offset. While the pager is idle the layer stays behind the
  * pages; while it is dragging or settling the layer is raised above them, so the pet moves over
  * the pages rather than under them. Touches on the owner
  * viewport are forwarded to the layer while the pager is idle, and the model box (where drags turn
@@ -70,6 +70,8 @@ public final class PetStage implements PetViewport.TouchForwarder {
     private final SparseArray<PetViewport> viewports = new SparseArray<>();
     /** Pages that show the pet translucent behind their content (Chat), by page index. */
     private final SparseArray<View> backdrops = new SparseArray<>();
+    /** Each backdrop's pet alpha, by page index. */
+    private final SparseArray<Float> backdropAlphas = new SparseArray<>();
     private int scrollState = ViewPager2.SCROLL_STATE_IDLE;
     private int scrollPosition = MainPagerAdapter.PAGE_PETS;
     /** The last frame sent to the renderer; the pet stays there while no area is laid out. */
@@ -200,6 +202,7 @@ public final class PetStage implements PetViewport.TouchForwarder {
             backdrops.valueAt(i).removeOnLayoutChangeListener(relayout);
         }
         backdrops.clear();
+        backdropAlphas.clear();
         setPetLayer(null);
         renderer = null;
         framed = false;
@@ -239,15 +242,25 @@ public final class PetStage implements PetViewport.TouchForwarder {
     }
 
     /**
-     * Page {@code page} shows the pet translucent behind its content, filling {@code area} (call
-     * from {@code onViewCreated}). The area takes no part in touches.
+     * Page {@code page} shows the pet translucent ({@link PetTransitionMath#BACKDROP_PET_ALPHA})
+     * behind its content, filling {@code area} (call from {@code onViewCreated}).
      */
     public void registerBackdrop(int page, @NonNull View area) {
+        registerBackdrop(page, area, PetTransitionMath.BACKDROP_PET_ALPHA);
+    }
+
+    /**
+     * Page {@code page}'s pet area is {@code area}, where the pet is drawn at {@code alpha} (0 hides
+     * it while it keeps running; call from {@code onViewCreated}). The area takes no part in
+     * touches.
+     */
+    public void registerBackdrop(int page, @NonNull View area, float alpha) {
         View old = backdrops.get(page);
         if (old != null && old != area) {
             unregisterBackdrop(old);
         }
         backdrops.put(page, area);
+        backdropAlphas.put(page, alpha);
         area.addOnLayoutChangeListener(relayout);
         postPlacement();
     }
@@ -256,6 +269,7 @@ public final class PetStage implements PetViewport.TouchForwarder {
     public void unregisterBackdrop(@NonNull View area) {
         int index = backdrops.indexOfValue(area);
         if (index >= 0) {
+            backdropAlphas.remove(backdrops.keyAt(index));
             backdrops.removeAt(index);
         }
         area.removeOnLayoutChangeListener(relayout);
@@ -376,7 +390,7 @@ public final class PetStage implements PetViewport.TouchForwarder {
     }
 
     /**
-     * Page {@code page}'s backdrop area relative to the layer (translucent, no lift), or null if
+     * Page {@code page}'s backdrop area relative to the layer (its alpha, no lift), or null if
      * it has none or it isn't laid out. Needs {@link #layerLocation} to be current.
      */
     @Nullable
@@ -389,7 +403,8 @@ public final class PetStage implements PetViewport.TouchForwarder {
         float left = viewLocation[0] - layerLocation[0];
         float top = viewLocation[1] - layerLocation[1];
         return new PetTransitionMath.Frame(left, top, left + area.getWidth(),
-                top + area.getHeight(), 0f, 0f, PetTransitionMath.BACKDROP_PET_ALPHA);
+                top + area.getHeight(), 0f, 0f,
+                backdropAlphas.get(page, PetTransitionMath.BACKDROP_PET_ALPHA));
     }
 
     /** Page {@code page}'s pet area relative to the layer, or null if it isn't laid out. */

@@ -88,6 +88,19 @@ public class PetTransitionMathTest {
     }
 
     @Test
+    public void frameFor_fadesOutTowardsAHiddenPage() {
+        PetTransitionMath.Frame chat = new PetTransitionMath.Frame(0f, 0f, 400f, 700f, 0f, 0f,
+                PetTransitionMath.BACKDROP_PET_ALPHA);
+        PetTransitionMath.Frame stats = new PetTransitionMath.Frame(400f, 0f, 800f, 700f, 0f, 0f,
+                PetTransitionMath.HIDDEN_PET_ALPHA);
+        PetTransitionMath.Frame[] all = areas(null, null, null, chat, stats);
+        assertEquals(0.1f, PetTransitionMath.frameFor(MainPagerAdapter.PAGE_CHAT, 0.5f, all,
+                null).alpha, EPS);
+        assertEquals(0f, PetTransitionMath.frameFor(MainPagerAdapter.PAGE_STATS, 0f, all,
+                null).alpha, 0f);
+    }
+
+    @Test
     public void frame_isOpaqueByDefaultAndAlphaIsInterpolated() {
         PetTransitionMath.Frame pets = new PetTransitionMath.Frame(0f, 0f, 400f, 800f, 0f, 1f);
         PetTransitionMath.Frame chat = new PetTransitionMath.Frame(0f, 0f, 400f, 700f, 0f, 0f,

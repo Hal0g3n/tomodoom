@@ -12,8 +12,13 @@ public final class PetTransitionMath {
 
     /** Without a health bar, the box ends this fraction of the viewport's height above its bottom. */
     public static final float MODEL_BOX_BOTTOM_FRACTION = 0.20f;
-    /** How opaque the pet is behind a page without a pet viewport (Chat, Stats, Settings). */
+    /** How opaque the pet is behind the Chat transcript. */
     public static final float BACKDROP_PET_ALPHA = 0.2f;
+    /**
+     * The pet's alpha on pages that hide it (Stats, Settings): it fades out towards them but keeps
+     * running, so it comes back without a reload or flash.
+     */
+    public static final float HIDDEN_PET_ALPHA = 0f;
 
     private PetTransitionMath() {
     }

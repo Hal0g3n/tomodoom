@@ -24,6 +24,7 @@ import com.example.tomodoom.di.ViewModelFactory;
 import com.example.tomodoom.stats.DoomScrollLog;
 import com.example.tomodoom.ui.MainPagerAdapter;
 import com.example.tomodoom.ui.PetStage;
+import com.example.tomodoom.ui.PetTransitionMath;
 import com.example.tomodoom.stats.HpHistory;
 import com.example.tomodoom.stats.StatsReport;
 import com.example.tomodoom.stats.TokenUsageLedger;
@@ -37,8 +38,8 @@ import java.util.concurrent.TimeUnit;
  * Stats page (the rightmost tab): time since the last doom-scroll, doom-scrolling today and this
  * week, the pet's health over 24 hours or 7 days, and LLM tokens per model. It only formats the
  * {@link StatsReport} from {@link StatsViewModel}, and refreshes it every half minute while
- * visible so the clean-streak timer keeps counting. The activity's pet ({@link PetStage}) shows
- * translucent behind the cards.
+ * visible so the clean-streak timer keeps counting. The activity's pet ({@link PetStage}) fades out
+ * on this page but keeps running.
  */
 public class StatsFragment extends Fragment {
 
@@ -89,7 +90,9 @@ public class StatsFragment extends Fragment {
             }
         });
         viewModel.getReport().observe(getViewLifecycleOwner(), this::bind);
-        stage().registerBackdrop(MainPagerAdapter.PAGE_STATS, binding.getRoot());
+        // The pet fades out here but keeps running, so it returns without a flash.
+        stage().registerBackdrop(MainPagerAdapter.PAGE_STATS, binding.getRoot(),
+                PetTransitionMath.HIDDEN_PET_ALPHA);
         viewModel.getPetState().observe(getViewLifecycleOwner(),
                 state -> stage().render(binding.getRoot(), state));
     }
@@ -119,7 +122,7 @@ public class StatsFragment extends Fragment {
         binding = null;
     }
 
-    /** The activity's shared pet renderer, shown faintly behind this page. */
+    /** The activity's shared pet renderer, hidden (alpha 0) on this page. */
     @NonNull
     private PetStage stage() {
         return ((PetStage.Host) requireActivity()).getPetStage();

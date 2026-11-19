@@ -26,6 +26,7 @@ import com.example.tomodoom.model.PetNames;
 import com.example.tomodoom.model.PetState;
 import com.example.tomodoom.ui.MainPagerAdapter;
 import com.example.tomodoom.ui.PetStage;
+import com.example.tomodoom.ui.PetTransitionMath;
 import com.example.tomodoom.ui.onboarding.PetChoiceAdapter;
 import com.example.tomodoom.ui.onboarding.PetPortraits;
 import com.example.tomodoom.ui.watchedapps.WatchedAppsActivity;
@@ -37,7 +38,7 @@ import java.util.Set;
 /**
  * Settings page: rename the pet, switch to another pet, choose the tracked apps and set the chat
  * text size. Holds no logic; every change goes through {@link SettingsViewModel}. The activity's
- * pet ({@link PetStage}) shows translucent behind the cards.
+ * pet ({@link PetStage}) fades out on this page but keeps running.
  */
 public class SettingsFragment extends Fragment {
 
@@ -67,7 +68,9 @@ public class SettingsFragment extends Fragment {
         viewModel.getPetState().observe(getViewLifecycleOwner(), this::renderPet);
         viewModel.getWatchedPackages().observe(getViewLifecycleOwner(), this::renderWatched);
         viewModel.getChatTextScale().observe(getViewLifecycleOwner(), this::renderChatSize);
-        stage().registerBackdrop(MainPagerAdapter.PAGE_SETTINGS, binding.getRoot());
+        // The pet fades out here but keeps running, so it returns without a flash.
+        stage().registerBackdrop(MainPagerAdapter.PAGE_SETTINGS, binding.getRoot(),
+                PetTransitionMath.HIDDEN_PET_ALPHA);
         viewModel.getPetState().observe(getViewLifecycleOwner(),
                 state -> stage().render(binding.getRoot(), state));
     }
@@ -85,7 +88,7 @@ public class SettingsFragment extends Fragment {
         super.onPause();
     }
 
-    /** The activity's shared pet renderer, shown faintly behind this page. */
+    /** The activity's shared pet renderer, hidden (alpha 0) on this page. */
     @NonNull
     private PetStage stage() {
         return ((PetStage.Host) requireActivity()).getPetStage();
