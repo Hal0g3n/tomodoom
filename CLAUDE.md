@@ -573,21 +573,34 @@ How `OpenAiCompatibleChatService` behaves:
 #### Relay backend (`backend/`): Kafka on trufar.cn
 
 ```
-app (HttpTruFarChatService) ──/v1/chat/sessions──► relay (Flask, Cloud Run) ──► trufar.cn web chat
+app (HttpTruFarChatService) ──/v1/chat/sessions──► relay (Flask, Vercel)    ──► trufar.cn web chat
           ▲  quiz_evaluated event                    ▲  POST /mcp award_hp               │ Kafka
           └──────────────────────────────────────────┴───────────────────────────────────┘
 ```
 The relay implements the session API below. Deployment, env vars and the TruFar-side setup are
 in `backend/README.md`.
 
-**Hosting (Cloud Run):**
-- Service `tomodoom-relay` in region `asia-east1`, deployed with `--allow-unauthenticated`. That's
-  intended: the app and TruFar call it publicly, and the app token and MCP key are the protection.
-- gunicorn runs 1 worker with **8 threads** (`Procfile`), so Kafka's `/mcp` call is served while
-  the `/messages` request for the same turn is still waiting on TruFar.
+**Hosting: Vercel (primary; free Hobby plan, no card)**
+- The Vercel project's Root Directory is `backend`. Zero-config Flask runs `app.py` → `app`.
+  `vercel.json` pins functions to `hkg1` (Hong Kong), and functions may run up to 300 s.
+- Each request is its own function invocation, so state can't live in memory. The Firestore
+  store is **required** there: it holds the turn lease, which is how Kafka's mid-turn `/mcp`
+  call finds the turn. Firestore runs on Firebase's free Spark plan.
+- Env vars live in Vercel's *Settings → Environment Variables* (encrypted): `BACKEND_TOKEN`,
+  `MCP_KEY`, `TRUFAR_COOKIE`, `TRUFAR_CONVERSATION_ID`, and `FIREBASE_SERVICE_ACCOUNT` (the key
+  JSON). A change only applies after a redeploy. Pushes to `main` redeploy automatically.
+- The endpoints are public on purpose: the app and TruFar must reach them, and the app token
+  and MCP key are the protection.
+
+**Alternative: Cloud Run (needs a billing card)**
+- Service `tomodoom-relay` in `asia-east1`, deployed with `--allow-unauthenticated`.
+- gunicorn runs 1 worker with **8 threads** (`Procfile`), so `/mcp` is served while a
+  `/messages` request waits on TruFar.
 - Secrets come from **Secret Manager** as env vars: `backend-token` → `BACKEND_TOKEN`,
   `mcp-key` → `MCP_KEY`, `trufar-cookie` → `TRUFAR_COOKIE`. `TRUFAR_CONVERSATION_ID` and
   `GOOGLE_CLOUD_PROJECT` are plain env vars.
+
+**Credentials and store selection (all hosts)**
 - `Config.from_env()` picks the Firestore store automatically when `FIREBASE_SERVICE_ACCOUNT`,
   `GOOGLE_APPLICATION_CREDENTIALS` or `K_SERVICE` (set by Cloud Run) is present, otherwise memory.
   Firestore credentials, in order:
@@ -798,17 +811,21 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
   there's no rate limit. Add one in the handler if it gets abused.
 - **PythonAnywhere free can't host the relay** (confirmed by a live test): its allowlist proxy
   blocks trufar.cn, and the relay answers *"TruFar unreachable from host (PythonAnywhere free
-  allowlist?)"* instantly. That's why the relay runs on Cloud Run. With a single web worker,
-  Kafka's `/mcp` call would also have to wait for the turn to end; Cloud Run's 8 gunicorn threads
-  avoid that. Kafka's prompt still asks for the `[[CORRECT]]` marker as an HP fallback.
-- **Cloud Run notes:** `--allow-unauthenticated` is intentional (see §5.2). The first request
-  after idle has a few seconds of cold start (the app's timeout is 120 s). Whether trufar.cn
-  accepts Google Cloud addresses was still unconfirmed when this was written.
+  allowlist?)"* instantly. With a single web worker, Kafka's `/mcp` call would also have to wait
+  for the turn to end. Kafka's prompt still asks for the `[[CORRECT]]` marker as an HP fallback.
+- **Hosting must be free with no card** (the user's requirement). Cloud Run, Koyeb and Hugging
+  Face Docker Spaces need payment details, so the relay runs on **Vercel Hobby**. Hobby is
+  non-commercial only, which is fine for a course project.
+- **Vercel notes:**
+  - Every request may run in a fresh function, so never set `TOMODOOM_STORE=memory` there.
+  - The first request after idle has a few seconds of cold start; the app's timeout is 120 s.
+  - Whether trufar.cn accepts requests from Vercel's Hong Kong addresses was still unconfirmed
+    when this was written.
 - **TruFar cookie expiry:** the relay authenticates with a copied cookie from a **separate TruFar
-  bot account** (so your own login is never exposed). When it expires, the app shows "TruFar login
-  expired: refresh TRUFAR_COOKIE". Add a fresh `cookie` header as a new version of the
-  `trufar-cookie` secret, then run `gcloud run services update tomodoom-relay --region asia-east1`
-  (`backend/README.md`). Never commit it or paste it into chats.
+  bot account**, so your own login is never exposed. When it expires, the app shows "TruFar
+  login expired: refresh TRUFAR_COOKIE". Update the `TRUFAR_COOKIE` env var in Vercel and
+  redeploy (on Cloud Run: add a new `trufar-cookie` secret version and run `gcloud run services
+  update`). Never commit it or paste it into chats.
 - **org.json in JVM tests:** android.jar only has throwing stubs, so `org.json:json` is a
   `testImplementation` dependency. Tests can then call `AgentProfileLoader.parse(JSONObject)` on the
   real asset (unit tests run with `app/` as the working directory).
@@ -1022,15 +1039,15 @@ Debug helpers available in the debug build:
 **Kafka on trufar.cn via the relay**: deploy `backend/` (see its README), set `TRUFAR_API_URL`/`TRUFAR_API_TOKEN`
 and leave `TRUFAR_LLM_URL` unset:
 
-18. The Cloud Run URL (`https://tomodoom-relay-….run.app/`) returns `"ok": true`. Open **Chat**
-    and wait (up to about a minute): Kafka's TruFar greeting appears, with no `__START__` bubble.
-19. Answer Kafka's question correctly. The Cloud Run logs (*Cloud Run → tomodoom-relay → Logs*)
-    show `MCP award_hp amount=10 -> ok` (or `award=10 via marker`), the reply shows no `[[…]]`
+18. The relay URL (`https://<project>.vercel.app/`) returns `"ok": true`. Open **Chat** and wait
+    (up to about a minute): Kafka's TruFar greeting appears, with no `__START__` bubble.
+19. Answer Kafka's question correctly. The relay logs (*Vercel → project → Logs*) show
+    `MCP award_hp amount=10 -> ok` (or `award=10 via marker`), the reply shows no `[[…]]`
     marker, and a SYSTEM message shows **"+10 HP awarded via MCP!"**. A wrong answer gets no HP.
 20. Send a message while another is still being answered (e.g. from a second device). That one
     gets `⚠ TruFar error: … HTTP 409: Kafka is busy…`.
-21. Add a stale cookie as a new `trufar-cookie` secret version and run `gcloud run services update`:
-    the app shows `HTTP 503: TruFar login expired: refresh TRUFAR_COOKIE`. A wrong
+21. Set a stale `TRUFAR_COOKIE` in Vercel and redeploy: the app shows
+    `HTTP 503: TruFar login expired: refresh TRUFAR_COOKIE`. A wrong
     `TRUFAR_API_TOKEN` shows `HTTP 401`. `TruFar unreachable from host` means the host can't
     reach trufar.cn (§6.2).
 
@@ -1050,13 +1067,13 @@ Update this table in the same commit when your task changes a subsystem's status
 | Chat UI | ✅ Skeleton done | `ChatFragment` / `ChatViewModel` / `ChatRepository` |
 | Pet rendering | ✅ scene-3 rabbit (three.js, offline) via the HTML/WebView pipeline; add-ons are primitive placeholders | `HtmlManiengineRenderer` + `assets/maniengine/` |
 | Item catalog | ⏳ Placeholder (6 hard-coded items: hats and accessories) | `AccessoryCatalog` → Maniengine Agent |
-| TruFar backend | ✅ Relay to Kafka on trufar.cn (`backend/`), packaged for Cloud Run but not yet deployed there; tested locally; PythonAnywhere free confirmed blocked. OpenAI-compatible client as an alternative; mock when unconfigured | `HttpTruFarChatService` (`TRUFAR_API_URL` → relay) / `OpenAiCompatibleChatService` (`TRUFAR_LLM_URL`) / `MockTruFarChatService` |
+| TruFar backend | ✅ Relay to Kafka on trufar.cn (`backend/`), set up for Vercel (free, no card) with Firestore on Spark, but not yet deployed there; tested locally; PythonAnywhere free confirmed blocked; Cloud Run packaging kept as an alternative. OpenAI-compatible client as an alternative; mock when unconfigured | `HttpTruFarChatService` (`TRUFAR_API_URL` → relay) / `OpenAiCompatibleChatService` (`TRUFAR_LLM_URL`) / `MockTruFarChatService` |
 | Doom-scroll detection | ✅ Usage Access polling in a foreground service; portrait only, 1 HP per minute, warnings every 10 minutes (not yet tested on a device) | `UsageStatsDoomScrollMonitor` |
 
 Known gaps and TODOs (not assigned to anyone yet):
 - The relay (`backend/`) has been tested against a fake TruFar (pytest plus an HTTP smoke test)
   and deployed once to PythonAnywhere free (it ran, but trufar.cn was blocked). Not yet tested:
-  - Cloud Run, Firestore, and a real trufar.cn reply
+  - Vercel, Firestore, and a real trufar.cn reply
   - which MCP transport TruFar's client uses (the relay speaks Streamable HTTP with JSON responses)
   - how long the TruFar cookie lasts
 - All app sessions share one TruFar conversation (`TRUFAR_CONVERSATION_ID`). Per-user
