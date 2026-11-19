@@ -88,6 +88,48 @@ public class PetTransitionMathTest {
     }
 
     @Test
+    public void towardsChat_followsTheOffsetFromPets() {
+        assertEquals(0f, PetTransitionMath.towardsChat(0, 0.5f), EPS);
+        assertEquals(0f, PetTransitionMath.towardsChat(1, 0f), EPS);
+        assertEquals(0.25f, PetTransitionMath.towardsChat(1, 0.25f), EPS);
+        assertEquals(1f, PetTransitionMath.towardsChat(2, 0f), EPS);
+        assertEquals(1f, PetTransitionMath.towardsChat(3, 0f), EPS);
+    }
+
+    @Test
+    public void frame_isOpaqueByDefaultAndAlphaIsInterpolated() {
+        PetTransitionMath.Frame pets = new PetTransitionMath.Frame(0f, 0f, 400f, 800f, 0f, 1f);
+        PetTransitionMath.Frame chat = new PetTransitionMath.Frame(0f, 0f, 400f, 700f, 0f, 0f,
+                0.2f);
+        assertEquals(1f, pets.alpha, 0f);
+        assertEquals(0.6f, PetTransitionMath.between(pets, chat, 0.5f).alpha, EPS);
+    }
+
+    @Test
+    public void frameFor_blendsBetweenPetsAndTheChatBackdrop() {
+        // Live areas: at offset t the Pets page is at -tW and Chat at (1-t)W.
+        float w = 400f;
+        PetTransitionMath.Frame pets = new PetTransitionMath.Frame(-0.5f * w, 0f, 0.5f * w,
+                800f, 0f, 1f);
+        PetTransitionMath.Frame chat = new PetTransitionMath.Frame(0.5f * w, 0f, 1.5f * w, 700f,
+                0f, 0f, PetTransitionMath.CHAT_PET_ALPHA);
+        PetTransitionMath.Frame card = new PetTransitionMath.Frame(16f, 16f, 384f, 336f, 14f, 0f);
+        PetTransitionMath.Frame half = PetTransitionMath.frameFor(1, 0.5f, pets, card, chat);
+        assertEquals(0f, half.left, EPS); // the pet stays put while both pages slide
+        assertEquals(w, half.right, EPS);
+        assertEquals(750f, half.bottom, EPS);
+        assertEquals(0.5f, half.lift, EPS);
+        assertEquals(0.6f, half.alpha, EPS);
+        assertSame(chat, PetTransitionMath.frameFor(2, 0f, pets, card, chat));
+        assertSame(chat, PetTransitionMath.frameFor(2, 0.3f, pets, card, chat)); // to Stats
+        assertSame(chat, PetTransitionMath.frameFor(3, 0f, null, card, chat));
+        assertEquals(1f, PetTransitionMath.frameFor(1, 0f, pets, card, chat).alpha, EPS);
+        assertSame(pets, PetTransitionMath.frameFor(1, 0.5f, pets, card, null));
+        assertNull(PetTransitionMath.frameFor(1, 0.5f, null, card, chat));
+        assertEquals(8f, PetTransitionMath.frameFor(0, 0.5f, pets, card, chat).top, EPS);
+    }
+
+    @Test
     public void modelBox_linesUpWithTheHealthBarOrLeavesTheBottomToSwipes() {
         PetTransitionMath.Frame area = new PetTransitionMath.Frame(0f, 0f, 400f, 800f, 0f, 1f);
         PetTransitionMath.Frame bar = new PetTransitionMath.Frame(16f, 680f, 384f, 784f, 0f, 0f);

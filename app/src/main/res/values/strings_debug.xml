@@ -5,6 +5,7 @@
     <string name="debug_section_pet">Pet</string>
     <string name="debug_section_doom_scroll">Doom scroll</string>
     <string name="debug_section_chat">Chat and MCP</string>
+    <string name="debug_section_stats">Stats</string>
     <string name="debug_section_app">App</string>
 
     <!-- Pet -->
@@ -39,6 +40,12 @@
     <string name="debug_quiz_replay">Replay last quiz (replay guard)</string>
     <string name="debug_new_conversation">Start a new conversation</string>
     <string name="debug_new_conversation_done">New conversation started</string>
+
+    <!-- Stats -->
+    <string name="debug_stats_demo">Fill Stats with a demo week</string>
+    <string name="debug_stats_demo_done">Stats filled with demo data</string>
+    <string name="debug_stats_clear">Clear Stats history</string>
+    <string name="debug_stats_clear_done">Stats history cleared</string>
 
     <!-- App -->
     <string name="debug_app_version">Version %1$s (%2$d) · %3$s build</string>

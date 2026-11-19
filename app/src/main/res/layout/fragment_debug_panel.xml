@@ -189,6 +189,24 @@
             style="@style/Widget.Tomodoom.DebugWideButton"
             android:text="@string/debug_new_conversation" />
 
+        <!-- Stats -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/debug_section_stats"
+            android:textAppearance="@style/TextAppearance.Tomodoom.DebugSection" />
+
+        <Button
+            android:id="@+id/stats_demo"
+            style="@style/Widget.Tomodoom.DebugWideButton"
+            android:text="@string/debug_stats_demo" />
+
+        <Button
+            android:id="@+id/stats_clear"
+            style="@style/Widget.Tomodoom.DebugWideButton"
+            android:text="@string/debug_stats_clear" />
+
         <!-- App -->
         <TextView
             android:layout_width="wrap_content"

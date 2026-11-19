@@ -48,7 +48,7 @@ public final class ViewModelFactory implements ViewModelProvider.Factory {
         }
         if (modelClass.isAssignableFrom(ChatViewModel.class)) {
             return (T) new ChatViewModel(container.getChatRepository(),
-                    container.getSettingsRepository());
+                    container.getPetStateRepository(), container.getSettingsRepository());
         }
         if (modelClass.isAssignableFrom(OnboardingViewModel.class)) {
             return (T) new OnboardingViewModel(container.getPetStateRepository(),
@@ -69,7 +69,8 @@ public final class ViewModelFactory implements ViewModelProvider.Factory {
         if (modelClass.isAssignableFrom(DebugViewModel.class)) {
             return (T) new DebugViewModel(container.getPetStateRepository(),
                     container.getMcpPetActionHandler(), container.getChatRepository(),
-                    container.getDoomScrollMonitor(), container.getDoomScrollListener());
+                    container.getDoomScrollMonitor(), container.getDoomScrollListener(),
+                    container.getStatsRepository());
         }
         throw new IllegalArgumentException("Unknown ViewModel class: " + modelClass.getName());
     }

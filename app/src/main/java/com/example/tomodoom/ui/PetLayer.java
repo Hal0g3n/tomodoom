@@ -10,11 +10,13 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 /**
- * The layer behind the pager that holds the pet for the activity's whole life ({@link PetStage}).
- * The pages are transparent over their {@link PetViewport}s, so the pet shows through them.
+ * The layer that holds the pet for the activity's whole life ({@link PetStage}). At rest it is
+ * behind the pager: the pages are transparent over their {@link PetViewport}s (and Chat's
+ * backdrop), so the pet shows through them. While the pager moves, the stage raises it above the
+ * pages, so the pet travels over them.
  *
- * <p>The pager covers the layer, so it gets no touches of its own (any that fall through are
- * ignored). The visible viewport forwards its touches with {@link #forward}; while it does,
+ * <p>It never takes touches of its own, even while raised: {@link #dispatchTouchEvent} declines
+ * them, so they go on to the pager. The visible viewport forwards its touches with {@link #forward}; while it does,
  * {@link #requestDisallowInterceptTouchEvent} goes to that viewport's parents, so the pet's view can
  * keep a drag from the pager, or hand a flick back to it, as if it were inside the viewport.</p>
  */

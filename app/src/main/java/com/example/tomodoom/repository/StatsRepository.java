@@ -49,11 +49,11 @@ public final class StatsRepository {
     @NonNull
     private final SharedPreferences prefs;
     @NonNull
-    private final TokenUsageLedger tokens;
+    private TokenUsageLedger tokens;
     @NonNull
-    private final HpHistory hp;
+    private HpHistory hp;
     @NonNull
-    private final DoomScrollLog doomScroll;
+    private DoomScrollLog doomScroll;
     @NonNull
     private final MutableLiveData<StatsSnapshot> stats;
     @NonNull
@@ -138,6 +138,34 @@ public final class StatsRepository {
         }
     }
 
+    /**
+     * Replaces all recorded stats with {@code replacement} (the debug panel's demo data), its
+     * doom-scroll log's start becoming the new {@code tracking_since}. Real events keep being
+     * recorded on top of it.
+     */
+    @AnyThread
+    public void replaceAll(@NonNull StatsSnapshot replacement) {
+        synchronized (lock) {
+            tokens = replacement.getTokens().copy();
+            hp = replacement.getHp().copy();
+            doomScroll = replacement.getDoomScroll().copy();
+            saveAllLocked();
+        }
+    }
+
+    /** Forgets all recorded stats: tracking starts again now, at {@code pet}'s HP. */
+    @AnyThread
+    public void clear(@NonNull PetState pet) {
+        long now = System.currentTimeMillis();
+        synchronized (lock) {
+            tokens = new TokenUsageLedger();
+            hp = new HpHistory();
+            hp.recordSample(now, pet.getCurrentHp(), pet.getMaxHp());
+            doomScroll = new DoomScrollLog(now);
+            saveAllLocked();
+        }
+    }
+
     // Internals. Every method ending in "Locked" (and saveHp) runs while holding `lock`, except
     // during construction.
 
@@ -147,6 +175,20 @@ public final class StatsRepository {
         } catch (JSONException e) {
             Log.w(TAG, "couldn't save HP history", e);
         }
+    }
+
+    private void saveAllLocked() {
+        try {
+            prefs.edit()
+                    .putLong(KEY_TRACKING_SINCE, doomScroll.getTrackingSinceMillis())
+                    .putString(KEY_TOKEN_USAGE, tokens.toJson().toString())
+                    .putString(KEY_HP_HISTORY, hp.toJson().toString())
+                    .putString(KEY_DOOM_SCROLL_LOG, doomScroll.toJson().toString())
+                    .apply();
+        } catch (JSONException e) {
+            Log.w(TAG, "couldn't save stats", e);
+        }
+        publishLocked();
     }
 
     private void publishLocked() {

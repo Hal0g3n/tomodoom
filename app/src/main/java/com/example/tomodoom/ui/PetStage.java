@@ -21,7 +21,8 @@ import com.example.tomodoom.model.PetState;
 
 /**
  * Owns the activity's single {@link ManiengineAssetRenderer} and shows it for whichever pet page
- * (Pets or Customise) is visible, so only one pet is rendered at a time. A page {@link #attach}es
+ * (Pets, Customise, or Chat with its translucent backdrop) is visible, so only one pet is rendered
+ * at a time. A page {@link #attach}es
  * its viewport in {@code onResume} and {@link #detach}es it in {@code onPause}/{@code onDestroyView};
  * {@link #render} from a page that isn't the owner is ignored. Main thread only.
  *
@@ -29,7 +30,11 @@ import com.example.tomodoom.model.PetState;
  * live in the {@link PetLayer} behind the pager for good: they are never moved or resized, which
  * is what keeps the pet from jumping. The stage tells them where to draw instead: the frame
  * follows the Pets viewport, and while only Customise and Pets are on screen it slides and shrinks
- * from one viewport's pet area to the other's with the pager's scroll offset. Touches on the owner
+ * from one viewport's pet area to the other's with the pager's scroll offset; between Pets and Chat
+ * it moves the same way into Chat's backdrop ({@link #registerBackdrop}) and fades to
+ * {@link PetTransitionMath#CHAT_PET_ALPHA}. While the pager is idle the layer stays behind the
+ * pages; while it is dragging or settling the layer is raised above them, so the pet moves over
+ * the pages rather than under them. Touches on the owner
  * viewport are forwarded to the layer while the pager is idle, and the model box (where drags turn
  * the pet) is worked out here.</p>
  *
@@ -63,6 +68,8 @@ public final class PetStage implements PetViewport.TouchForwarder {
     private PetLayer layer;
     /** Each pet page's viewport while its view exists, by page index. */
     private final SparseArray<PetViewport> viewports = new SparseArray<>();
+    /** Pages that show the pet translucent behind their content (Chat), by page index. */
+    private final SparseArray<View> backdrops = new SparseArray<>();
     private int scrollState = ViewPager2.SCROLL_STATE_IDLE;
     private int scrollPosition = MainPagerAdapter.PAGE_PETS;
     /** The last frame sent to the renderer, kept to park the pet off screen (frameFor null). */
@@ -109,6 +116,9 @@ public final class PetStage implements PetViewport.TouchForwarder {
             r.resume(layer);
             return;
         }
+        if (backdrops.indexOfValue(container) >= 0) {
+            return; // only a framed pet can sit behind a page's content
+        }
         if (owner != null && owner != container) {
             r.pause(owner);
         }
@@ -150,6 +160,10 @@ public final class PetStage implements PetViewport.TouchForwarder {
             viewports.valueAt(i).removeOnLayoutChangeListener(relayout);
         }
         viewports.clear();
+        for (int i = 0; i < backdrops.size(); i++) {
+            backdrops.valueAt(i).removeOnLayoutChangeListener(relayout);
+        }
+        backdrops.clear();
         setPetLayer(null);
         renderer = null;
         framed = false;
@@ -188,9 +202,38 @@ public final class PetStage implements PetViewport.TouchForwarder {
         }
     }
 
+    /**
+     * Page {@code page} shows the pet translucent behind its content, filling {@code area} (call
+     * from {@code onViewCreated}). The area takes no part in touches.
+     */
+    public void registerBackdrop(int page, @NonNull View area) {
+        View old = backdrops.get(page);
+        if (old != null && old != area) {
+            unregisterBackdrop(old);
+        }
+        backdrops.put(page, area);
+        area.addOnLayoutChangeListener(relayout);
+        postPlacement();
+    }
+
+    /** {@code area}'s view is going away (call from {@code onDestroyView}). */
+    public void unregisterBackdrop(@NonNull View area) {
+        int index = backdrops.indexOfValue(area);
+        if (index >= 0) {
+            backdrops.removeAt(index);
+        }
+        area.removeOnLayoutChangeListener(relayout);
+    }
+
     /** Forwarded from {@code ViewPager2.OnPageChangeCallback#onPageScrollStateChanged}. */
     public void onPagerScrollStateChanged(int state) {
         scrollState = state;
+        if (layer != null) {
+            // Over the pages while they move, behind them at rest. Only the drawing order
+            // changes: the layer takes no touches of its own, so the pager still gets them.
+            layer.setTranslationZ(state == ViewPager2.SCROLL_STATE_IDLE ? 0f
+                    : layer.getResources().getDisplayMetrics().density);
+        }
         updateTouchBox(); // drags only turn the pet while the pager is idle
     }
 
@@ -265,15 +308,17 @@ public final class PetStage implements PetViewport.TouchForwarder {
         target.getLocationInWindow(layerLocation);
         PetTransitionMath.Frame pets = petArea(MainPagerAdapter.PAGE_PETS);
         PetTransitionMath.Frame f = PetTransitionMath.frameFor(scrollPosition, scrollOffset,
-                pets, petArea(MainPagerAdapter.PAGE_CUSTOMISE));
+                pets, petArea(MainPagerAdapter.PAGE_CUSTOMISE),
+                backdropArea(MainPagerAdapter.PAGE_CHAT));
         if (f == null) {
-            // Pets was detached by a jump of several pages before its frame slid away.
+            // Pets (and Chat) were detached by a jump of several pages before the frame slid away.
             f = PetTransitionMath.parkedFrame(scrollPosition, pets, lastFrame);
         }
         if (f == null || f.isEmpty()) {
             return; // not laid out yet; the layout listener tries again
         }
         lastFrame = f;
+        target.setAlpha(f.alpha); // the container's, so the renderer's own reveal is untouched
         // Hide the layer while the pet is off screen: a paused WebView keeps its last picture.
         int visibility = PetTransitionMath.isOffScreen(f, target.getWidth())
                 ? View.INVISIBLE : View.VISIBLE;
@@ -300,6 +345,23 @@ public final class PetStage implements PetViewport.TouchForwarder {
             }
         }
         renderer.setTouchBox(target, box);
+    }
+
+    /**
+     * Page {@code page}'s backdrop area relative to the layer (translucent, no lift), or null if
+     * it has none or it isn't laid out. Needs {@link #layerLocation} to be current.
+     */
+    @Nullable
+    private PetTransitionMath.Frame backdropArea(int page) {
+        View area = backdrops.get(page);
+        if (area == null || !area.isAttachedToWindow() || area.getWidth() == 0) {
+            return null;
+        }
+        area.getLocationInWindow(viewLocation);
+        float left = viewLocation[0] - layerLocation[0];
+        float top = viewLocation[1] - layerLocation[1];
+        return new PetTransitionMath.Frame(left, top, left + area.getWidth(),
+                top + area.getHeight(), 0f, 0f, PetTransitionMath.CHAT_PET_ALPHA);
     }
 
     /** Page {@code page}'s pet area relative to the layer, or null if it isn't laid out. */
