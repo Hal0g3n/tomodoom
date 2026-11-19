@@ -21,6 +21,7 @@ import java.util.TreeMap;
  *     <li>{@code 0 <= currentHp <= maxHp} (out-of-range values are clamped)</li>
  *     <li>{@code equippedItems} contains no null/empty keys or values; it maps an
  *     {@link AccessorySlot} ID to an {@link AccessoryItem} ID.</li>
+ *     <li>{@code petSpecies} is a {@link PetSpecies} ID (unknown values become the default).</li>
  * </ul>
  *
  * <p>Pure Java (no {@code android.*} imports), so it is unit-testable on the JVM.</p>
@@ -38,12 +39,24 @@ public final class PetState {
     private final int maxHp;
     @NonNull
     private final Map<String, String> equippedItems;
+    @NonNull
+    private final String petSpecies;
 
+    /** A {@link PetSpecies#DEFAULT} pet. */
     public PetState(@NonNull String petName,
                     int currentHp,
                     int maxHp,
                     @Nullable Map<String, String> equippedItems) {
+        this(petName, currentHp, maxHp, equippedItems, PetSpecies.DEFAULT);
+    }
+
+    public PetState(@NonNull String petName,
+                    int currentHp,
+                    int maxHp,
+                    @Nullable Map<String, String> equippedItems,
+                    @Nullable String petSpecies) {
         this.petName = petName;
+        this.petSpecies = PetSpecies.orDefault(petSpecies);
         this.maxHp = Math.max(1, maxHp);
         this.currentHp = clamp(currentHp, 0, this.maxHp);
         TreeMap<String, String> copy = new TreeMap<>();
@@ -66,6 +79,12 @@ public final class PetState {
     @NonNull
     public String getPetName() {
         return petName;
+    }
+
+    /** @return the chosen pet model, a {@link PetSpecies} ID. */
+    @NonNull
+    public String getPetSpecies() {
+        return petSpecies;
     }
 
     public int getCurrentHp() {
@@ -101,13 +120,19 @@ public final class PetState {
     /** @return a copy with the pet's name set to {@code name} (see {@link PetNames} for validation). */
     @NonNull
     public PetState withName(@NonNull String name) {
-        return new PetState(name, currentHp, maxHp, equippedItems);
+        return new PetState(name, currentHp, maxHp, equippedItems, petSpecies);
+    }
+
+    /** @return a copy with the pet model set to {@code species} (unknown IDs become the default). */
+    @NonNull
+    public PetState withPetSpecies(@Nullable String species) {
+        return new PetState(petName, currentHp, maxHp, equippedItems, species);
     }
 
     /** @return a copy with HP set to {@code hp}, clamped to {@code [0, maxHp]}. */
     @NonNull
     public PetState withHp(int hp) {
-        return new PetState(petName, hp, maxHp, equippedItems);
+        return new PetState(petName, hp, maxHp, equippedItems, petSpecies);
     }
 
     /**
@@ -126,7 +151,7 @@ public final class PetState {
         } else {
             copy.put(slot, itemId);
         }
-        return new PetState(petName, currentHp, maxHp, copy);
+        return new PetState(petName, currentHp, maxHp, copy, petSpecies);
     }
 
     private static int clamp(int value, int min, int max) {
@@ -145,6 +170,7 @@ public final class PetState {
         return currentHp == other.currentHp
                 && maxHp == other.maxHp
                 && petName.equals(other.petName)
+                && petSpecies.equals(other.petSpecies)
                 && equippedItems.equals(other.equippedItems);
     }
 
@@ -154,13 +180,14 @@ public final class PetState {
         result = 31 * result + currentHp;
         result = 31 * result + maxHp;
         result = 31 * result + equippedItems.hashCode();
+        result = 31 * result + petSpecies.hashCode();
         return result;
     }
 
     @NonNull
     @Override
     public String toString() {
-        return "PetState{name=" + petName + ", hp=" + currentHp + "/" + maxHp
+        return "PetState{name=" + petName + ", species=" + petSpecies + ", hp=" + currentHp + "/" + maxHp
                 + ", equipped=" + equippedItems + "}";
     }
 }

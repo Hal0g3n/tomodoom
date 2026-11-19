@@ -122,7 +122,8 @@ com.example.tomodoom
 │                                 hidden reset: long-press the Wardrobe tab → confirm → wipe all data
 │
 ├── model/                        Immutable, pure-Java value objects (no android.* imports)
-│   ├── PetState                  name, currentHp, maxHp, equipped items (slot → itemId)
+│   ├── PetState                  name, currentHp, maxHp, equipped items (slot → itemId), petSpecies
+│   ├── PetSpecies                pet model IDs: RABBIT="rabbit" (default), CAT="cat" (= pet-scene.js PETS keys)
 │   ├── PetNames                  pet-name validation: trim, collapse whitespace, 1–20 chars
 │   ├── PetMood                   THRIVING/OKAY/STRUGGLING/FAINTED from HP (the only HP thresholds)
 │   ├── AccessorySlot             slot IDs: HAT="hat", ACCESSORY="accessory"
@@ -286,16 +287,20 @@ ui  ──►  viewmodel  ──►  repository  ──►  contracts  ◄──
   - `PetState equipItem(String slot, @Nullable String itemId)`: `null` unequips the slot.
   - `PetState resetPetState()`: restores the default HP and unequips everything. It keeps the pet's
     name and the onboarding flag, so onboarding only ever runs once.
-  - `boolean isOnboardingComplete()` / `PetState completeOnboarding(String petName)`: the
-    onboarding flag; `completeOnboarding` also sets the name (validate it with `PetNames.normalize`).
+  - `boolean isOnboardingComplete()` / `PetState completeOnboarding(String petName, String species)`:
+    the onboarding flag; `completeOnboarding` also sets the name (validate it with
+    `PetNames.normalize`) and the `PetSpecies` (unknown → default). A one-argument overload keeps
+    the current species. `resetPetState()` keeps the species too.
 - Persistence: prefs file **`tomodoom_pet_state`**, keys `pet_name`, `current_hp`, `max_hp`,
-  `equipped.<slotId>`, `onboarding_complete`. **Only `PetStateRepository` may read or write this file.** A write that
+  `equipped.<slotId>`, `onboarding_complete`, `pet_species` (a `PetSpecies` ID; missing or unknown →
+  `rabbit`). **Only `PetStateRepository` may read or write this file.** A write that
   bypasses it won't reach LiveData observers and will be overwritten.
 - **Hidden reset** (`MainActivity.resetApp`, long-press the Wardrobe tab, then confirm): calls
   `ActivityManager.clearApplicationUserData()`, which wipes *all* app data (this prefs file,
   WebView storage) and kills the process, so the next launch is a fresh install with onboarding.
   It's the one sanctioned bypass of the repository, since nothing survives to observe it.
-- `PetState` is **immutable**. Make modified copies with `withHp(...)` / `withName(...)` / `withEquippedItem(...)`.
+- `PetState` is **immutable**. Make modified copies with `withHp(...)` / `withName(...)` /
+  `withEquippedItem(...)` / `withPetSpecies(...)`.
   Never hold on to a state and assume it is current. Re-read it or observe it.
 
 ### 3.2 Threading contract

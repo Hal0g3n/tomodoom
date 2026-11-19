@@ -11,6 +11,7 @@ import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 
 import com.example.tomodoom.model.AccessorySlot;
+import com.example.tomodoom.model.PetSpecies;
 import com.example.tomodoom.model.PetState;
 
 import java.util.HashMap;
@@ -45,6 +46,7 @@ public final class PetStateRepository {
     static final String KEY_MAX_HP = "max_hp";
     static final String KEY_EQUIPPED_PREFIX = "equipped.";
     static final String KEY_ONBOARDING_COMPLETE = "onboarding_complete";
+    static final String KEY_PET_SPECIES = "pet_species";
 
     private final Object lock = new Object();
     @NonNull
@@ -156,24 +158,33 @@ public final class PetStateRepository {
         }
     }
 
+    /** Names the pet and marks onboarding as complete, keeping the current species. */
+    @AnyThread
+    @NonNull
+    public PetState completeOnboarding(@NonNull String petName) {
+        return completeOnboarding(petName, current.getPetSpecies());
+    }
+
     /**
-     * Names the pet and marks onboarding as complete.
+     * Names the pet, sets its species and marks onboarding as complete.
      *
      * @param petName the new name; the caller validates it with
      *                {@link com.example.tomodoom.model.PetNames#normalize(String)}.
+     * @param species a {@link PetSpecies} ID; an unknown one becomes {@link PetSpecies#DEFAULT}.
      * @return the new snapshot.
      * @throws IllegalArgumentException if {@code petName} is empty.
      */
     @AnyThread
     @NonNull
-    public PetState completeOnboarding(@NonNull String petName) {
+    public PetState completeOnboarding(@NonNull String petName, @Nullable String species) {
         if (petName.isEmpty()) {
             throw new IllegalArgumentException("petName must be non-empty");
         }
         synchronized (lock) {
-            PetState next = current.withName(petName);
+            PetState next = current.withName(petName).withPetSpecies(species);
             prefs.edit()
                     .putString(KEY_PET_NAME, petName)
+                    .putString(KEY_PET_SPECIES, next.getPetSpecies())
                     .putBoolean(KEY_ONBOARDING_COMPLETE, true)
                     .apply();
             Log.i(TAG, "onboarding complete");
@@ -185,8 +196,8 @@ public final class PetStateRepository {
     }
 
     /**
-     * Restores the default HP and unequips everything. The pet's name and the onboarding flag are
-     * kept, because onboarding only runs once.
+     * Restores the default HP and unequips everything. The pet's name, species and the onboarding
+     * flag are kept, because onboarding only runs once.
      *
      * @return the new snapshot.
      */
@@ -194,7 +205,8 @@ public final class PetStateRepository {
     @NonNull
     public PetState resetPetState() {
         synchronized (lock) {
-            PetState fresh = PetState.createDefault().withName(current.getPetName());
+            PetState fresh = PetState.createDefault().withName(current.getPetName())
+                    .withPetSpecies(current.getPetSpecies());
             boolean onboardingComplete = prefs.getBoolean(KEY_ONBOARDING_COMPLETE, false);
             SharedPreferences.Editor editor = prefs.edit().clear();
             writeCore(editor, fresh);
@@ -230,6 +242,7 @@ public final class PetStateRepository {
 
     private static void writeCore(@NonNull SharedPreferences.Editor editor, @NonNull PetState state) {
         editor.putString(KEY_PET_NAME, state.getPetName())
+                .putString(KEY_PET_SPECIES, state.getPetSpecies())
                 .putInt(KEY_CURRENT_HP, state.getCurrentHp())
                 .putInt(KEY_MAX_HP, state.getMaxHp());
         for (Map.Entry<String, String> e : state.getEquippedItems().entrySet()) {
@@ -263,7 +276,9 @@ public final class PetStateRepository {
             }
         }
         staleSlots.apply();
-        return new PetState(name != null ? name : PetState.DEFAULT_PET_NAME, hp, maxHp, equipped);
+        String species = PetSpecies.orDefault(prefs.getString(KEY_PET_SPECIES, null));
+        return new PetState(name != null ? name : PetState.DEFAULT_PET_NAME, hp, maxHp, equipped,
+                species);
     }
 
     private static void requireNonNegative(int amount) {

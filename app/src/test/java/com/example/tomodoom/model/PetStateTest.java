@@ -94,4 +94,23 @@ public class PetStateTest {
         assertEquals(a, b);
         assertEquals(a.hashCode(), b.hashCode());
     }
+
+    @Test
+    public void species_defaultsAndSurvivesCopies() {
+        PetState s = PetState.createDefault();
+        assertEquals(PetSpecies.DEFAULT, s.getPetSpecies());
+        PetState cat = s.withPetSpecies(PetSpecies.CAT)
+                .withHp(70).withName("Mochi").withEquippedItem(AccessorySlot.HAT, "hat_cap");
+        assertEquals(PetSpecies.CAT, cat.getPetSpecies());
+        assertEquals(PetSpecies.DEFAULT, s.withPetSpecies("dragon").getPetSpecies());
+        assertEquals(PetSpecies.DEFAULT, new PetState("Rex", 1, 2, null, null).getPetSpecies());
+    }
+
+    @Test
+    public void species_isPartOfEquality() {
+        PetState rabbit = PetState.createDefault();
+        PetState cat = rabbit.withPetSpecies(PetSpecies.CAT);
+        assertFalse(rabbit.equals(cat));
+        assertEquals(cat, PetState.createDefault().withPetSpecies(PetSpecies.CAT));
+    }
 }
