@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A code block inside a bot bubble (ChatAdapter). Opaque, unlike the bubble, so code stays
+     readable over the pet. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/chat_code_block_background" />
+    <corners android:radius="8dp" />
+</shape>

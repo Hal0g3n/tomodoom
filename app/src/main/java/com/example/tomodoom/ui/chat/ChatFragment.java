@@ -48,7 +48,7 @@ public class ChatFragment extends Fragment {
         viewModel = new ViewModelProvider(this, ViewModelFactory.from(requireContext()))
                 .get(ChatViewModel.class);
 
-        adapter = new ChatAdapter();
+        adapter = new ChatAdapter(requireContext());
         LinearLayoutManager layoutManager = new LinearLayoutManager(requireContext());
         layoutManager.setStackFromEnd(true);
         binding.chatList.setLayoutManager(layoutManager);

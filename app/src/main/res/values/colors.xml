@@ -10,6 +10,12 @@
     <!-- Chat -->
     <color name="bubble_bot_background">@color/eggshell</color>
     <color name="system_notice_background">@color/eggshell</color>
+    <!-- Chat Markdown: code blocks are opaque so code stays readable -->
+    <color name="chat_code_block_background">@color/jet</color>
+    <color name="chat_code_block_text">@color/floral_white</color>
+    <color name="chat_code_block_label">@color/eggshell</color>
+    <color name="chat_inline_code_background">@color/floral_white</color>
+    <color name="chat_math_text">@color/jet</color>
 
     <!-- Pets -->
     <color name="viewport_stroke">@color/eggshell</color>

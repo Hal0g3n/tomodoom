@@ -55,6 +55,10 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-livedata:2.7.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel:2.7.0")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
+    // Chat bubbles: Markdown + LaTeX (JLatexMath, offline) in bot replies; see CLAUDE.md §6.2.
+    implementation("io.noties.markwon:core:4.6.2")
+    implementation("io.noties.markwon:inline-parser:4.6.2")
+    implementation("io.noties.markwon:ext-latex:4.6.2")
     testImplementation("junit:junit:4.13.2")
     // Real org.json for JVM tests (android.jar only has throwing stubs); parses the agent export.
     testImplementation("org.json:json:20231013")
