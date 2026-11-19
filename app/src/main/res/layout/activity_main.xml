@@ -16,6 +16,17 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
+    <!-- Holds the pet while PetStage animates it between the Pets and Customise viewports. Over the
+         pager, the same size; it only draws, so every touch reaches the pager below. -->
+    <com.example.tomodoom.ui.PassThroughFrameLayout
+        android:id="@+id/pet_transition_layer"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toBottomOf="@id/main_pager"
+        app:layout_constraintEnd_toEndOf="@id/main_pager"
+        app:layout_constraintStart_toStartOf="@id/main_pager"
+        app:layout_constraintTop_toTopOf="@id/main_pager" />
+
     <!-- Icons only; the open tab widens, shows its label and enlarges its icon (MainActivity). -->
     <com.google.android.material.bottomnavigation.BottomNavigationView
         android:id="@+id/nav_view"

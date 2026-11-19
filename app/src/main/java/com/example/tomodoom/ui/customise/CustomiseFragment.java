@@ -16,6 +16,7 @@ import com.example.tomodoom.databinding.FragmentCustomiseBinding;
 import com.example.tomodoom.di.ViewModelFactory;
 import com.example.tomodoom.model.AccessorySlot;
 import com.example.tomodoom.model.PetState;
+import com.example.tomodoom.ui.MainPagerAdapter;
 import com.example.tomodoom.ui.PetStage;
 import com.example.tomodoom.viewmodel.CustomiseViewModel;
 import com.google.android.material.tabs.TabLayout;
@@ -53,6 +54,7 @@ public class CustomiseFragment extends Fragment {
         setUpSlotTabs();
         viewModel.getSelectedSlot().observe(getViewLifecycleOwner(), this::showSlot);
         viewModel.getPetState().observe(getViewLifecycleOwner(), this::renderState);
+        stage().registerViewport(MainPagerAdapter.PAGE_CUSTOMISE, binding.petViewport);
     }
 
     @Override
@@ -70,6 +72,7 @@ public class CustomiseFragment extends Fragment {
     @Override
     public void onDestroyView() {
         stage().detach(binding.petViewport);
+        stage().unregisterViewport(binding.petViewport);
         binding.itemGrid.setAdapter(null);
         gridAdapter = null;
         gridSlot = null;

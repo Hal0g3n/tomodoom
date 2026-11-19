@@ -23,6 +23,7 @@ import com.example.tomodoom.di.ViewModelFactory;
 import com.example.tomodoom.model.PetMood;
 import com.example.tomodoom.model.PetState;
 import com.example.tomodoom.ui.NotificationPrompt;
+import com.example.tomodoom.ui.MainPagerAdapter;
 import com.example.tomodoom.ui.PetStage;
 import com.example.tomodoom.viewmodel.PetsViewModel;
 
@@ -63,11 +64,13 @@ public class PetsFragment extends Fragment {
         updateUsageAccessCard();
 
         viewModel.getPetState().observe(getViewLifecycleOwner(), this::renderState);
+        stage().registerViewport(MainPagerAdapter.PAGE_PETS, binding.petViewport);
     }
 
     @Override
     public void onDestroyView() {
         stage().detach(binding.petViewport);
+        stage().unregisterViewport(binding.petViewport);
         doomScrollMonitor = null;
         super.onDestroyView();
         binding = null;

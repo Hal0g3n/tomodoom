@@ -5,5 +5,5 @@
     <stroke
         android:width="@dimen/pet_viewport_stroke"
         android:color="@color/viewport_stroke" />
-    <corners android:radius="16dp" />
+    <corners android:radius="@dimen/pet_viewport_corner_radius" />
 </shape>
