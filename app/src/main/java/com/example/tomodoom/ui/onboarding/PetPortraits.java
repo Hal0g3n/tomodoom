@@ -10,14 +10,14 @@ import com.example.tomodoom.R;
  * Maps {@link com.example.tomodoom.model.PetSpecies} IDs to their onboarding portrait and display
  * name. The portraits are rendered from the pet models by {@code tools/maniengine/make_thumbnails.py}.
  */
-final class PetPortraits {
+public final class PetPortraits {
 
     private PetPortraits() {
     }
 
     /** @return the portrait for {@code species}, or 0 if it has none. */
     @DrawableRes
-    static int portraitFor(@NonNull String species) {
+    public static int portraitFor(@NonNull String species) {
         switch (species) {
             case "rabbit":
                 return R.drawable.thumb_pet_rabbit;
@@ -30,7 +30,7 @@ final class PetPortraits {
 
     /** @return the display name for {@code species}, or 0 if it has none. */
     @StringRes
-    static int nameFor(@NonNull String species) {
+    public static int nameFor(@NonNull String species) {
         switch (species) {
             case "rabbit":
                 return R.string.pet_species_rabbit;

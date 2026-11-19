@@ -12,11 +12,14 @@ import com.example.tomodoom.databinding.ItemPetChoiceBinding;
 import java.util.List;
 import java.util.Objects;
 
-/** The pet portrait cards on the onboarding screen; the chosen species' card is selected. */
-final class PetChoiceAdapter extends RecyclerView.Adapter<PetChoiceAdapter.ChoiceHolder> {
+/**
+ * The pet portrait cards on the onboarding screen and the Settings page; the chosen species' card
+ * is selected.
+ */
+public final class PetChoiceAdapter extends RecyclerView.Adapter<PetChoiceAdapter.ChoiceHolder> {
 
     /** Called with the tapped card's species ID. */
-    interface OnSpeciesClickListener {
+    public interface OnSpeciesClickListener {
         void onSpeciesClick(@NonNull String species);
     }
 
@@ -29,13 +32,13 @@ final class PetChoiceAdapter extends RecyclerView.Adapter<PetChoiceAdapter.Choic
     @Nullable
     private String selected;
 
-    PetChoiceAdapter(@NonNull List<String> species, @NonNull OnSpeciesClickListener listener) {
+    public PetChoiceAdapter(@NonNull List<String> species, @NonNull OnSpeciesClickListener listener) {
         this.species = species;
         this.listener = listener;
     }
 
     /** Moves the selection ring to {@code id} without rebinding the images. */
-    void setSelected(@Nullable String id) {
+    public void setSelected(@Nullable String id) {
         if (Objects.equals(selected, id)) {
             return;
         }
@@ -92,7 +95,7 @@ final class PetChoiceAdapter extends RecyclerView.Adapter<PetChoiceAdapter.Choic
         return species.size();
     }
 
-    static final class ChoiceHolder extends RecyclerView.ViewHolder {
+    public static final class ChoiceHolder extends RecyclerView.ViewHolder {
 
         @NonNull
         final ItemPetChoiceBinding binding;

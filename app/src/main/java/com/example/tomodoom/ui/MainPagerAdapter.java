@@ -10,6 +10,7 @@ import com.example.tomodoom.R;
 import com.example.tomodoom.ui.chat.ChatFragment;
 import com.example.tomodoom.ui.customise.CustomiseFragment;
 import com.example.tomodoom.ui.pets.PetsFragment;
+import com.example.tomodoom.ui.settings.SettingsFragment;
 import com.example.tomodoom.ui.stats.StatsFragment;
 
 /**
@@ -26,10 +27,11 @@ public final class MainPagerAdapter extends FragmentStateAdapter {
     public static final int PAGE_PETS = 1;
     public static final int PAGE_CHAT = 2;
     public static final int PAGE_STATS = 3;
+    public static final int PAGE_SETTINGS = 4;
 
     private static final int[] MENU_ITEM_IDS = {
             R.id.navigation_customise, R.id.navigation_pets, R.id.navigation_chat,
-            R.id.navigation_stats};
+            R.id.navigation_stats, R.id.navigation_settings};
 
     public MainPagerAdapter(@NonNull FragmentActivity activity) {
         super(activity);
@@ -45,6 +47,8 @@ public final class MainPagerAdapter extends FragmentStateAdapter {
                 return new ChatFragment();
             case PAGE_STATS:
                 return new StatsFragment();
+            case PAGE_SETTINGS:
+                return new SettingsFragment();
             case PAGE_PETS:
             default:
                 return new PetsFragment();

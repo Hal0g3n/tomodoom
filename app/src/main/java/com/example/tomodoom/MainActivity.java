@@ -22,8 +22,8 @@ import com.example.tomodoom.ui.PetStage;
 import com.example.tomodoom.ui.debug.DebugPanelFragment;
 
 /**
- * Single activity hosting the three top-level pages (Customise, Pets, Chat) in a swipeable
- * {@link ViewPager2}, kept in sync with a
+ * Single activity hosting the five top-level pages (Customise, Pets, Chat, Stats, Settings) in a
+ * swipeable {@link ViewPager2}, kept in sync with a
  * {@link com.google.android.material.bottomnavigation.BottomNavigationView}.
  *
  * <p>Pets is the default page. Swiping and tapping a bottom-nav item both change the page. Back on

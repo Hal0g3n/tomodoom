@@ -90,10 +90,11 @@ virtual pet whose **HP** reflects your digital habits:
 | You stay out of the app for over 30 minutes | Pet **loses** 30% of its HP per 8 h away, applied when you return | `InactivityDecayTracker` |
 | You equip clothes or accessories | The pet's look changes | Maniengine renderer |
 
-The app has four bottom-navigation tabs, left to right: **Customise** (live pet preview + slot tabs
+The app has five bottom-navigation tabs, left to right: **Customise** (live pet preview + slot tabs
 and a grid of item circles), **Pets** (HP and the pet viewport; the default page on launch), **Chat**
 (Gemini chatbot + quizzes) and **Stats** (time since the last doom-scroll, doom-scrolling per day and
-app, the pet's health over 24 h / 7 days, and LLM tokens per model). There is no action bar on any tab. The bottom bar shows icons only: the
+app, the pet's health over 24 h / 7 days, and LLM tokens per model) and **Settings** (rename the pet,
+switch to another pet, choose the tracked apps, chat text size). There is no action bar on any tab. The bottom bar shows icons only: the
 open tab widens, shows its label and enlarges its icon.
 
 ### Tech stack (fixed — don't change it without updating this file)
@@ -216,6 +217,7 @@ com.example.tomodoom
 │   ├── OnboardingPermissionFlow  pure Java: next permission step (Usage Access → notifications → done)
 │   ├── ChatViewModel             exposes transcript + active quiz, sends messages
 │   ├── StatsViewModel            StatsReport per snapshot / refresh(); selected health-chart range
+│   ├── SettingsViewModel         rename (PetNames), species switch, watched-app count, chat text scale
 │   └── WatchedAppsViewModel      installed apps (loaded once, off the main thread) + watched set, toggles
 │
 └── ui/
@@ -225,8 +227,9 @@ com.example.tomodoom
     ├── NotificationPrompt        Android 13+ notification permission; one "asked this launch" flag
     │                             shared by onboarding and Pets
     ├── onboarding/PetChoiceAdapter, PetPortraits   two-column pet portrait cards; species ID → portrait/name
+    │                             (public: the Settings page uses the same cards)
     ├── MainPagerAdapter          FragmentStateAdapter: page index ↔ bottom-nav item id
-    │                             (Customise=0, Pets=1 = default, Chat=2, Stats=3)
+    │                             (Customise=0, Pets=1 = default, Chat=2, Stats=3, Settings=4)
     ├── PetStage                  MainActivity's ONE pet renderer, kept in `pet_layer` behind the pager and
     │                             framed onto the resumed page's viewport (shrinks Pets ↔ Customise on swipe)
     ├── PetTransitionMath         pure Java: frame for a pager position (lift included), model box
@@ -243,6 +246,8 @@ com.example.tomodoom
     ├── chat/MarkdownSegments     pure Java: a reply → prose / fenced-code segments
     ├── chat/LatexNormalizer      pure Java: \(…\), \[…\], $…$, $$…$$ → Markwon's $$-only syntax
     ├── stats/StatsFragment       four cards; refreshes every 30 s while visible
+    ├── settings/SettingsFragment four cards: pet name, pet species, tracked apps (→ WatchedAppsActivity
+    │                             or Usage Access settings), chat text size slider + preview bubble
     ├── stats/HpLineChartView, BarChartView   Canvas charts in the palette (no chart library)
     ├── stats/StatsFormatter      durations, token counts and app labels → display text
     └── watchedapps/WatchedAppsActivity, WatchedAppsAdapter   picker: one switch per launcher app
@@ -261,8 +266,9 @@ floating over it; both cards are transparent),
 picker), `res/drawable/bg_accessory_circle.xml`, `ic_item_none_24dp.xml`,
 `res/drawable-nodpi/thumb_<itemId>.png` and `thumb_pet_<speciesId>.png` (GENERATED item thumbnails and
 pet portraits, §5.1), `item_pet_choice.xml` + `res/drawable/bg_pet_choice.xml` (onboarding pet cards),
-`res/drawable/ic_hanger_24dp.xml` (Customise tab icon), `ic_stats_24dp.xml` (Stats tab icon),
-`fragment_stats.xml` + `item_stats_row.xml` + `values/styles_stats.xml` (Stats page cards),
+`res/drawable/ic_hanger_24dp.xml` (Customise tab icon), `ic_stats_24dp.xml` (Stats tab icon), `ic_settings_24dp.xml` (Settings tab icon, a generated gear),
+`fragment_stats.xml` + `item_stats_row.xml` + `values/styles_stats.xml` (Stats page cards; `Widget.Tomodoom.StatsCard`
+is reused by `fragment_settings.xml`, the Settings page),
 launcher icon: `mipmap-anydpi-v26/ic_launcher{,_round}.xml` (adaptive: `@color/launcher_background`
 + GENERATED `drawable/ic_launcher_foreground.xml` / `ic_launcher_monochrome.xml`) and GENERATED legacy
 `mipmap-*/ic_launcher{,_round}.webp` for API 24–25, GENERATED `drawable/ic_notification.xml` (notification
@@ -912,7 +918,8 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
   in transitively from Material, like drawerlayout, so don't pin it. Rules:
   - A new top-level tab means a menu item in `bottom_nav_menu.xml` **and** an entry in
     `MainPagerAdapter` (`MENU_ITEM_IDS` + `createFragment`), in the same order.
-  - Page order is Customise (0), Pets (1), Chat (2), Stats (3). Pets is the default: `MainActivity` calls
+  - Page order is Customise (0), Pets (1), Chat (2), Stats (3), Settings (4). Five is
+    BottomNavigationView's maximum, so a sixth tab needs another design. Pets is the default: `MainActivity` calls
     `setCurrentItem(PAGE_PETS, false)` only when `savedInstanceState == null`, so a restore keeps
     the saved page. Don't assume page 0 is the start page.
   - `FragmentStateAdapter` creates pages lazily (a page is created the first time you swipe or tap
@@ -1284,9 +1291,24 @@ Debug helpers:
     non-social app (e.g. Chrome) and use it in portrait: HP drops by 1 each minute. Rotation keeps
     the list; relaunching keeps the choice.
 
+**Settings tab:**
+
+26. Five tab icons; the gear on the right opens Settings (also by swiping left from Stats). Tapping
+    the gear straight from Pets shows no pet behind the cards. Under **Pet name** the field shows the
+    current name and **Save name** stays disabled until it is a different valid name; save `Mochi`: a
+    "Renamed to Mochi" Snackbar appears above the bottom bar, the Pets health bar says `Mochi`, and the
+    next chatbot reply uses it. Under **Your pet**, tap Cat: the ring moves, "Mochi is now a Cat"
+    appears, and Pets and Customise show the cat with the same HP and items. Relaunch: both stick.
+27. **Tracked apps** shows "N apps watched"; without Usage Access it says so and offers **Enable**.
+    **Choose apps** opens the Watched apps picker; changing it updates the count on return.
+28. **Chat text size**: drag the slider (80%–150%, six stops). The percentage and the preview bubble
+    change at once; on Chat, user and bot bubbles, code blocks and LaTeX use the new size, and system
+    notices don't. Rotation and relaunch keep it. *(26–28 verified on an API 37 emulator, 2026-11-19,
+    except the chatbot reply, LaTeX and relaunch.)*
+
 **Stats tab:**
 
-23. Fresh install: four tab icons, Stats on the right; swiping left from Chat opens it. "Since your
+23. Fresh install: five tab icons, Stats on the right; swiping left from Chat opens it. "Since your
     last doom-scroll" counts up from install ("No doom-scrolling since tracking began …"), the bars
     and per-app list are empty, the health chart shows a dot at the current HP on the right, and
     "Tokens by model" says no tokens have been used yet.
@@ -1324,6 +1346,7 @@ Update this table in the same commit when your task changes a subsystem's status
 | Pet rendering | ✅ scene-3 rabbit (default) and scene-5 cat (three.js, offline) via the HTML/WebView pipeline; add-ons are primitive placeholders | `HtmlManiengineRenderer` + `assets/maniengine/` |
 | Item catalog | ⏳ Placeholder (6 hard-coded items: hats and accessories) | `AccessoryCatalog` → Maniengine Agent |
 | Chatbot (Gemini) | ✅ Kafka (low HP) / Charon (high HP) personas, 40/60 hysteresis, speaking as the pet's name, new conversation after 10 min in the background, on Google's free Gemini API (`gemini-3.1-flash-lite` with fallbacks, retries on 503/429/timeouts) via the in-app OpenAI-compatible client. It's verified from a PC; on a device, the first build hit a 503, and the fix is not yet re-tested there. Mock when unconfigured | `GeminiChatService` (`GEMINI_API_URL`) / `MockChatService` |
+| Settings tab | ✅ Rename the pet, switch species, tracked apps (count + picker / Usage Access), chat text size (80–150%) with a live preview; verified on an emulator | `SettingsFragment` / `SettingsViewModel` / `SettingsRepository` |
 | Stats tab | ✅ Time since the last doom-scroll, clean streaks, doom-scrolling per day/app/session, HP over 24 h / 7 d, HP by cause, tokens per model; tracking starts at install. Token and HP parts verified on an emulator; the doom-scroll parts are unit-tested only | `StatsRepository` / `StatsFragment` |
 | Doom-scroll detection | ✅ Usage Access polling in a foreground service; only the apps the user picks (default: social apps), portrait only, 1 HP per minute, warnings every 10 minutes (not yet tested on a device) | `UsageStatsDoomScrollMonitor` |
 
@@ -1331,8 +1354,8 @@ Known gaps and TODOs (not assigned to anyone yet):
 - The chat transcript isn't persisted (only the persona is), and quiz replay protection only lasts for the process
   lifetime. Quiz IDs include a random session UUID, so they stay unique across sessions.
 - Non-UI user-facing text (MCP results, chat notices, mock bot) is inline English, not in `strings.xml`.
-- The pet species is chosen once, at onboarding; there's no way to change it later short of the
-  hidden reset. Add-ons are positioned for the rabbit, so they may sit oddly on the cat.
+- The pet species is chosen at onboarding and can be changed in Settings. Add-ons are positioned
+  for the rabbit, so they may sit oddly on the cat.
 - Nothing happens yet when HP reaches 0 beyond the "Fainted" status label.
 - To change HP for manual testing, use the debug panel (long-press the Pets tab). To start over,
   use the hidden reset (long-press the Wardrobe tab, or the panel). Whether it keeps Usage Access and
