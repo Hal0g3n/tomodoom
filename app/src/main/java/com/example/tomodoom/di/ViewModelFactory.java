@@ -72,7 +72,7 @@ public final class ViewModelFactory implements ViewModelProvider.Factory {
             return (T) new DebugViewModel(container.getPetStateRepository(),
                     container.getMcpPetActionHandler(), container.getChatRepository(),
                     container.getDoomScrollMonitor(), container.getDoomScrollListener(),
-                    container.getStatsRepository());
+                    container.getStatsRepository(), container.getSettingsRepository());
         }
         throw new IllegalArgumentException("Unknown ViewModel class: " + modelClass.getName());
     }

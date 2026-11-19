@@ -8,10 +8,13 @@ import android.provider.Settings;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.FragmentManager;
 import androidx.lifecycle.ViewModelProvider;
 
@@ -19,6 +22,7 @@ import com.example.tomodoom.BuildConfig;
 import com.example.tomodoom.R;
 import com.example.tomodoom.databinding.FragmentDebugPanelBinding;
 import com.example.tomodoom.di.ViewModelFactory;
+import com.example.tomodoom.model.DoomScrollRate;
 import com.example.tomodoom.model.PetMood;
 import com.example.tomodoom.model.PetState;
 import com.example.tomodoom.ui.AppReset;
@@ -84,6 +88,17 @@ public class DebugPanelFragment extends BottomSheetDialogFragment {
         binding.unequipAll.setOnClickListener(v -> viewModel.unequipAll());
 
         // Doom scroll
+        binding.doomRateLayout.setHelperText(getString(R.string.debug_doom_rate_helper,
+                DoomScrollRate.MIN, DoomScrollRate.MAX, DoomScrollRate.DEFAULT));
+        binding.doomRateApply.setOnClickListener(v -> applyDoomScrollRate());
+        binding.doomRateInput.setOnEditorActionListener((v, actionId, event) -> {
+            if (actionId == EditorInfo.IME_ACTION_DONE) {
+                applyDoomScrollRate();
+                return true;
+            }
+            return false;
+        });
+        viewModel.getDoomScrollHpPerMinute().observe(getViewLifecycleOwner(), this::renderRate);
         binding.doomMinute.setOnClickListener(v -> viewModel.simulateDoomScrollMinute());
         binding.doomWarning.setOnClickListener(v -> viewModel.simulateDoomScrollWarning());
         binding.usageSettings.setOnClickListener(v -> openUsageAccessSettings());
@@ -155,6 +170,36 @@ public class DebugPanelFragment extends BottomSheetDialogFragment {
         binding.petEquipped.setText(getString(R.string.debug_pet_equipped,
                 equipped.length() > 0 ? equipped.toString()
                         : getString(R.string.debug_nothing_equipped)));
+    }
+
+    private void renderRate(@Nullable Integer hpPerMinute) {
+        if (hpPerMinute == null) {
+            return;
+        }
+        binding.doomMinute.setText(getString(R.string.debug_doom_minute, hpPerMinute));
+        // Don't overwrite what the user is typing.
+        if (!binding.doomRateInput.hasFocus()) {
+            binding.doomRateInput.setText(String.valueOf(hpPerMinute));
+        }
+    }
+
+    private void applyDoomScrollRate() {
+        CharSequence text = binding.doomRateInput.getText();
+        Integer saved = viewModel.setDoomScrollHpPerMinute(text == null ? null : text.toString());
+        if (saved == null) {
+            binding.doomRateLayout.setError(getString(R.string.debug_doom_rate_invalid));
+            return;
+        }
+        binding.doomRateLayout.setError(null);
+        binding.doomRateInput.setText(String.valueOf(saved));
+        binding.doomRateInput.clearFocus();
+        InputMethodManager imm = ContextCompat.getSystemService(requireContext(),
+                InputMethodManager.class);
+        if (imm != null) {
+            imm.hideSoftInputFromWindow(binding.doomRateInput.getWindowToken(), 0);
+        }
+        Toast.makeText(requireContext(), getString(R.string.debug_doom_rate_done, saved),
+                Toast.LENGTH_SHORT).show();
     }
 
     @NonNull

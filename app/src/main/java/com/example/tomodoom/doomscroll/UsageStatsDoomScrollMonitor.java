@@ -28,11 +28,13 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
 /**
  * Detects doom-scrolling in the apps the user watches using Android Usage Access. Polls every
- * 15 seconds and charges 1 HP per minute a watched app is on screen in portrait. The watched set
+ * 15 seconds and charges the configured HP (default 1, set in the debug panel) per minute a
+ * watched app is on screen in portrait. The watched set
  * is read at every poll, so a change in the picker applies within one poll. Landscape (such
  * as fullscreen video) doesn't count. {@link DoomScrollSessionTracker} holds the session rules.
  */
@@ -42,7 +44,6 @@ public final class UsageStatsDoomScrollMonitor implements DoomScrollMonitor {
     private static final long POLL_INTERVAL_MILLIS = TimeUnit.SECONDS.toMillis(15);
     private static final long MAX_POLL_GAP_MILLIS = TimeUnit.SECONDS.toMillis(45);
     private static final long PENALTY_INTERVAL_MILLIS = TimeUnit.MINUTES.toMillis(1);
-    private static final int HP_PER_PENALTY_INTERVAL = 1;
     private static final long WARNING_INTERVAL_MILLIS = TimeUnit.MINUTES.toMillis(10);
     private static final long AWAY_GRACE_MILLIS = TimeUnit.SECONDS.toMillis(60);
     private static final long EVENT_LOOKBACK_MILLIS = TimeUnit.MINUTES.toMillis(30);
@@ -64,6 +65,8 @@ public final class UsageStatsDoomScrollMonitor implements DoomScrollMonitor {
     private final DoomScrollSessionTracker sessionTracker;
     @NonNull
     private final Supplier<Set<String>> watchedPackages;
+    @NonNull
+    private final IntSupplier hpPerMinute;
     @Nullable
     private volatile DoomScrollListener listener;
     @Nullable
@@ -76,11 +79,15 @@ public final class UsageStatsDoomScrollMonitor implements DoomScrollMonitor {
     /**
      * @param watchedPackages the package IDs to watch, read on the polling thread at every poll
      *                        (e.g. {@code WatchedAppsRepository::getCurrent}).
+     * @param hpPerMinute     HP charged per counted minute, read at each penalty on the polling
+     *                        thread (e.g. {@code SettingsRepository::getCurrentDoomScrollHpPerMinute}).
      */
     public UsageStatsDoomScrollMonitor(@NonNull Context context,
-                                       @NonNull Supplier<Set<String>> watchedPackages) {
+                                       @NonNull Supplier<Set<String>> watchedPackages,
+                                       @NonNull IntSupplier hpPerMinute) {
         appContext = context.getApplicationContext();
         this.watchedPackages = watchedPackages;
+        this.hpPerMinute = hpPerMinute;
         usageStatsManager = (UsageStatsManager) appContext.getSystemService(Context.USAGE_STATS_SERVICE);
         displayManager = (DisplayManager) appContext.getSystemService(Context.DISPLAY_SERVICE);
         powerManager = (PowerManager) appContext.getSystemService(Context.POWER_SERVICE);
@@ -251,7 +258,7 @@ public final class UsageStatsDoomScrollMonitor implements DoomScrollMonitor {
         if (tick != null && tick.penaltyIntervals > 0) {
             notifyListener(new DoomScrollEvent(tick.sourcePackage,
                     tick.penaltyIntervals * PENALTY_INTERVAL_MILLIS,
-                    tick.penaltyIntervals * HP_PER_PENALTY_INTERVAL,
+                    tick.penaltyIntervals * Math.max(0, hpPerMinute.getAsInt()),
                     nowMillis));
         }
         if (tick != null && tick.warningSessionMillis > 0L) {

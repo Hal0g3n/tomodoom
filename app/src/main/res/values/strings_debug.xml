@@ -28,7 +28,12 @@
     <string name="debug_doom_status">Usage Access: %1$s · monitoring: %2$s</string>
     <string name="debug_yes">yes</string>
     <string name="debug_no">no</string>
-    <string name="debug_doom_minute">Simulate 1 minute (−1 HP)</string>
+    <string name="debug_doom_minute">Simulate 1 minute (−%1$d HP)</string>
+    <string name="debug_doom_rate_hint">HP lost per minute</string>
+    <string name="debug_doom_rate_helper">Whole number, %1$d–%2$d (default %3$d)</string>
+    <string name="debug_doom_rate_apply">Apply</string>
+    <string name="debug_doom_rate_invalid">Enter a whole number</string>
+    <string name="debug_doom_rate_done">Doom-scrolling now costs %1$d HP per minute</string>
     <string name="debug_doom_warning">Simulate 10-minute warning</string>
     <string name="debug_usage_settings">Open Usage Access settings</string>
 

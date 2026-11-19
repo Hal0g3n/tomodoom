@@ -79,7 +79,7 @@ public final class AppContainer {
         // Single source of truth for pet state. Never replace or duplicate it.
         petStateRepository = new PetStateRepository(appContext);
 
-        // Settings page preferences (chat text size).
+        // App preferences (chat text size, music volume, doom-scroll HP per minute).
         settingsRepository = new SettingsRepository(appContext);
 
         // Stats page history: HP changes, LLM tokens and doom-scrolling are recorded here.
@@ -111,7 +111,8 @@ public final class AppContainer {
 
         // SWAP POINT (Doom Scroll Agent): Usage Access-based foreground-app session detector.
         doomScrollMonitor = new UsageStatsDoomScrollMonitor(appContext,
-                watchedAppsRepository::getCurrent);
+                watchedAppsRepository::getCurrent,
+                settingsRepository::getCurrentDoomScrollHpPerMinute);
 
         // Doom-scroll detections → HP loss. Keep this wiring when swapping the monitor.
         doomScrollHpBridge = new DoomScrollHpBridge(petStateRepository);

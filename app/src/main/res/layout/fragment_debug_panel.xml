@@ -142,11 +142,48 @@
             android:textAppearance="?attr/textAppearanceBody2"
             tools:text="Usage Access: no · monitoring: no" />
 
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:baselineAligned="false"
+            android:gravity="top"
+            android:orientation="horizontal">
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/doom_rate_layout"
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.Dense"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:layout_weight="2"
+                android:hint="@string/debug_doom_rate_hint">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/doom_rate_input"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:importantForAutofill="no"
+                    android:imeOptions="actionDone"
+                    android:inputType="number"
+                    android:maxLength="3"
+                    android:maxLines="1"
+                    tools:text="1" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <Button
+                android:id="@+id/doom_rate_apply"
+                style="@style/Widget.Tomodoom.DebugButton"
+                android:layout_marginTop="4dp"
+                android:layout_marginEnd="0dp"
+                android:text="@string/debug_doom_rate_apply" />
+        </LinearLayout>
+
         <Button
             android:id="@+id/doom_minute"
             style="@style/Widget.Tomodoom.DebugWideButton"
             android:layout_marginTop="8dp"
-            android:text="@string/debug_doom_minute" />
+            tools:text="Simulate 1 minute (−1 HP)" />
 
         <Button
             android:id="@+id/doom_warning"

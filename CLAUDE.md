@@ -144,7 +144,8 @@ com.example.tomodoom
 │   ├── WatchedApps               default watched-app package IDs + set/sort helpers for the picker
 │   ├── InstalledApp              packageName, label (a launcher app in the watched-apps picker)
 │   ├── ChatTextScale             chat text sizes offered in Settings (0.8–1.5×, default 1.0) + snapping
-│   └── MusicVolume               background-music volume % (0–100, step 10, default 50) + gain curve
+│   ├── MusicVolume               background-music volume % (0–100, step 10, default 50) + gain curve
+│   └── DoomScrollRate            HP lost per doom-scroll minute (0–100, default 1) + input parsing
 │
 ├── contracts/                    Interfaces that downstream agents implement (see §4)
 │   ├── ManiengineAssetRenderer
@@ -162,7 +163,8 @@ com.example.tomodoom
 │   ├── DoomScrollHpBridge        DoomScrollListener → PetStateRepository.decreaseHp(...)
 │   ├── InactivityDecayPolicy     pure Java: HP lost to time away (30 min grace, keeps 70% per 8 h)
 │   ├── InactivityDecayTracker    time away (prefs tomodoom_decay) → decreaseHp on return + notice
-│   ├── SettingsRepository        Settings page preferences (prefs `tomodoom_settings` + LiveData): chat text scale, music volume
+│   ├── SettingsRepository        app preferences (prefs `tomodoom_settings` + LiveData): chat text scale, music volume,
+│   │                             doom-scroll HP per minute (debug panel)
 │   ├── WatchedAppsRepository     the user's watched apps (prefs `tomodoom_doomscroll` + LiveData); read by the monitor
 │   ├── StatsRepository           Stats page history (prefs `tomodoom_stats` + LiveData<StatsSnapshot>)
 │   └── StatsRecordingDoomScrollListener   records each DoomScrollEvent in StatsRepository, then forwards
@@ -457,8 +459,10 @@ ui  ──►  viewmodel  ──►  repository  ──►  contracts  ◄──
   `replaceAll(StatsSnapshot)` (the debug panel's demo week from `stats.DemoStats`) and
   `clear(PetState)` overwrite every ledger plus `tracking_since`; they never touch the pet.
 - `SettingsRepository` owns prefs file **`tomodoom_settings`**, keys `chat_text_scale` (float, a
-  `ChatTextScale` step; missing → 1.0, other values snap to the nearest step) and `music_volume`
-  (int percent, a `MusicVolume` step; missing → 50). Same §3.2 rules.
+  `ChatTextScale` step; missing → 1.0, other values snap to the nearest step), `music_volume`
+  (int percent, a `MusicVolume` step; missing → 50) and `doom_scroll_hp_per_minute` (int, set in
+  the debug panel, clamped to `DoomScrollRate` 0–100; missing → 1). Same §3.2 rules. The monitor
+  reads the rate (`getCurrentDoomScrollHpPerMinute`) on its polling thread at every penalty.
 - **Background music:** the same 1 → 0 / 0 → 1 started-activity count calls
   `BackgroundMusicPlayer.onAppBackgrounded` (pause + `seekTo(0)`, abandon audio focus) /
   `onAppForegrounded` (play), so leaving and reopening the app restarts the track; rotation and
@@ -593,8 +597,8 @@ interface DoomScrollListener {                         // callbacks: ANY thread
   penalties to `DoomScrollHpBridge`, which calls
   `PetStateRepository.decreaseHp(event.getHpPenalty(), "doom_scroll:" + pkg)`. **The monitor never
   touches the repository directly.** It reports events, and the monitor decides `hpPenalty`
-  (the real monitor charges 1 HP per minute; `DoomScrollEvent.DEFAULT_HP_PENALTY` = 5 is for the
-  stub). `AppContainer.getDoomScrollListener()` returns that whole chain (notifier → stats → bridge),
+  (the real monitor charges `SettingsRepository`'s doom-scroll rate per minute, default 1 HP, set
+  in the debug panel; `DoomScrollEvent.DEFAULT_HP_PENALTY` = 5 is for the stub). `AppContainer.getDoomScrollListener()` returns that whole chain (notifier → stats → bridge),
   so the debug panel's synthetic minutes and warnings take the real path.
 - `TomodoomApplication.onCreate()` calls `startMonitoring()` if `isPermissionGranted()`. The Pets
   page calls `startFromForeground()` on resume, which starts the foreground service.
@@ -901,7 +905,8 @@ work or study app) never counts.
   IDs), Reddit, YouTube, X/Twitter, Facebook and Snapchat. The hidden reset restores it.
 
 Session rules (`DoomScrollSessionTracker`):
-- The pet loses **1 HP per counted minute**, from the first minute. Part-minutes carry over.
+- The pet loses **1 HP per counted minute** by default (the debug panel's *HP lost per minute*
+  field changes it, 0–100, persisted), from the first minute. Part-minutes carry over.
 - A notification appears at **every 10 counted minutes** of a session.
 - Time counts only in a watched app, in **portrait** (display height ≥ width), with the screen on.
   Landscape pauses the session without losing progress.
@@ -1251,8 +1256,9 @@ for your feature) as "manual verification needed", and add those new steps to §
 Debug helpers:
 - **Debug panel (all builds):** long-press the **Pets** tab. A bottom sheet shows the live pet state
   (name, species, HP, mood, equipped) and offers: HP −10/−1/+1/+10, set HP to 0/30/50/80/max,
-  unequip all; simulate one doom-scroll minute (−1 HP) or the 10-minute warning notification, Usage
-  Access status and settings; chat backend (mock or Gemini + models), simulate a quiz pass (+10 HP
+  unequip all; *HP lost per minute* (a typed whole number 0–100, default 1, **Apply**; it drives the
+  real monitor too and survives relaunch); simulate one doom-scroll minute (at that rate) or the
+  10-minute warning notification, Usage Access status and settings; chat backend (mock or Gemini + models), simulate a quiz pass (+10 HP
   through `McpPetActionHandler.onQuizPassed`), replay it (the replay guard should reject it), start a
   new conversation; fill Stats with a demo week (`DemoStats`: random sessions, quizzes and tokens over
   the last 7 days, the HP line ending at the pet's current HP) or clear the Stats history; version and
@@ -1340,7 +1346,10 @@ Debug helpers:
    again with HP 50 / 100 and nothing equipped. A plain tap on Wardrobe still just opens the page.
 8a. Long-press the **Pets** tab: the debug panel opens fully expanded (a plain tap still just opens
    Pets; a second long-press doesn't stack a second panel). −10 lowers the health bar at once; set 0
-   tips the pet over, 80 makes it hop. Simulate quiz pass shows "Tomo will remember that (+10 HP)", Replay shows
+   tips the pet over, 80 makes it hop. Type `5` under *HP lost per minute* and tap **Apply** (or
+   Done): a toast confirms it and the button reads "Simulate 1 minute (−5 HP)", which removes 5 HP;
+   an empty field shows "Enter a whole number"; relaunching keeps 5 (with Usage Access, real
+   scrolling then costs 5 HP a minute). Simulate quiz pass shows "Tomo will remember that (+10 HP)", Replay shows
    "⚠ Quiz debug:… was already rewarded." Simulate warning posts "Time to look up". New conversation
    clears the Chat transcript and greets again. Fill Stats with a demo week: the Stats tab shows a
    week of bars, apps, a health line ending at the current HP, quiz gains and three Gemini models; HP

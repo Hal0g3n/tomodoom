@@ -12,10 +12,12 @@ import com.example.tomodoom.contracts.DoomScrollMonitor;
 import com.example.tomodoom.contracts.McpPetActionHandler;
 import com.example.tomodoom.model.AccessorySlot;
 import com.example.tomodoom.model.DoomScrollEvent;
+import com.example.tomodoom.model.DoomScrollRate;
 import com.example.tomodoom.model.McpToolResult;
 import com.example.tomodoom.model.PetState;
 import com.example.tomodoom.repository.ChatRepository;
 import com.example.tomodoom.repository.PetStateRepository;
+import com.example.tomodoom.repository.SettingsRepository;
 import com.example.tomodoom.repository.StatsRepository;
 import com.example.tomodoom.stats.DemoStats;
 
@@ -53,6 +55,8 @@ public class DebugViewModel extends ViewModel {
     private final DoomScrollListener doomScrollListener;
     @NonNull
     private final StatsRepository statsRepository;
+    @NonNull
+    private final SettingsRepository settingsRepository;
 
     private final MutableLiveData<String> lastResult = new MutableLiveData<>(null);
     @Nullable
@@ -63,13 +67,15 @@ public class DebugViewModel extends ViewModel {
                           @NonNull ChatRepository chatRepository,
                           @NonNull DoomScrollMonitor doomScrollMonitor,
                           @NonNull DoomScrollListener doomScrollListener,
-                          @NonNull StatsRepository statsRepository) {
+                          @NonNull StatsRepository statsRepository,
+                          @NonNull SettingsRepository settingsRepository) {
         this.petStateRepository = petStateRepository;
         this.mcpHandler = mcpHandler;
         this.chatRepository = chatRepository;
         this.doomScrollMonitor = doomScrollMonitor;
         this.doomScrollListener = doomScrollListener;
         this.statsRepository = statsRepository;
+        this.settingsRepository = settingsRepository;
     }
 
     @NonNull
@@ -134,11 +140,32 @@ public class DebugViewModel extends ViewModel {
         return doomScrollMonitor.isMonitoring();
     }
 
-    /** One counted minute of doom-scrolling: −1 HP, like the real monitor. */
+    /** HP lost per counted doom-scroll minute (real monitor and simulated minutes). */
+    @NonNull
+    public LiveData<Integer> getDoomScrollHpPerMinute() {
+        return settingsRepository.getDoomScrollHpPerMinute();
+    }
+
+    /**
+     * Sets the HP lost per doom-scroll minute from typed input ({@link DoomScrollRate#parse}).
+     *
+     * @return the saved rate, or {@code null} if the input isn't a whole number.
+     */
+    @MainThread
+    @Nullable
+    public Integer setDoomScrollHpPerMinute(@Nullable String input) {
+        Integer rate = DoomScrollRate.parse(input);
+        if (rate == null) {
+            return null;
+        }
+        return settingsRepository.setDoomScrollHpPerMinute(rate);
+    }
+
+    /** One counted minute of doom-scrolling, charged at the current rate like the real monitor. */
     @MainThread
     public void simulateDoomScrollMinute() {
-        doomScrollListener.onDoomScrollDetected(
-                DoomScrollEvent.now(DEBUG_PACKAGE, ONE_MINUTE_MS, 1));
+        doomScrollListener.onDoomScrollDetected(DoomScrollEvent.now(DEBUG_PACKAGE, ONE_MINUTE_MS,
+                settingsRepository.getCurrentDoomScrollHpPerMinute()));
     }
 
     /** The 10-minute warning, which posts the real "Time to look up" notification. */
