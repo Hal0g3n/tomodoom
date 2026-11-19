@@ -1,5 +1,8 @@
 # Tomodoom relay backend
 
+> **Currently parked.** The app runs Kafka's persona on Google's free Gemini API instead
+> (CLAUDE.md §5.2). This relay is only needed if Kafka should run on trufar.cn itself again.
+
 A small Flask app that sits between the Android app and **Kafka running on the TruFar website**
 (trufar.cn has no public API):
 

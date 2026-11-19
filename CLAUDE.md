@@ -210,7 +210,7 @@ thumbnail tool), `pet-model.js` (GENERATED from the scene-3 export) and `vendor/
 Tools: `tools/maniengine/extract_model.py` (+ `source/scene-3.html`), `make_thumbnails.py` (+ `thumbnails.html`).
 
 Outside the app: **`backend/`** is the Python relay server that connects the app's chat to Kafka on
-trufar.cn. It's Flask, hosted on **Vercel** (free Hobby plan, no card), with Firestore on Firebase's
+trufar.cn. It's **currently parked**: the app runs Kafka on Gemini instead (§5.2). It's Flask, hosted on **Vercel** (free Hobby plan, no card), with Firestore on Firebase's
 free Spark plan. It's a flat folder of modules (`app.py` WSGI entry, `trufar_client.py`,
 `mcp_server.py`, `store.py`, `markers.py`, `config.py`) with pytest tests in `backend/tests/`.
 
@@ -537,18 +537,30 @@ Everything else in the export (icon, tools, opening statement) is ignored.
 
 TruFar publishes no API for running an agent, and the export only names the model provider
 (`trufar_tokenhub`). There are two ways to run Kafka:
-- **On trufar.cn itself, through the relay backend** (the intended setup; see *Relay backend* below).
-  The app uses `HttpTruFarChatService` (`TRUFAR_API_URL`).
-- **In the app against an OpenAI-compatible LLM** (no TruFar involved). The app runs the persona
-  itself with `trufar.OpenAiCompatibleChatService` against **any OpenAI-compatible
-  `POST {base}/chat/completions`**. Set these Gradle properties (e.g. in an untracked
-  `~/.gradle/gradle.properties`):
+- **In the app against an OpenAI-compatible LLM. This is the setup in use: Google's Gemini API,
+  free tier.** The app runs the persona itself with `trufar.OpenAiCompatibleChatService`
+  against **any OpenAI-compatible `POST {base}/chat/completions`**. No TruFar and no backend
+  are involved.
+- **On trufar.cn itself, through the relay backend** (*Relay backend* below; currently
+  **parked**). The app would use `HttpTruFarChatService` (`TRUFAR_API_URL`). It's parked because
+  every free, no-card host either blocks trufar.cn or is unconfirmed, and a model hosted on
+  PythonAnywhere free isn't viable (512 MB disk, one shared-CPU worker, no GPU).
+
+Set these Gradle properties in the untracked `~/.gradle/gradle.properties` (never in the repo):
 
 | Property | Meaning |
 |---|---|
-| `TRUFAR_LLM_URL` | HTTPS base URL; `/chat/completions` is appended (e.g. `https://api.deepseek.com`) |
-| `TRUFAR_LLM_API_KEY` | bearer token (compiled into the APK: dev/testing only, same caveat as below) |
-| `TRUFAR_LLM_MODEL` | optional; overrides the export's model name (e.g. `deepseek-chat` if the endpoint doesn't know `deepseek-v4-pro`) |
+| `TRUFAR_LLM_URL` | HTTPS base URL; `/chat/completions` is appended. In use: `https://generativelanguage.googleapis.com/v1beta/openai` (Gemini) |
+| `TRUFAR_LLM_API_KEY` | bearer token. For Gemini, a free key from aistudio.google.com/apikey (no card). It's compiled into the APK: dev/testing only, same caveat as below |
+| `TRUFAR_LLM_MODEL` | optional; overrides the export's model name (`deepseek-v4-pro`). In use: `gemini-3.5-flash` |
+
+Gemini was verified with the real persona (2026-11-19):
+- The `__START__` greeting worked; the first call took ~44 s and later turns ~6 s.
+- A correct answer ended with `[[CORRECT]]`.
+- `gemini-3.8-flash` / `3.7-flash` returned 503 "high demand", and `gemini-2.5-flash` returned
+  404 for this key. `gemini-3.1-flash-lite` and `gemini-flash-lite-latest` also work on the
+  free tier, if 3.5-flash is ever unavailable.
+- List the models available to a key with `GET {base}/models`.
 
 `AppContainer` picks the first configured option: `TRUFAR_LLM_URL` → `OpenAiCompatibleChatService`,
 then `TRUFAR_API_URL` → `HttpTruFarChatService`, otherwise `MockTruFarChatService` (offline demo).
@@ -806,6 +818,15 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
 - **`androidx.activity` / `drawerlayout` / `viewpager2`** come in transitively as compile-scope
   dependencies of Material. Don't pin them in `build.gradle.kts`: that adds `GradleDependency`
   lint warnings.
+- **Gemini free tier (the LLM in use):**
+  - Popular models sometimes return **503 "high demand"**; the app shows it as a SYSTEM
+    `⚠ TruFar error` message, and the user can just resend.
+  - The free tier has rate limits, and some projects report "free tier unavailable". If that
+    happens, switch `TRUFAR_LLM_MODEL` to another Flash model from `GET {base}/models`, or use
+    another free OpenAI-compatible provider. No code change is needed either way.
+  - The first request can take ~45 s, which is within the client's 90 s read timeout.
+  - Changing any `TRUFAR_LLM_*` property needs a rebuild and reinstall, because they're compiled
+    into `BuildConfig`.
 - **LLM-graded HP is persuadable:** a user can talk Kafka into emitting `[[CORRECT]]`. Each award
   is bounded by `OpenAiCompatibleChatService.CORRECT_ANSWER_HP` (10) and the per-award cap, but
   there's no rate limit. Add one in the handler if it gets abused.
@@ -1020,7 +1041,7 @@ Debug helpers available in the debug build:
 7. Pets debug row: **Simulate doom-scroll** → HP −5. **Reset pet** → back to 50/100, nothing equipped, name unchanged.
 8. Kill and relaunch the app. HP and equipped items persist (SharedPreferences). Onboarding doesn't show again, even if you used **Reset pet** in step 7. The chat transcript resets (in memory only).
 
-**Kafka (real LLM)**: build with `TRUFAR_LLM_URL`/`TRUFAR_LLM_API_KEY` set (§5.2):
+**Kafka (real LLM, Gemini in use)**: build with `TRUFAR_LLM_URL`/`TRUFAR_LLM_API_KEY`/`TRUFAR_LLM_MODEL` set (§5.2):
 
 9. Open **Chat**. Kafka sends a sarcastic three-sentence greeting asking for a topic. No `__START__` bubble appears.
 10. Name a topic and answer Kafka's question correctly. The reply shows no `[[…]]` marker, and a SYSTEM
@@ -1067,7 +1088,7 @@ Update this table in the same commit when your task changes a subsystem's status
 | Chat UI | ✅ Skeleton done | `ChatFragment` / `ChatViewModel` / `ChatRepository` |
 | Pet rendering | ✅ scene-3 rabbit (three.js, offline) via the HTML/WebView pipeline; add-ons are primitive placeholders | `HtmlManiengineRenderer` + `assets/maniengine/` |
 | Item catalog | ⏳ Placeholder (6 hard-coded items: hats and accessories) | `AccessoryCatalog` → Maniengine Agent |
-| TruFar backend | ✅ Relay to Kafka on trufar.cn (`backend/`), set up for Vercel (free, no card) with Firestore on Spark, but not yet deployed there; tested locally; PythonAnywhere free confirmed blocked; Cloud Run packaging kept as an alternative. OpenAI-compatible client as an alternative; mock when unconfigured | `HttpTruFarChatService` (`TRUFAR_API_URL` → relay) / `OpenAiCompatibleChatService` (`TRUFAR_LLM_URL`) / `MockTruFarChatService` |
+| TruFar backend | ✅ Kafka persona on Google's free Gemini API (`gemini-3.5-flash`) via the in-app OpenAI-compatible client, verified from a PC (not yet on a device). trufar.cn relay (`backend/`) **parked**: tested locally, PythonAnywhere free blocked, Vercel/Cloud Run configs kept. Mock when unconfigured | `OpenAiCompatibleChatService` (`TRUFAR_LLM_URL`) / `HttpTruFarChatService` (`TRUFAR_API_URL` → relay) / `MockTruFarChatService` |
 | Doom-scroll detection | ✅ Usage Access polling in a foreground service; portrait only, 1 HP per minute, warnings every 10 minutes (not yet tested on a device) | `UsageStatsDoomScrollMonitor` |
 
 Known gaps and TODOs (not assigned to anyone yet):
