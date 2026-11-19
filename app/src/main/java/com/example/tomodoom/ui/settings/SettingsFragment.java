@@ -24,6 +24,8 @@ import com.example.tomodoom.di.ViewModelFactory;
 import com.example.tomodoom.model.ChatTextScale;
 import com.example.tomodoom.model.PetNames;
 import com.example.tomodoom.model.PetState;
+import com.example.tomodoom.ui.MainPagerAdapter;
+import com.example.tomodoom.ui.PetStage;
 import com.example.tomodoom.ui.onboarding.PetChoiceAdapter;
 import com.example.tomodoom.ui.onboarding.PetPortraits;
 import com.example.tomodoom.ui.watchedapps.WatchedAppsActivity;
@@ -34,7 +36,8 @@ import java.util.Set;
 
 /**
  * Settings page: rename the pet, switch to another pet, choose the tracked apps and set the chat
- * text size. Holds no logic; every change goes through {@link SettingsViewModel}.
+ * text size. Holds no logic; every change goes through {@link SettingsViewModel}. The activity's
+ * pet ({@link PetStage}) shows translucent behind the cards.
  */
 public class SettingsFragment extends Fragment {
 
@@ -64,16 +67,34 @@ public class SettingsFragment extends Fragment {
         viewModel.getPetState().observe(getViewLifecycleOwner(), this::renderPet);
         viewModel.getWatchedPackages().observe(getViewLifecycleOwner(), this::renderWatched);
         viewModel.getChatTextScale().observe(getViewLifecycleOwner(), this::renderChatSize);
+        stage().registerBackdrop(MainPagerAdapter.PAGE_SETTINGS, binding.getRoot());
+        viewModel.getPetState().observe(getViewLifecycleOwner(),
+                state -> stage().render(binding.getRoot(), state));
     }
 
     @Override
     public void onResume() {
         super.onResume();
         updateUsageAccess(); // may have changed in the system settings
+        stage().attach(binding.getRoot(), viewModel.getPetState().getValue());
+    }
+
+    @Override
+    public void onPause() {
+        stage().detach(binding.getRoot());
+        super.onPause();
+    }
+
+    /** The activity's shared pet renderer, shown faintly behind this page. */
+    @NonNull
+    private PetStage stage() {
+        return ((PetStage.Host) requireActivity()).getPetStage();
     }
 
     @Override
     public void onDestroyView() {
+        stage().detach(binding.getRoot());
+        stage().unregisterBackdrop(binding.getRoot());
         super.onDestroyView();
         binding = null;
         petChoices = null;

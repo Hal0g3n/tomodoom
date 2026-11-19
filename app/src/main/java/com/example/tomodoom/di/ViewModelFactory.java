@@ -59,7 +59,8 @@ public final class ViewModelFactory implements ViewModelProvider.Factory {
                     container.getInstalledAppsSource());
         }
         if (modelClass.isAssignableFrom(StatsViewModel.class)) {
-            return (T) new StatsViewModel(container.getStatsRepository());
+            return (T) new StatsViewModel(container.getStatsRepository(),
+                    container.getPetStateRepository());
         }
         if (modelClass.isAssignableFrom(SettingsViewModel.class)) {
             return (T) new SettingsViewModel(container.getPetStateRepository(),

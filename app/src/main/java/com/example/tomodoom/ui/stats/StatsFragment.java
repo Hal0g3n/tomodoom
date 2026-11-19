@@ -22,6 +22,8 @@ import com.example.tomodoom.databinding.FragmentStatsBinding;
 import com.example.tomodoom.databinding.ItemStatsRowBinding;
 import com.example.tomodoom.di.ViewModelFactory;
 import com.example.tomodoom.stats.DoomScrollLog;
+import com.example.tomodoom.ui.MainPagerAdapter;
+import com.example.tomodoom.ui.PetStage;
 import com.example.tomodoom.stats.HpHistory;
 import com.example.tomodoom.stats.StatsReport;
 import com.example.tomodoom.stats.TokenUsageLedger;
@@ -35,7 +37,8 @@ import java.util.concurrent.TimeUnit;
  * Stats page (the rightmost tab): time since the last doom-scroll, doom-scrolling today and this
  * week, the pet's health over 24 hours or 7 days, and LLM tokens per model. It only formats the
  * {@link StatsReport} from {@link StatsViewModel}, and refreshes it every half minute while
- * visible so the clean-streak timer keeps counting.
+ * visible so the clean-streak timer keeps counting. The activity's pet ({@link PetStage}) shows
+ * translucent behind the cards.
  */
 public class StatsFragment extends Fragment {
 
@@ -86,6 +89,9 @@ public class StatsFragment extends Fragment {
             }
         });
         viewModel.getReport().observe(getViewLifecycleOwner(), this::bind);
+        stage().registerBackdrop(MainPagerAdapter.PAGE_STATS, binding.getRoot());
+        viewModel.getPetState().observe(getViewLifecycleOwner(),
+                state -> stage().render(binding.getRoot(), state));
     }
 
     @Override
@@ -93,20 +99,30 @@ public class StatsFragment extends Fragment {
         super.onResume();
         handler.removeCallbacks(refresher);
         handler.post(refresher);
+        stage().attach(binding.getRoot(), viewModel.getPetState().getValue());
     }
 
     @Override
     public void onPause() {
+        stage().detach(binding.getRoot());
         super.onPause();
         handler.removeCallbacks(refresher);
     }
 
     @Override
     public void onDestroyView() {
+        stage().detach(binding.getRoot());
+        stage().unregisterBackdrop(binding.getRoot());
         super.onDestroyView();
         handler.removeCallbacks(refresher);
         lastReport = null;
         binding = null;
+    }
+
+    /** The activity's shared pet renderer, shown faintly behind this page. */
+    @NonNull
+    private PetStage stage() {
+        return ((PetStage.Host) requireActivity()).getPetStage();
     }
 
     private void bind(@NonNull StatsReport report) {

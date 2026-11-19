@@ -28,6 +28,8 @@ public final class MainPagerAdapter extends FragmentStateAdapter {
     public static final int PAGE_PETS = 2;
     public static final int PAGE_CHAT = 3;
     public static final int PAGE_STATS = 4;
+    /** How many pages there are. */
+    public static final int PAGE_COUNT = 5;
 
     private static final int[] MENU_ITEM_IDS = {
             R.id.navigation_settings, R.id.navigation_customise, R.id.navigation_pets,

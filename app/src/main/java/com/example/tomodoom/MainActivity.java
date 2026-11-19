@@ -127,6 +127,18 @@ public class MainActivity extends AppCompatActivity implements PetStage.Host {
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        petStage.onHostResume();
+    }
+
+    @Override
+    protected void onPause() {
+        petStage.onHostPause();
+        super.onPause();
+    }
+
+    @Override
     protected void onDestroy() {
         // The pages' views are gone or going; free the WebView with this activity (rotation too).
         petStage.release();
