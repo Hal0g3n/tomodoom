@@ -1,0 +1,323 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Stats page: time since the last doom-scroll, doom-scrolling, pet health and LLM tokens. -->
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clipToPadding="false"
+    tools:context=".ui.stats.StatsFragment">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="16dp"
+        android:paddingTop="16dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="24dp">
+
+        <TextView
+            android:id="@+id/stats_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:accessibilityHeading="true"
+            android:text="@string/stats_title"
+            android:textAppearance="?attr/textAppearanceHeadline6"
+            tools:targetApi="p" />
+
+        <!-- 1. Since the last doom-scroll -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/clean_card"
+            style="@style/Widget.Tomodoom.StatsCard">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/clean_label"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/stats_since_last_title"
+                    android:textAppearance="@style/TextAppearance.Tomodoom.StatsCardTitle" />
+
+                <TextView
+                    android:id="@+id/clean_value"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:textAppearance="@style/TextAppearance.Tomodoom.StatsHero"
+                    tools:text="2 h 15 min" />
+
+                <TextView
+                    android:id="@+id/clean_detail"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:textAppearance="?attr/textAppearanceBody2"
+                    tools:text="Last seen today at 14:02" />
+
+                <TextView
+                    android:id="@+id/clean_longest"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:textAppearance="?attr/textAppearanceBody2"
+                    android:textColor="?android:attr/textColorSecondary"
+                    tools:text="Longest clean streak: 1 d 3 h" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- 2. Doom-scrolling -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/doom_card"
+            style="@style/Widget.Tomodoom.StatsCard">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/stats_doom_title"
+                    android:textAppearance="@style/TextAppearance.Tomodoom.StatsCardTitle" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:baselineAligned="false"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/doom_today_value"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textAppearance="@style/TextAppearance.Tomodoom.StatsTileValue"
+                            tools:text="24 min" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/stats_doom_today"
+                            android:textAppearance="?attr/textAppearanceCaption"
+                            android:textColor="?android:attr/textColorSecondary" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/doom_sessions_value"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textAppearance="@style/TextAppearance.Tomodoom.StatsTileValue"
+                            tools:text="3" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/stats_doom_sessions_today"
+                            android:textAppearance="?attr/textAppearanceCaption"
+                            android:textColor="?android:attr/textColorSecondary" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/doom_longest_value"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textAppearance="@style/TextAppearance.Tomodoom.StatsTileValue"
+                            tools:text="18 min" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/stats_doom_longest_session"
+                            android:textAppearance="?attr/textAppearanceCaption"
+                            android:textColor="?android:attr/textColorSecondary" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <com.example.tomodoom.ui.stats.BarChartView
+                    android:id="@+id/doom_week_chart"
+                    android:layout_width="match_parent"
+                    android:layout_height="140dp"
+                    android:layout_marginTop="16dp" />
+
+                <TextView
+                    android:id="@+id/doom_week_total"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:textAppearance="?attr/textAppearanceBody2"
+                    tools:text="Last 7 days: 3 h 40 min" />
+
+                <TextView
+                    android:id="@+id/doom_apps_title"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="@string/stats_doom_apps_title"
+                    android:textAppearance="?attr/textAppearanceSubtitle2" />
+
+                <!-- Filled by StatsFragment with one row per app. -->
+                <LinearLayout
+                    android:id="@+id/doom_apps"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- 3. Pet health -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/hp_card"
+            style="@style/Widget.Tomodoom.StatsCard">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/stats_hp_title"
+                        android:textAppearance="@style/TextAppearance.Tomodoom.StatsCardTitle" />
+
+                    <com.google.android.material.button.MaterialButtonToggleGroup
+                        android:id="@+id/hp_range"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        app:checkedButton="@id/hp_range_day"
+                        app:selectionRequired="true"
+                        app:singleSelection="true">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/hp_range_day"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:minWidth="0dp"
+                            android:text="@string/stats_range_day"
+                            app:strokeColor="@color/stats_card_stroke" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/hp_range_week"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:minWidth="0dp"
+                            android:text="@string/stats_range_week"
+                            app:strokeColor="@color/stats_card_stroke" />
+                    </com.google.android.material.button.MaterialButtonToggleGroup>
+                </LinearLayout>
+
+                <com.example.tomodoom.ui.stats.HpLineChartView
+                    android:id="@+id/hp_chart"
+                    android:layout_width="match_parent"
+                    android:layout_height="160dp"
+                    android:layout_marginTop="12dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/hp_chart_start"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:textAppearance="?attr/textAppearanceCaption"
+                        android:textColor="?android:attr/textColorSecondary"
+                        tools:text="24 h ago" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/stats_chart_now"
+                        android:textAppearance="?attr/textAppearanceCaption"
+                        android:textColor="?android:attr/textColorSecondary" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/hp_week_gained"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:textAppearance="?attr/textAppearanceBody2"
+                    tools:text="+20 HP from quizzes this week" />
+
+                <TextView
+                    android:id="@+id/hp_week_lost"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:textAppearance="?attr/textAppearanceBody2"
+                    tools:text="−35 HP to doom-scrolling this week" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- 4. LLM tokens -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/tokens_card"
+            style="@style/Widget.Tomodoom.StatsCard">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/stats_tokens_title"
+                    android:textAppearance="@style/TextAppearance.Tomodoom.StatsCardTitle" />
+
+                <!-- Filled by StatsFragment with one row per model. -->
+                <LinearLayout
+                    android:id="@+id/tokens_models"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+
+                <TextView
+                    android:id="@+id/tokens_total"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:textAppearance="?attr/textAppearanceBody2"
+                    android:textStyle="bold"
+                    tools:text="All models: 12,345 tokens in 18 requests" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

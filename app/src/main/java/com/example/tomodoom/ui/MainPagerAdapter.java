@@ -10,6 +10,7 @@ import com.example.tomodoom.R;
 import com.example.tomodoom.ui.chat.ChatFragment;
 import com.example.tomodoom.ui.customise.CustomiseFragment;
 import com.example.tomodoom.ui.pets.PetsFragment;
+import com.example.tomodoom.ui.stats.StatsFragment;
 
 /**
  * The top-level pages of {@code MainActivity}'s swipeable {@code ViewPager2}, in order. Each page
@@ -24,9 +25,11 @@ public final class MainPagerAdapter extends FragmentStateAdapter {
     /** The default page, shown on a fresh launch. */
     public static final int PAGE_PETS = 1;
     public static final int PAGE_CHAT = 2;
+    public static final int PAGE_STATS = 3;
 
     private static final int[] MENU_ITEM_IDS = {
-            R.id.navigation_customise, R.id.navigation_pets, R.id.navigation_chat};
+            R.id.navigation_customise, R.id.navigation_pets, R.id.navigation_chat,
+            R.id.navigation_stats};
 
     public MainPagerAdapter(@NonNull FragmentActivity activity) {
         super(activity);
@@ -40,6 +43,8 @@ public final class MainPagerAdapter extends FragmentStateAdapter {
                 return new CustomiseFragment();
             case PAGE_CHAT:
                 return new ChatFragment();
+            case PAGE_STATS:
+                return new StatsFragment();
             case PAGE_PETS:
             default:
                 return new PetsFragment();

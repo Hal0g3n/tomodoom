@@ -5,6 +5,7 @@
     <string name="title_customise">Wardrobe</string>
     <string name="title_pets">Pets</string>
     <string name="title_chat">Chat</string>
+    <string name="title_stats">Stats</string>
     <string name="reset_title">Reset Tomodoom?</string>
     <string name="reset_message">This erases your pet, its HP and items, and closes the app. Next time it opens, you\'ll start over.</string>
     <string name="reset_confirm">Reset</string>
@@ -59,10 +60,56 @@
     <string name="chat_input_hint_quiz">Type your answer…</string>
     <string name="chat_send">Send</string>
 
-    <!-- HtmlManiengineRenderer -->
     <!-- Pets page: inactivity decay -->
     <string name="inactivity_decay_notice">%1$s missed you: −%2$d HP while you were away</string>
 
+    <!-- Stats page -->
+    <string name="stats_title">Statistics</string>
+    <string name="stats_since_last_title">Since your last doom-scroll</string>
+    <string name="stats_since_last_seen">Last doom-scroll %1$s</string>
+    <string name="stats_since_never">No doom-scrolling since tracking began %1$s</string>
+    <string name="stats_longest_clean">Longest clean streak: %1$s</string>
+    <string name="stats_doom_title">Doom-scrolling</string>
+    <string name="stats_doom_today">Today</string>
+    <string name="stats_doom_sessions_today">Sessions today</string>
+    <string name="stats_doom_longest_session">Longest (7 days)</string>
+    <string name="stats_doom_week_total">Last 7 days: %1$s</string>
+    <string name="stats_doom_chart_description">Doom-scrolling per day, last 7 days.</string>
+    <string name="stats_doom_apps_title">By app, last 7 days</string>
+    <string name="stats_doom_apps_empty">No doom-scrolling in the last 7 days. Nice!</string>
+    <string name="stats_unknown_app">Unknown app</string>
+    <string name="stats_today">Today</string>
+    <string name="stats_bar_under_minute">&lt;1m</string>
+    <string name="stats_bar_minutes">%1$dm</string>
+    <string name="stats_bar_hours">%1$dh</string>
+    <string name="stats_hp_title">Pet health</string>
+    <string name="stats_range_day">24 h</string>
+    <string name="stats_range_week">7 days</string>
+    <string name="stats_chart_day_ago">24 h ago</string>
+    <string name="stats_chart_week_ago">7 days ago</string>
+    <string name="stats_chart_now">Now</string>
+    <string name="stats_hp_chart_description">Pet health over time, now %1$d of %2$d HP.</string>
+    <string name="stats_hp_chart_empty">No pet health recorded yet.</string>
+    <string name="stats_hp_week_gained">+%1$d HP from quizzes this week</string>
+    <string name="stats_hp_week_lost">−%1$d HP to doom-scrolling this week</string>
+    <string name="stats_tokens_title">Tokens by model</string>
+    <string name="stats_tokens_empty">No tokens used yet. Chat with your pet to see usage per model.</string>
+    <plurals name="stats_tokens_detail">
+        <item quantity="one">%1$s request · %2$s in · %3$s out</item>
+        <item quantity="other">%1$s requests · %2$s in · %3$s out</item>
+    </plurals>
+    <plurals name="stats_tokens_total">
+        <item quantity="one">All models: %1$s tokens in %2$s request</item>
+        <item quantity="other">All models: %1$s tokens in %2$s requests</item>
+    </plurals>
+    <string name="stats_duration_under_minute">under 1 min</string>
+    <string name="stats_duration_minutes">%1$d min</string>
+    <string name="stats_duration_hours">%1$d h %2$d min</string>
+    <string name="stats_duration_hours_only">%1$d h</string>
+    <string name="stats_duration_days">%1$d d %2$d h</string>
+    <string name="stats_duration_days_only">%1$d d</string>
+
+    <!-- HtmlManiengineRenderer -->
     <string name="maniengine_unavailable">Your pet can\'t be shown: this device has no working WebView.</string>
     <string name="maniengine_crashed">The pet viewer stopped. Switch tabs or reopen the app to reload it.</string>
 

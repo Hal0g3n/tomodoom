@@ -11,6 +11,7 @@ import com.example.tomodoom.viewmodel.CustomiseViewModel;
 import com.example.tomodoom.viewmodel.DebugViewModel;
 import com.example.tomodoom.viewmodel.OnboardingViewModel;
 import com.example.tomodoom.viewmodel.PetsViewModel;
+import com.example.tomodoom.viewmodel.StatsViewModel;
 import com.example.tomodoom.viewmodel.WatchedAppsViewModel;
 
 /**
@@ -53,6 +54,9 @@ public final class ViewModelFactory implements ViewModelProvider.Factory {
         if (modelClass.isAssignableFrom(WatchedAppsViewModel.class)) {
             return (T) new WatchedAppsViewModel(container.getWatchedAppsRepository(),
                     container.getInstalledAppsSource());
+        }
+        if (modelClass.isAssignableFrom(StatsViewModel.class)) {
+            return (T) new StatsViewModel(container.getStatsRepository());
         }
         if (modelClass.isAssignableFrom(DebugViewModel.class)) {
             return (T) new DebugViewModel(container.getPetStateRepository(),
