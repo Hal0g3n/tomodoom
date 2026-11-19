@@ -18,7 +18,7 @@ public final class ChatMessage {
         USER,
         /** Produced by the chatbot (including quiz prompts and feedback). */
         BOT,
-        /** App/system notices, e.g. MCP tool results ("+10 HP awarded via MCP!") or errors. */
+        /** App/system notices, e.g. MCP tool results ("Tomo will remember that (+10 HP)") or errors. */
         SYSTEM
     }
 

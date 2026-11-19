@@ -22,5 +22,5 @@
         android:textColor="?android:attr/textColorSecondary"
         android:textSize="13sp"
         android:textStyle="italic"
-        tools:text="+10 HP awarded via MCP! (60/100 HP)" />
+        tools:text="Tomo will remember that (+10 HP)" />
 </FrameLayout>

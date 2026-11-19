@@ -29,7 +29,7 @@
             android:layout_marginTop="4dp"
             android:textAppearance="?attr/textAppearanceBody2"
             android:visibility="gone"
-            tools:text="+10 HP awarded via MCP! (60/100 HP)"
+            tools:text="Tomo will remember that (+10 HP)"
             tools:visibility="visible" />
 
         <!-- Pet -->

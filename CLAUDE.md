@@ -566,7 +566,9 @@ String TOOL_GET_PET_STATE = "get_pet_state";  // params: none
 - `onQuizPassed` is **idempotent per `quizId`**: a repeated award for the same quiz is rejected.
   A single award is capped at `DefaultMcpPetActionHandler.MAX_HP_PER_AWARD` (50).
 - `McpToolResult.getMessage()` is shown to the user as a SYSTEM chat message
-  (e.g. `"+10 HP awarded via MCP! (60/100 HP)"`).
+  (e.g. `"+5 HP awarded via MCP! (60/100 HP)"`). A passed quiz says
+  `"<pet name> will remember that (+10 HP)"`, and `ChatRepository` posts it **above** the bot's
+  grading reply (the award runs before the reply is appended).
 
 ### `DoomScrollMonitor` / `DoomScrollListener`
 ```java
@@ -1316,7 +1318,7 @@ Debug helpers:
    ```` ```python ```` fenced block: it shows as a dark, monospace block labelled "python" that scrolls
    sideways instead of wrapping; **Copy** puts the code on the clipboard. `**bold**` is bold. With
    Gemini, ask for "the quadratic formula in LaTeX and a short Python function".
-4. Answer correctly (`4`). The bot confirms, and a SYSTEM message shows **"+10 HP awarded via MCP! (60/100 HP)"**.
+4. Answer correctly (`4`). A SYSTEM message **"Tomo will remember that (+10 HP)"** appears, with the bot's confirmation right below it.
 5. Switch to **Pets**: **HP 60 / 100**.
 6. In Chat, type `/tool get_pet_state` (or `/tool award_hp amount=5`). A SYSTEM message shows the MCP result.
 7. On **Customise**, equip an item and note the current HP.
@@ -1325,7 +1327,7 @@ Debug helpers:
    again with HP 50 / 100 and nothing equipped. A plain tap on Wardrobe still just opens the page.
 8a. Long-press the **Pets** tab: the debug panel opens fully expanded (a plain tap still just opens
    Pets; a second long-press doesn't stack a second panel). −10 lowers the health bar at once; set 0
-   tips the pet over, 80 makes it hop. Simulate quiz pass shows "+10 HP awarded via MCP!", Replay shows
+   tips the pet over, 80 makes it hop. Simulate quiz pass shows "Tomo will remember that (+10 HP)", Replay shows
    "⚠ Quiz debug:… was already rewarded." Simulate warning posts "Time to look up". New conversation
    clears the Chat transcript and greets again. Fill Stats with a demo week: the Stats tab shows a
    week of bars, apps, a health line ending at the current HP, quiz gains and three Gemini models; HP
@@ -1337,7 +1339,7 @@ Debug helpers:
 9. Fresh install at 50 HP, pet named `Mochi`. Open **Chat**: Charon's warm three-sentence greeting
    appears, calling itself Mochi (never "Charon"). No `__START__` bubble appears.
 10. Name a topic and answer correctly. The reply shows no `[[…]]` marker, and a SYSTEM
-    message shows **"+10 HP awarded via MCP!"**. A first wrong answer gets a hint and no HP.
+    message **"Mochi will remember that (+10 HP)"** sits above it. A first wrong answer gets a hint and no HP.
 11. Use a bad key or URL. A SYSTEM `⚠ Chat error: … HTTP 401…` message appears and the app doesn't crash.
 12. Doom-scroll until HP < 40, then send a message. The reply opens with one line showing a soured
     mood, then continues the same topic in Kafka's sarcastic tone, still as Mochi. Between 40 and

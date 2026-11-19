@@ -205,16 +205,20 @@ public final class ChatRepository {
 
         @Override
         public void onQuizEvaluated(@NonNull QuizEvaluation evaluation) {
+            // Award first (outside the lock), so the HP notice sits above the bot's reply.
+            McpToolResult award = null;
+            if (evaluation.isPassed()) {
+                award = mcpHandler.onQuizPassed(evaluation.getQuizId(), evaluation.getHpReward());
+                Log.i(TAG, "quiz " + evaluation.getQuizId() + " passed -> " + award);
+            }
             synchronized (lock) {
                 if (activeQuiz != null && activeQuiz.getQuizId().equals(evaluation.getQuizId())) {
                     setActiveQuizLocked(null);
                 }
+                if (award != null) {
+                    appendLocked(systemNotice(award));
+                }
                 appendLocked(ChatMessage.bot(evaluation.getFeedback()));
-            }
-            if (evaluation.isPassed()) {
-                McpToolResult result = mcpHandler.onQuizPassed(evaluation.getQuizId(), evaluation.getHpReward());
-                Log.i(TAG, "quiz " + evaluation.getQuizId() + " passed -> " + result);
-                append(systemNotice(result));
             }
         }
 

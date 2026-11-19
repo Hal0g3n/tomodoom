@@ -77,7 +77,7 @@ public final class DefaultMcpPetActionHandler implements McpPetActionHandler {
         Map<String, Object> data = stateData(after);
         data.put("quizId", quizId);
         data.put("awarded", amount);
-        return McpToolResult.success(awardMessage(amount, after), data);
+        return McpToolResult.success(quizAwardMessage(amount, after), data);
     }
 
     @AnyThread
@@ -159,6 +159,12 @@ public final class DefaultMcpPetActionHandler implements McpPetActionHandler {
     @NonNull
     private static String awardMessage(int amount, @NonNull PetState after) {
         return "+" + amount + " HP awarded via MCP! (" + after.getCurrentHp() + "/" + after.getMaxHp() + " HP)";
+    }
+
+    /** The chat notice for a passed quiz, e.g. "Tomo will remember that (+10 HP)". */
+    @NonNull
+    static String quizAwardMessage(int amount, @NonNull PetState after) {
+        return after.getPetName() + " will remember that (+" + amount + " HP)";
     }
 
     @NonNull
