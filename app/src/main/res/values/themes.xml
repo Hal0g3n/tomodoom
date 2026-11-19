@@ -86,6 +86,8 @@
         <item name="android:textAppearance">@style/TextAppearance.Tomodoom.ChatBubble</item>
         <item name="fontFamily">@font/unkempt</item>
         <item name="android:fontFamily">@font/unkempt</item>
+        <!-- Unkempt Regular is thin at bubble size; the bundled Bold reads better. -->
+        <item name="android:textStyle">bold</item>
     </style>
 
     <!-- Label of the open bottom bar tab (the other tabs show only their icon). -->

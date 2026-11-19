@@ -874,7 +874,7 @@ Rules:
   emblem fills the 72dp visible area. The monochrome (themed-icon) layer keeps only the `jet` line work.
 
 **Typography.** All UI text is **Playpen Sans**; user and bot chat bubbles use **Unkempt**
-(`Widget.Tomodoom.ChatBubble`, applied with `style=`; its text appearance sets 17sp). SYSTEM chat
+(`Widget.Tomodoom.ChatBubble`, applied with `style=`: Unkempt Bold, 17sp from its text appearance). SYSTEM chat
 notices stay in Playpen Sans.
 - Both are bundled static Regular/Bold TTFs (Playpen Sans: OFL, from TypeTogether's repo, since
   Google Fonts ships only the variable font; Unkempt: Apache 2.0). Licences are in
