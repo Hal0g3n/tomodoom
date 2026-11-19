@@ -1,6 +1,9 @@
 package com.example.tomodoom;
 
+import android.app.ActivityManager;
 import android.os.Bundle;
+import android.util.Log;
+import android.view.HapticFeedbackConstants;
 import android.view.Menu;
 import android.view.View;
 import android.view.ViewGroup;
@@ -17,6 +20,7 @@ import androidx.viewpager2.widget.ViewPager2;
 import com.example.tomodoom.databinding.ActivityMainBinding;
 import com.example.tomodoom.ui.MainPagerAdapter;
 import com.example.tomodoom.ui.PetStage;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 /**
  * Single activity hosting the three top-level pages (Customise, Pets, Chat) in a swipeable
@@ -33,6 +37,7 @@ import com.example.tomodoom.ui.PetStage;
  */
 public class MainActivity extends AppCompatActivity implements PetStage.Host {
 
+    private static final String TAG = "MainActivity";
     private static final float NAV_ICON_SELECTED_SCALE = 1.3f;
     private static final long NAV_ICON_ANIMATION_MS = 180L;
 
@@ -74,6 +79,15 @@ public class MainActivity extends AppCompatActivity implements PetStage.Host {
             return true;
         });
         getOnBackPressedDispatcher().addCallback(this, backToPets);
+        // Hidden on purpose: long-pressing the Wardrobe tab offers a full reset (testing/demos).
+        View wardrobeTab = binding.navView.findViewById(R.id.navigation_customise);
+        if (wardrobeTab != null) {
+            wardrobeTab.setOnLongClickListener(v -> {
+                v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                confirmReset();
+                return true; // consumed: no tooltip
+            });
+        }
         if (savedInstanceState == null) {
             // Fresh launch: start on Pets (the middle page). A restore keeps the saved page.
             pager.setCurrentItem(MainPagerAdapter.PAGE_PETS, false);
@@ -99,6 +113,30 @@ public class MainActivity extends AppCompatActivity implements PetStage.Host {
     @Override
     public PetStage getPetStage() {
         return petStage;
+    }
+
+    /** Asks before wiping everything; see {@link #resetApp()}. */
+    private void confirmReset() {
+        new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.reset_title)
+                .setMessage(R.string.reset_message)
+                .setPositiveButton(R.string.reset_confirm, (dialog, which) -> resetApp())
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    /**
+     * Wipes all app data (pet state, onboarding flag, WebView storage) and kills the process, so
+     * the next launch is a fresh install. Bypassing {@code PetStateRepository} is fine here
+     * because no observer outlives the process.
+     */
+    private void resetApp() {
+        Log.i(TAG, "hidden reset: clearing app data");
+        ActivityManager am = getSystemService(ActivityManager.class);
+        if (am == null || !am.clearApplicationUserData()) {
+            Log.w(TAG, "clearApplicationUserData failed; closing without a reset");
+            finishAffinity();
+        }
     }
 
     private void syncWithPage(int position, boolean animate) {

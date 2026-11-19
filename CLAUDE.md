@@ -118,7 +118,8 @@ Root package: `com.example.tomodoom`. Source root: `app/src/main/java/com/exampl
 com.example.tomodoom
 ├── TomodoomApplication.java      Application subclass; owns the AppContainer; starts the monitor
 ├── MainActivity.java             Main activity (not exported); swipeable ViewPager2 (Customise | Pets | Chat) ↔ BottomNavigationView;
-│                                 starts on Pets; Back off Pets → Pets; no action bar (NoActionBar theme)
+│                                 starts on Pets; Back off Pets → Pets; no action bar (NoActionBar theme);
+│                                 hidden reset: long-press the Wardrobe tab → confirm → wipe all data
 │
 ├── model/                        Immutable, pure-Java value objects (no android.* imports)
 │   ├── PetState                  name, currentHp, maxHp, equipped items (slot → itemId)
@@ -287,6 +288,10 @@ ui  ──►  viewmodel  ──►  repository  ──►  contracts  ◄──
 - Persistence: prefs file **`tomodoom_pet_state`**, keys `pet_name`, `current_hp`, `max_hp`,
   `equipped.<slotId>`, `onboarding_complete`. **Only `PetStateRepository` may read or write this file.** A write that
   bypasses it won't reach LiveData observers and will be overwritten.
+- **Hidden reset** (`MainActivity.resetApp`, long-press the Wardrobe tab, then confirm): calls
+  `ActivityManager.clearApplicationUserData()`, which wipes *all* app data (this prefs file,
+  WebView storage) and kills the process, so the next launch is a fresh install with onboarding.
+  It's the one sanctioned bypass of the repository, since nothing survives to observe it.
 - `PetState` is **immutable**. Make modified copies with `withHp(...)` / `withName(...)` / `withEquippedItem(...)`.
   Never hold on to a state and assume it is current. Re-read it or observe it.
 
@@ -1064,7 +1069,9 @@ Debug helpers available in the debug build:
 5. Switch to **Pets**: **HP 60 / 100**.
 6. In Chat, type `/tool get_pet_state` (or `/tool award_hp amount=5`). A SYSTEM message shows the MCP result.
 7. On **Customise**, equip an item and note the current HP.
-8. Kill and relaunch the app. HP and equipped items persist (SharedPreferences). Onboarding doesn't show again. The chat transcript resets (in memory only). To start over, clear the app's data in Android Settings.
+8. Kill and relaunch the app. HP and equipped items persist (SharedPreferences). Onboarding doesn't show again. The chat transcript resets (in memory only). To start over, long-press the **Wardrobe** tab
+   and confirm **Reset** (Cancel changes nothing): the app closes and the next launch shows onboarding
+   again with HP 50 / 100 and nothing equipped. A plain tap on Wardrobe still just opens the page.
 
 **Kafka (real LLM, Gemini in use)**: build with `TRUFAR_LLM_URL`/`TRUFAR_LLM_API_KEY`/`TRUFAR_LLM_MODEL` set (§5.2):
 
@@ -1128,7 +1135,8 @@ Known gaps and TODOs (not assigned to anyone yet):
   lifetime. Real backends must use globally unique quiz IDs.
 - Non-UI user-facing text (MCP results, chat notices, mock bot) is inline English, not in `strings.xml`.
 - Nothing happens yet when HP reaches 0 beyond the "Fainted" status label.
-- The app has no built-in way to lower HP or reset the pet for manual testing. Use real doom-scroll
-  detection, or clear the app's data to start over.
+- The app has no built-in way to lower HP for manual testing; use real doom-scroll detection. To
+  start over, use the hidden reset (long-press the Wardrobe tab). Whether it keeps Usage Access and
+  the notification permission hasn't been checked on a device.
 - No instrumented/UI tests yet. JVM tests only (`model`, `doomscroll`, `trufar`, `maniengine`),
   plus pytest for `backend/`.
