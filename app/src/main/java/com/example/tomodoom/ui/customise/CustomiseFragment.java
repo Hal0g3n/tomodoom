@@ -22,7 +22,7 @@ import com.example.tomodoom.viewmodel.CustomiseViewModel;
 import com.google.android.material.tabs.TabLayout;
 
 /**
- * Customise page (leftmost tab): a live pet preview above the slot tabs and a two-column grid of
+ * Customise page (second tab, after Settings): a live pet preview above the slot tabs and a two-column grid of
  * item circles. The preview is the activity's single shared pet ({@link PetStage}), shown here
  * while this page is resumed. Equipping goes through {@link CustomiseViewModel} to
  * {@code PetStateRepository}, so the Pets page updates too.

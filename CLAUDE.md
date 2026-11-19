@@ -90,11 +90,11 @@ virtual pet whose **HP** reflects your digital habits:
 | You stay out of the app for over 30 minutes | Pet **loses** 30% of its HP per 8 h away, applied when you return | `InactivityDecayTracker` |
 | You equip clothes or accessories | The pet's look changes | Maniengine renderer |
 
-The app has five bottom-navigation tabs, left to right: **Customise** (live pet preview + slot tabs
+The app has five bottom-navigation tabs, left to right: **Settings** (rename the pet, switch to
+another pet, choose the tracked apps, chat text size), **Customise** (live pet preview + slot tabs
 and a grid of item circles), **Pets** (HP and the pet viewport; the default page on launch), **Chat**
 (Gemini chatbot + quizzes) and **Stats** (time since the last doom-scroll, doom-scrolling per day and
-app, the pet's health over 24 h / 7 days, and LLM tokens per model) and **Settings** (rename the pet,
-switch to another pet, choose the tracked apps, chat text size). There is no action bar on any tab. The bottom bar shows icons only: the
+app, the pet's health over 24 h / 7 days, and LLM tokens per model). There is no action bar on any tab. The bottom bar shows icons only: the
 open tab widens, shows its label and enlarges its icon.
 
 ### Tech stack (fixed — don't change it without updating this file)
@@ -121,7 +121,7 @@ Root package: `com.example.tomodoom`. Source root: `app/src/main/java/com/exampl
 com.example.tomodoom
 ├── TomodoomApplication.java      Application subclass; owns the AppContainer; starts the monitor;
 │                                 counts started activities → ChatRepository background/foreground
-├── MainActivity.java             Main activity (not exported); swipeable ViewPager2 (Customise | Pets | Chat | Stats) ↔ BottomNavigationView;
+├── MainActivity.java             Main activity (not exported); swipeable ViewPager2 (Settings | Customise | Pets | Chat | Stats) ↔ BottomNavigationView;
 │                                 starts on Pets; Back off Pets → Pets; no action bar (NoActionBar theme);
 │                                 hidden reset: long-press the Wardrobe tab → confirm → wipe all data;
 │                                 hidden debug panel: long-press the Pets tab (all builds)
@@ -230,7 +230,7 @@ com.example.tomodoom
     ├── onboarding/PetChoiceAdapter, PetPortraits   two-column pet portrait cards; species ID → portrait/name
     │                             (public: the Settings page uses the same cards)
     ├── MainPagerAdapter          FragmentStateAdapter: page index ↔ bottom-nav item id
-    │                             (Customise=0, Pets=1 = default, Chat=2, Stats=3, Settings=4)
+    │                             (Settings=0, Customise=1, Pets=2 = default, Chat=3, Stats=4)
     ├── PetStage                  MainActivity's ONE pet renderer, kept in `pet_layer` (behind the pager at rest,
     │                             raised over it while scrolling) and framed onto the resumed page's viewport
     │                             (shrinks Pets ↔ Customise on swipe; fades into Chat's translucent backdrop)
@@ -698,10 +698,12 @@ How the page is hosted (`HtmlManiengineRenderer`):
   above the pages, so the pet travels over the slot tabs, item grid and chat; at rest it drops back
   behind them (Pets cards and Chat bubbles draw over it). Nothing is reparented or resized, so nothing
   jumps when the swipe settles. While the frame is wholly off screen (e.g. Chat has slid away
-  towards Stats), `PetStage` also makes `pet_layer` INVISIBLE (`PetTransitionMath.isOffScreen`),
-  because a paused WebView keeps showing its last picture. A tab tap that jumps several pages
-  (Pets → Settings) detaches Pets and Chat before the frame slides away, so `frameFor` returns null;
-  then `PetTransitionMath.parkedFrame` moves the last frame off the left edge. `MainActivity` sets `offscreenPageLimit(1)` so both viewports are laid
+  towards Stats, or Customise towards Settings), `PetStage` also makes `pet_layer` INVISIBLE
+  (`PetTransitionMath.isOffScreen`), because a paused WebView keeps showing its last picture. Left of
+  Customise (Settings) the pet follows the Customise preview as it slides away to the right. A tab
+  tap that jumps several pages (Chat → Settings, Settings → Stats) can detach the page the pet follows
+  before the frame slides away, so `frameFor` returns null; then `PetTransitionMath.parkedFrame` moves
+  the last frame off the left edge (past Pets) or the right edge (on Settings). `MainActivity` sets `offscreenPageLimit(1)` so both viewports are laid
   out from the first frame. The page still refits to any size (`ResizeObserver` calling `fit()`).
 - **Touch forwarding:** `PetViewport` hands its touches to `PetStage` while its page is resumed and
   the pager is idle (decided at `ACTION_DOWN`); they are offset into layer coordinates and dispatched
@@ -937,7 +939,7 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
   in transitively from Material, like drawerlayout, so don't pin it. Rules:
   - A new top-level tab means a menu item in `bottom_nav_menu.xml` **and** an entry in
     `MainPagerAdapter` (`MENU_ITEM_IDS` + `createFragment`), in the same order.
-  - Page order is Customise (0), Pets (1), Chat (2), Stats (3), Settings (4). Five is
+  - Page order is Settings (0), Customise (1), Pets (2), Chat (3), Stats (4). Five is
     BottomNavigationView's maximum, so a sixth tab needs another design. Pets is the default: `MainActivity` calls
     `setCurrentItem(PAGE_PETS, false)` only when `savedInstanceState == null`, so a restore keeps
     the saved page. Don't assume page 0 is the start page.
@@ -990,9 +992,10 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
   forwarded by `PetViewport`, so don't make the layer clickable. It's created
   with the viewport's (activity) context, so `PetStage` lives in `MainActivity` and is released
   in its `onDestroy`. Never hold it in a ViewModel or `AppContainer`: that would leak the activity.
-- **Pages more than one away from both Pets and Chat** (Settings) have neither view laid out
-  (`offscreenPageLimit(1)`), so `PetStage` has nothing to follow there; it parks and hides the pet
-  instead (§5.1 layout note). The page is transparent, so without that the pet showed between cards.
+- **Settings, left of Customise,** is transparent, so the pet must never rest behind its cards.
+  `frameFor` keeps the pet on the Customise preview (off screen once Settings settles, so the layer
+  is hidden), and if a tab jump detached Customise, `parkedFrame` parks it off the right edge
+  (§5.1 layout note). Without that the pet showed between cards.
 - **WebView (Maniengine):** an `OnTouchListener` on a WebView triggers lint
   `ClickableViewAccessibility`, so `HtmlManiengineRenderer` uses a private `WebView` subclass that
   overrides `dispatchTouchEvent`. `SetJavaScriptEnabled` is suppressed on purpose: the page is a
@@ -1240,7 +1243,7 @@ Debug helpers:
    mask shape; on Android 13+ with themed icons on, a tinted line drawing). Launch the app. The **Pets** tab has **no action bar** and no debug buttons. The health bar sits below
    the rabbit and shows `Tomo`, **HP 50 / 100** and status "Okay". Until Usage Access is granted, a Usage Access card with an **Enable** button
    sits at the top of the page. Once access is granted it reads "Only scrolling in the apps you
-   choose costs HP." with a **Choose apps** button (step 20). The bottom bar shows four icons (Customise, Pets, Chat, Stats). Pets is open: its tile is wider, its icon is larger and only it shows a label.
+   choose costs HP." with a **Choose apps** button (step 20). The bottom bar shows five icons (Settings, Customise, Pets, Chat, Stats). Pets is open: its tile is wider, its icon is larger and only it shows a label.
 2. Swipe right (or tap **Customise**). The Customise page shows no title: a pet preview at the top and
    full-width Hat / Accessory tabs above a two-column grid of circles showing each item's model
    (None first). Tap the **Cap** circle on the Hat tab: its ring darkens and the preview (the 3D
@@ -1328,8 +1331,9 @@ Debug helpers:
 
 **Settings tab:**
 
-26. Five tab icons; the gear on the right opens Settings (also by swiping left from Stats). Tapping
-    the gear straight from Pets shows no pet behind the cards. Under **Pet name** the field shows the
+26. Five tab icons; the gear on the left opens Settings (also by swiping right from Customise).
+    Tapping the gear straight from Pets or Chat, or swiping Customise → Settings, shows no pet behind
+    the cards (the Customise preview slides away to the right). Under **Pet name** the field shows the
     current name and **Save name** stays disabled until it is a different valid name; save `Mochi`: a
     "Renamed to Mochi" Snackbar appears above the bottom bar, the Pets health bar says `Mochi`, and the
     next chatbot reply uses it. Under **Your pet**, tap Cat: the ring moves, "Mochi is now a Cat"

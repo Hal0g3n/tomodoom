@@ -63,7 +63,7 @@ public final class PetTransitionMath {
     /**
      * @param position {@code ViewPager2.OnPageChangeCallback#onPageScrolled}'s left page.
      * @param offset   its offset towards {@code position + 1}, in [0, 1).
-     * @return true while only Customise (page 0) and Pets (page 1) are on screen. Resting exactly on
+     * @return true while only Customise and Pets are on screen. Resting exactly on
      * Pets counts, so a drag wobbling around Pets doesn't end and restart the transition.
      */
     public static boolean showsOnlyCustomiseAndPets(int position, float offset) {
@@ -80,24 +80,34 @@ public final class PetTransitionMath {
     }
 
     /**
-     * Where the pet waits while the pager is past Pets but the Pets page isn't laid out (a tab tap
-     * that jumps several pages detaches Pets before its frame has slid away).
+     * Where the pet waits while the page it would follow isn't laid out (a tab tap that jumps
+     * several pages detaches it before its frame has slid away): past Pets without Pets, or left
+     * of Customise (Settings) without Customise.
      *
-     * @param position the pager's left page.
-     * @param pets     the Pets viewport's pet area, or null if it isn't laid out.
-     * @param last     the last frame sent, or null if none yet.
-     * @return {@code last} moved just off the layer's left edge, as if it had slid away with Pets;
-     * null when the pet needn't be parked (Pets is laid out, the pager isn't past Pets, or no frame
-     * was ever sent).
+     * @param position   the pager's left page.
+     * @param pets       the Pets viewport's pet area, or null if it isn't laid out.
+     * @param customise  the Customise viewport's pet area, or null if it isn't laid out.
+     * @param last       the last frame sent, or null if none yet.
+     * @param layerWidth the layer's width in px.
+     * @return {@code last} moved just off the layer's left edge (past Pets) or right edge (left of
+     * Customise), as if it had slid away with that page; null when the pet needn't be parked.
      */
     @Nullable
-    public static Frame parkedFrame(int position, @Nullable Frame pets, @Nullable Frame last) {
-        if (pets != null || last == null || position <= MainPagerAdapter.PAGE_PETS) {
+    public static Frame parkedFrame(int position, @Nullable Frame pets, @Nullable Frame customise,
+                                    @Nullable Frame last, float layerWidth) {
+        if (last == null) {
             return null;
         }
         float width = last.width();
-        return new Frame(-width, last.top, 0f, last.bottom, last.radius, last.lift,
-                last.alpha);
+        if (position > MainPagerAdapter.PAGE_PETS && pets == null) {
+            return new Frame(-width, last.top, 0f, last.bottom, last.radius, last.lift,
+                    last.alpha);
+        }
+        if (position < MainPagerAdapter.PAGE_CUSTOMISE && customise == null) {
+            return new Frame(layerWidth, last.top, layerWidth + width, last.bottom, last.radius,
+                    last.lift, last.alpha);
+        }
+        return null;
     }
 
     /**
@@ -140,7 +150,8 @@ public final class PetTransitionMath {
      * @param pets      the Pets viewport's pet area, or null if it isn't laid out.
      * @param customise the Customise viewport's pet area, or null if it isn't laid out.
      * @param chat      the Chat backdrop's pet area (translucent), or null if it isn't laid out.
-     * @return where the pet goes at this pager scroll: between Customise and Pets while only they
+     * @return where the pet goes at this pager scroll: the Customise area left of Customise
+     * (sliding away with its page towards Settings), between Customise and Pets while only they
      * are on screen, between Pets and Chat while those two are, and the Chat area from Chat on
      * (sliding away with its page). Without the area it needs, the Pets area (sliding away with
      * its page). Null if that one is missing too.
@@ -148,6 +159,9 @@ public final class PetTransitionMath {
     @Nullable
     public static Frame frameFor(int position, float offset, @Nullable Frame pets,
                                  @Nullable Frame customise, @Nullable Frame chat) {
+        if (position < MainPagerAdapter.PAGE_CUSTOMISE) {
+            return customise;
+        }
         if (chat != null && position >= MainPagerAdapter.PAGE_CHAT) {
             return chat;
         }

@@ -2,6 +2,11 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
 
     <item
+        android:id="@+id/navigation_settings"
+        android:icon="@drawable/ic_settings_24dp"
+        android:title="@string/title_settings" />
+
+    <item
         android:id="@+id/navigation_customise"
         android:icon="@drawable/ic_hanger_24dp"
         android:title="@string/title_customise" />
@@ -20,10 +25,5 @@
         android:id="@+id/navigation_stats"
         android:icon="@drawable/ic_stats_24dp"
         android:title="@string/title_stats" />
-
-    <item
-        android:id="@+id/navigation_settings"
-        android:icon="@drawable/ic_settings_24dp"
-        android:title="@string/title_settings" />
 
 </menu>

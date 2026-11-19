@@ -307,12 +307,14 @@ public final class PetStage implements PetViewport.TouchForwarder {
         }
         target.getLocationInWindow(layerLocation);
         PetTransitionMath.Frame pets = petArea(MainPagerAdapter.PAGE_PETS);
+        PetTransitionMath.Frame customise = petArea(MainPagerAdapter.PAGE_CUSTOMISE);
         PetTransitionMath.Frame f = PetTransitionMath.frameFor(scrollPosition, scrollOffset,
-                pets, petArea(MainPagerAdapter.PAGE_CUSTOMISE),
-                backdropArea(MainPagerAdapter.PAGE_CHAT));
+                pets, customise, backdropArea(MainPagerAdapter.PAGE_CHAT));
         if (f == null) {
-            // Pets (and Chat) were detached by a jump of several pages before the frame slid away.
-            f = PetTransitionMath.parkedFrame(scrollPosition, pets, lastFrame);
+            // The page the pet follows was detached by a jump of several pages before the frame
+            // slid away.
+            f = PetTransitionMath.parkedFrame(scrollPosition, pets, customise, lastFrame,
+                    target.getWidth());
         }
         if (f == null || f.isEmpty()) {
             return; // not laid out yet; the layout listener tries again
