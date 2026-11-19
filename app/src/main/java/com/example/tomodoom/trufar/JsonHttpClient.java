@@ -51,7 +51,8 @@ final class JsonHttpClient {
     /**
      * Sends {@code body} (or nothing when null) to {@code baseUrl + path} and parses the JSON
      * response. An empty or 204 response yields an empty object. A non-2xx status throws an
-     * {@link IOException} that includes the server's {@code error.message} when it provides one.
+     * {@link HttpStatusException} (an {@link IOException} carrying the status code) whose message
+     * includes the server's {@code error.message} when it provides one.
      */
     @WorkerThread
     @NonNull
@@ -62,8 +63,8 @@ final class JsonHttpClient {
         try {
             int status = connection.getResponseCode();
             if (status < 200 || status >= 300) {
-                throw new IOException(label + " request failed with HTTP " + status
-                        + errorDetail(connection.getErrorStream()));
+                throw new HttpStatusException(status, label + " request failed with HTTP "
+                        + status + errorDetail(connection.getErrorStream()));
             }
             if (status == HttpURLConnection.HTTP_NO_CONTENT) {
                 return new JSONObject();

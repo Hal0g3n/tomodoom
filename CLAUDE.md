@@ -157,7 +157,9 @@ com.example.tomodoom
 │   ├── QuizMarkerParser          pure Java: strips [[CORRECT]]/[[WRONG]] grading markers from replies
 │   ├── ChatHistoryWindow         pure Java: last-N-turns conversation memory
 │   ├── HttpTruFarChatService     client for the /v1/chat/sessions event API (served by the backend/ relay)
-│   └── JsonHttpClient            package-private HTTPS + JSON helper shared by both clients
+│   ├── ModelFallback             pure Java: model list parsing + retry/fallback policy for overloaded LLMs
+│   └── JsonHttpClient            package-private HTTPS + JSON helper shared by both clients;
+│                                 non-2xx → HttpStatusException (an IOException with the status code)
 │
 ├── maniengine/                   Maniengine Agent: the HTML (3D) pet page in a WebView (§5.1)
 │   ├── HtmlManiengineRenderer    WebView renderer wired in AppContainer; pushes state, pause/resume
@@ -558,14 +560,15 @@ Set these Gradle properties in the untracked `~/.gradle/gradle.properties` (neve
 |---|---|
 | `TRUFAR_LLM_URL` | HTTPS base URL; `/chat/completions` is appended. In use: `https://generativelanguage.googleapis.com/v1beta/openai` (Gemini) |
 | `TRUFAR_LLM_API_KEY` | bearer token. For Gemini, a free key from aistudio.google.com/apikey (no card). It's compiled into the APK: dev/testing only, same caveat as below |
-| `TRUFAR_LLM_MODEL` | optional; overrides the export's model name (`deepseek-v4-pro`). In use: `gemini-3.5-flash` |
+| `TRUFAR_LLM_MODEL` | optional; overrides the export's model name (`deepseek-v4-pro`). May be a **comma-separated list**: the primary first, then fallbacks for when it's overloaded. In use: `gemini-3.1-flash-lite,gemini-flash-lite-latest,gemini-3.5-flash` |
 
 Gemini was verified with the real persona (2026-11-19):
-- The `__START__` greeting worked; the first call took ~44 s and later turns ~6 s.
-- A correct answer ended with `[[CORRECT]]`.
+- `gemini-3.1-flash-lite` answers in ~2 s. It greets in character and grades both ways
+  (`[[WRONG]]` for "Sydney", `[[CORRECT]]` for "Canberra"), so it's the primary.
+- `gemini-3.5-flash` writes better replies but was slow (~44 s first call) and later hung past
+  60 s or returned 503, so it's the last fallback.
 - `gemini-3.8-flash` / `3.7-flash` returned 503 "high demand", and `gemini-2.5-flash` returned
-  404 for this key. `gemini-3.1-flash-lite` and `gemini-flash-lite-latest` also work on the
-  free tier, if 3.5-flash is ever unavailable.
+  404 for this key.
 - List the models available to a key with `GET {base}/models`.
 
 `AppContainer` picks the first configured option: `TRUFAR_LLM_URL` → `OpenAiCompatibleChatService`,
@@ -575,8 +578,19 @@ So for the relay, leave `TRUFAR_LLM_URL` **unset**.
 How `OpenAiCompatibleChatService` behaves:
 - `connect()` loads the asset on the worker thread. It then sends the hidden user turn `__START__`,
   which the persona prompt answers with Kafka's greeting. `__START__` never appears in the transcript.
+  Only an asset-load failure leaves the service disconnected. If the greeting request fails, the
+  error is shown, but the session stays open (`ChatRepository` calls `connect()` only once), so
+  the user's next message starts the conversation.
 - Each request is `{model, temperature, stream:false, messages:[system, …last 5 turns, user]}`. A
   turn is remembered only if its request succeeds. Read timeout is 90 s.
+- **Retries and fallbacks (`ModelFallback`):** each turn tries the primary model twice, then each
+  fallback once, for at most 4 attempts, waiting 1 s, then 2 s between attempts.
+  - Only temporary failures move on: HTTP 408/429/500/502/503/504 or a timeout.
+  - A timeout skips straight to the next model, because a hanging model costs a full 90 s read
+    timeout per try.
+  - 400/401/403/404 fail at once, so a bad key or model name is reported immediately.
+  - Retries are logged under `OpenAiChatService` (model and status only). The user sees an
+    error only if every attempt fails.
 - **HP / quiz protocol:** Kafka quizzes in free text, so the service never emits `QuizPrompt`s. The
   app appends `APP_PROTOCOL_PROMPT` to the persona, which asks the model to end any reply that grades
   an answer with `[[CORRECT]]` or `[[WRONG]]`. `QuizMarkerParser` strips the markers (it's lenient
@@ -826,12 +840,15 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
   dependencies of Material. Don't pin them in `build.gradle.kts`: that adds `GradleDependency`
   lint warnings.
 - **Gemini free tier (the LLM in use):**
-  - Popular models sometimes return **503 "high demand"**; the app shows it as a SYSTEM
-    `⚠ TruFar error` message, and the user can just resend.
-  - The free tier has rate limits, and some projects report "free tier unavailable". If that
-    happens, switch `TRUFAR_LLM_MODEL` to another Flash model from `GET {base}/models`, or use
+  - Popular models often return **503 "high demand"** or simply hang. That's why
+    `TRUFAR_LLM_MODEL` lists fallbacks and `ModelFallback` retries automatically; a single 503
+    used to surface as `⚠ TruFar error … HTTP 503` and, on the greeting, left the chat
+    "not connected" until restart (fixed).
+  - The free tier has rate limits, and some projects report "free tier unavailable". If every
+    listed model fails, change the list (`GET {base}/models` shows what the key can use), or use
     another free OpenAI-compatible provider. No code change is needed either way.
-  - The first request can take ~45 s, which is within the client's 90 s read timeout.
+  - Worst case with all models hanging is about 3 × 90 s before the error appears. Fast-failing
+    503s are retried within seconds.
   - Changing any `TRUFAR_LLM_*` property needs a rebuild and reinstall, because they're compiled
     into `BuildConfig`.
 - **LLM-graded HP is persuadable:** a user can talk Kafka into emitting `[[CORRECT]]`. Each award
@@ -1096,7 +1113,7 @@ Update this table in the same commit when your task changes a subsystem's status
 | Chat UI | ✅ Skeleton done | `ChatFragment` / `ChatViewModel` / `ChatRepository` |
 | Pet rendering | ✅ scene-3 rabbit (three.js, offline) via the HTML/WebView pipeline; add-ons are primitive placeholders | `HtmlManiengineRenderer` + `assets/maniengine/` |
 | Item catalog | ⏳ Placeholder (6 hard-coded items: hats and accessories) | `AccessoryCatalog` → Maniengine Agent |
-| TruFar backend | ✅ Kafka persona on Google's free Gemini API (`gemini-3.5-flash`) via the in-app OpenAI-compatible client, verified from a PC (not yet on a device). trufar.cn relay (`backend/`) **parked**: tested locally, PythonAnywhere free blocked, Vercel/Cloud Run configs kept. Mock when unconfigured | `OpenAiCompatibleChatService` (`TRUFAR_LLM_URL`) / `HttpTruFarChatService` (`TRUFAR_API_URL` → relay) / `MockTruFarChatService` |
+| TruFar backend | ✅ Kafka persona on Google's free Gemini API (`gemini-3.1-flash-lite` with fallbacks, retries on 503/429/timeouts) via the in-app OpenAI-compatible client. It's verified from a PC; on a device, the first build hit a 503, and the fix is not yet re-tested there. trufar.cn relay (`backend/`) **parked**: tested locally, PythonAnywhere free blocked, Vercel/Cloud Run configs kept. Mock when unconfigured | `OpenAiCompatibleChatService` (`TRUFAR_LLM_URL`) / `HttpTruFarChatService` (`TRUFAR_API_URL` → relay) / `MockTruFarChatService` |
 | Doom-scroll detection | ✅ Usage Access polling in a foreground service; portrait only, 1 HP per minute, warnings every 10 minutes (not yet tested on a device) | `UsageStatsDoomScrollMonitor` |
 
 Known gaps and TODOs (not assigned to anyone yet):

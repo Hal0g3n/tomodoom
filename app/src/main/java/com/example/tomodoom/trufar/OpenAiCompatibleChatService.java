@@ -16,6 +16,8 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.IOException;
+import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -61,8 +63,12 @@ public final class OpenAiCompatibleChatService implements TruFarChatService {
     private final Context appContext;
     @NonNull
     private final String agentAssetPath;
+    /** Primary model override; empty keeps the export's model. */
     @NonNull
     private final String modelOverride;
+    /** Models tried after the primary when it is overloaded (see {@link ModelFallback}). */
+    @NonNull
+    private final List<String> fallbackModels;
     @NonNull
     private final JsonHttpClient http;
     @NonNull
@@ -91,7 +97,9 @@ public final class OpenAiCompatibleChatService implements TruFarChatService {
      * @param agentAssetPath TruFar agent export inside {@code assets/}.
      * @param baseUrl        HTTPS base URL; {@value #COMPLETIONS_PATH} is appended.
      * @param apiKey         bearer token; may be empty for gateways without auth.
-     * @param modelOverride  model name to use instead of the export's; empty keeps the export's.
+     * @param modelOverride  model to use instead of the export's, or a comma-separated list
+     *                       (primary first, then fallbacks for when it is overloaded); empty keeps
+     *                       the export's model.
      */
     public OpenAiCompatibleChatService(@NonNull Context context,
                                        @NonNull String agentAssetPath,
@@ -100,7 +108,10 @@ public final class OpenAiCompatibleChatService implements TruFarChatService {
                                        @NonNull String modelOverride) {
         this.appContext = context.getApplicationContext();
         this.agentAssetPath = agentAssetPath;
-        this.modelOverride = modelOverride;
+        List<String> models = ModelFallback.parseModels(modelOverride);
+        this.modelOverride = models.isEmpty() ? "" : models.get(0);
+        this.fallbackModels = models.size() > 1 ? models.subList(1, models.size())
+                : Collections.<String>emptyList();
         this.http = new JsonHttpClient(baseUrl, apiKey, "TruFar agent", READ_TIMEOUT_MILLIS);
     }
 
@@ -110,7 +121,12 @@ public final class OpenAiCompatibleChatService implements TruFarChatService {
         this.listener = listener;
     }
 
-    /** Loads the agent, starts a fresh conversation and sends the hidden greeting trigger. */
+    /**
+     * Loads the agent, starts a fresh conversation and sends the hidden greeting trigger. Only a
+     * failure to load the agent leaves the service disconnected: if just the greeting request
+     * fails (e.g. the provider is overloaded), the error is reported but the session stays open,
+     * so the user's next message starts the conversation ({@code ChatRepository} connects once).
+     */
     @AnyThread
     @Override
     public void connect() {
@@ -122,16 +138,21 @@ public final class OpenAiCompatibleChatService implements TruFarChatService {
                 if (profile == null) {
                     profile = AgentProfileLoader.load(appContext, agentAssetPath)
                             .withModelOverride(modelOverride);
-                    Log.i(TAG, "loaded " + profile);
+                    Log.i(TAG, "loaded " + profile + ", fallbacks " + fallbackModels);
                 }
-                history = new ChatHistoryWindow(profile.getMemoryWindowTurns());
-                sessionId = UUID.randomUUID().toString();
-                gradedAnswerCount = 0;
-                connected = true;
-                exchange(AgentProfile.GREETING_TRIGGER, true);
             } catch (IOException exception) {
                 connected = false;
                 connectRequested.set(false);
+                reportError(exception);
+                return;
+            }
+            history = new ChatHistoryWindow(profile.getMemoryWindowTurns());
+            sessionId = UUID.randomUUID().toString();
+            gradedAnswerCount = 0;
+            connected = true;
+            try {
+                exchange(AgentProfile.GREETING_TRIGGER, true);
+            } catch (IOException exception) {
                 reportError(exception);
             }
         });
@@ -187,7 +208,11 @@ public final class OpenAiCompatibleChatService implements TruFarChatService {
         sendMessage(answer);
     }
 
-    /** One request/response round trip; the turn is remembered only if it succeeds. */
+    /**
+     * One user turn; the turn is remembered only if it succeeds. Temporary failures (overload,
+     * rate limit, timeout) are retried with backoff, first on the primary model and then on the
+     * fallbacks ({@link ModelFallback}); only the last failure is reported.
+     */
     @WorkerThread
     private void exchange(@NonNull String userText, boolean isGreeting) throws IOException {
         AgentProfile currentProfile = profile;
@@ -195,20 +220,61 @@ public final class OpenAiCompatibleChatService implements TruFarChatService {
         if (currentProfile == null || currentHistory == null) {
             throw new IOException("TruFar agent is not connected");
         }
-        String reply;
-        try {
-            JSONObject response = http.requestJson("POST", COMPLETIONS_PATH,
-                    buildRequest(currentProfile, currentHistory, userText));
-            reply = extractReply(response);
-        } catch (JSONException exception) {
-            throw new IOException("TruFar agent returned an invalid response", exception);
+        List<String> plan = ModelFallback.attemptPlan(currentProfile.getModel(), fallbackModels);
+        String reply = null;
+        int attempt = 0;
+        while (reply == null) {
+            String model = plan.get(attempt);
+            sleepBeforeAttempt(attempt);
+            try {
+                JSONObject response = http.requestJson("POST", COMPLETIONS_PATH,
+                        buildRequest(currentProfile, model, currentHistory, userText));
+                reply = extractReply(response);
+                if (attempt > 0) {
+                    Log.i(TAG, "attempt " + (attempt + 1) + " succeeded with " + model);
+                }
+            } catch (JSONException exception) {
+                throw new IOException("TruFar agent returned an invalid response", exception);
+            } catch (IOException exception) {
+                int next = ModelFallback.nextAttemptIndex(plan, attempt, exception);
+                if (next < 0) {
+                    throw exception;
+                }
+                Log.w(TAG, "attempt " + (attempt + 1) + " with " + model + " failed ("
+                        + describe(exception) + "); retrying with " + plan.get(next));
+                attempt = next;
+            }
         }
         currentHistory.addTurn(userText, reply);
         deliver(QuizMarkerParser.parse(reply), isGreeting);
     }
 
+    @WorkerThread
+    private static void sleepBeforeAttempt(int attempt) throws IOException {
+        long delay = ModelFallback.backoffMillisBefore(attempt);
+        if (delay <= 0) {
+            return;
+        }
+        try {
+            Thread.sleep(delay);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IOException("TruFar agent request was interrupted", exception);
+        }
+    }
+
+    /** Status code or exception type only; never message content. */
+    @NonNull
+    private static String describe(@NonNull IOException exception) {
+        if (exception instanceof HttpStatusException) {
+            return "HTTP " + ((HttpStatusException) exception).getStatusCode();
+        }
+        return exception.getClass().getSimpleName();
+    }
+
     @NonNull
     private static JSONObject buildRequest(@NonNull AgentProfile profile,
+                                           @NonNull String model,
                                            @NonNull ChatHistoryWindow history,
                                            @NonNull String userText) throws JSONException {
         JSONArray messages = new JSONArray();
@@ -218,7 +284,7 @@ public final class OpenAiCompatibleChatService implements TruFarChatService {
         }
         messages.put(message(ChatHistoryWindow.ROLE_USER, userText));
         JSONObject request = new JSONObject();
-        request.put("model", profile.getModel());
+        request.put("model", model);
         request.put("temperature", profile.getTemperature());
         request.put("messages", messages);
         request.put("stream", false);
