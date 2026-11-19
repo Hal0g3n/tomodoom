@@ -17,13 +17,16 @@ import com.example.tomodoom.R;
 import com.example.tomodoom.databinding.FragmentChatBinding;
 import com.example.tomodoom.di.ViewModelFactory;
 import com.example.tomodoom.model.ChatMessage;
+import com.example.tomodoom.ui.MainPagerAdapter;
+import com.example.tomodoom.ui.PetStage;
 import com.example.tomodoom.viewmodel.ChatViewModel;
 
 import java.util.List;
 
 /**
  * Chat page: the chat transcript (user, bot and system/MCP messages) plus an input bar.
- * While a quiz is active, the input hint asks for an answer.
+ * While a quiz is active, the input hint asks for an answer. The activity's shared pet
+ * ({@link PetStage}) shows translucent behind the transcript while this page is resumed.
  */
 public class ChatFragment extends Fragment {
 
@@ -50,6 +53,9 @@ public class ChatFragment extends Fragment {
         layoutManager.setStackFromEnd(true);
         binding.chatList.setLayoutManager(layoutManager);
         binding.chatList.setAdapter(adapter);
+        stage().registerBackdrop(MainPagerAdapter.PAGE_CHAT, binding.chatList);
+        viewModel.getPetState().observe(getViewLifecycleOwner(),
+                state -> stage().render(binding.chatList, state));
 
         viewModel.getMessages().observe(getViewLifecycleOwner(), this::showMessages);
         viewModel.getActiveQuiz().observe(getViewLifecycleOwner(), quiz ->
@@ -72,9 +78,28 @@ public class ChatFragment extends Fragment {
     }
 
     @Override
+    public void onResume() {
+        super.onResume();
+        stage().attach(binding.chatList, viewModel.getPetState().getValue());
+    }
+
+    @Override
+    public void onPause() {
+        stage().detach(binding.chatList);
+        super.onPause();
+    }
+
+    @Override
     public void onDestroyView() {
+        stage().detach(binding.chatList);
+        stage().unregisterBackdrop(binding.chatList);
         super.onDestroyView();
         binding = null;
+    }
+
+    @NonNull
+    private PetStage stage() {
+        return ((PetStage.Host) requireActivity()).getPetStage();
     }
 
     private void showMessages(@NonNull List<ChatMessage> messages) {

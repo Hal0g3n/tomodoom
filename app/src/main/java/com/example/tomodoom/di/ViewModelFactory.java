@@ -46,7 +46,8 @@ public final class ViewModelFactory implements ViewModelProvider.Factory {
             return (T) new CustomiseViewModel(container.getPetStateRepository());
         }
         if (modelClass.isAssignableFrom(ChatViewModel.class)) {
-            return (T) new ChatViewModel(container.getChatRepository());
+            return (T) new ChatViewModel(container.getChatRepository(),
+                    container.getPetStateRepository());
         }
         if (modelClass.isAssignableFrom(OnboardingViewModel.class)) {
             return (T) new OnboardingViewModel(container.getPetStateRepository(),

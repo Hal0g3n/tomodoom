@@ -212,7 +212,7 @@ com.example.tomodoom
 │   ├── OnboardingViewModel       onboarding flag, suggested name, species list + selectedSpecies, submitName(),
 │   │                             permission-step state (usage skipped, notifications handled)
 │   ├── OnboardingPermissionFlow  pure Java: next permission step (Usage Access → notifications → done)
-│   ├── ChatViewModel             exposes transcript + active quiz, sends messages
+│   ├── ChatViewModel             exposes transcript + active quiz + PetState (for the pet backdrop), sends messages
 │   ├── StatsViewModel            StatsReport per snapshot / refresh(); selected health-chart range
 │   └── WatchedAppsViewModel      installed apps (loaded once, off the main thread) + watched set, toggles
 │
@@ -225,17 +225,19 @@ com.example.tomodoom
     ├── onboarding/PetChoiceAdapter, PetPortraits   two-column pet portrait cards; species ID → portrait/name
     ├── MainPagerAdapter          FragmentStateAdapter: page index ↔ bottom-nav item id
     │                             (Customise=0, Pets=1 = default, Chat=2, Stats=3)
-    ├── PetStage                  MainActivity's ONE pet renderer, kept in `pet_layer` behind the pager and
-    │                             framed onto the resumed page's viewport (shrinks Pets ↔ Customise on swipe)
-    ├── PetTransitionMath         pure Java: frame for a pager position (lift included), model box
-    ├── PetLayer                  `pet_layer`: holds the pet for good; takes only forwarded touches
+    ├── PetStage                  MainActivity's ONE pet renderer, kept in `pet_layer` (behind the pager at rest,
+    │                             raised over it while scrolling) and framed onto the resumed page's viewport
+    │                             (shrinks Pets ↔ Customise on swipe; fades into Chat's translucent backdrop)
+    ├── PetTransitionMath         pure Java: frame for a pager position (lift + alpha included), model box
+    ├── PetLayer                  `pet_layer`: holds the pet for good; never takes touches of its own
     ├── PetViewport               `pet_viewport` on Pets/Customise: forwards its touches to the PetLayer
     ├── AppReset                  the hidden full reset (confirm dialog + clearApplicationUserData)
     ├── debug/DebugPanelFragment  hidden debug bottom sheet (long-press the Pets tab)
     ├── customise/CustomiseFragment   pet preview viewport (via PetStage) + full-width slot tabs + item grid
     ├── customise/AccessoryGridAdapter, AccessoryThumbnails   two-column item circles; item ID → thumbnail
     ├── pets/PetsFragment         full-page pet viewport (FrameLayout) under the Usage Access card and health bar
-    ├── chat/ChatFragment, ChatAdapter   RecyclerView (3 view types) + input bar
+    ├── chat/ChatFragment, ChatAdapter   RecyclerView (3 view types) + input bar; `chat_list` is the pet
+    │                             backdrop (`PetStage.registerBackdrop`), the pet at 20% alpha behind it
     ├── stats/StatsFragment       four cards; refreshes every 30 s while visible
     ├── stats/HpLineChartView, BarChartView   Canvas charts in the palette (no chart library)
     ├── stats/StatsFormatter      durations, token counts and app labels → display text
@@ -447,12 +449,14 @@ The full Javadoc on each interface is normative. What follows is a summary.
 @MainThread default void setTouchBox(@NonNull ViewGroup container, @Nullable RectF box) {}
 ```
 - **One renderer per `MainActivity`**, so only one pet is rendered at a time. `ui.PetStage` owns it
-  and lends it to whichever page is resumed (Customise or Pets): the page calls
+  and lends it to whichever page is resumed (Customise, Pets, or Chat for its backdrop): the page calls
   `attach(viewport, state)` in `onResume`, `detach(viewport)` in `onPause`/`onDestroyView`, and
-  `render(viewport, state)` on each emission (ignored unless that page owns the pet).
+  `render(viewport, state)` on each emission (ignored unless that page owns the pet). Chat's backdrop
+  (`registerBackdrop`) only works with a frame-capable renderer; with the placeholder it is ignored.
 - **Frame-capable renderers** (`supportsFrames()`, as `HtmlManiengineRenderer` is) get **one fixed
   container for their whole life**: `MainActivity`'s `pet_layer` (a `ui.PetLayer` the size of the
-  pager, *behind* it). They are never moved or resized; `PetStage` places the pet with `setFrame`
+  pager, *behind* it at rest and raised above it with `translationZ` while the pager is dragging or
+  settling). They are never moved or resized; `PetStage` places the pet with `setFrame`
   (container px, rounded corners, plus a 0–1 `lift`: 1 on Pets, where the health bar floats over the
   bottom, 0 on Customise), sent on every scroll frame and layout change, so keep it cheap. The pet is
   drawn only in the frame, framed as in a viewport of that size, and the rest stays transparent;
@@ -659,10 +663,15 @@ How the page is hosted (`HtmlManiengineRenderer`):
 - **Layout note:** there is **one** WebView, and it never moves: it fills `pet_layer` behind the
   pager. `PetStage` frames it onto the large viewport on Pets or the preview at 40% of the page height
   on Customise (above the slot tabs and item circles). The frame follows the Pets viewport as its
-  page slides (so the pet leaves with Pets towards Chat, and is off screen on Chat), and while only
-  Customise and Pets are on screen it is interpolated between their pet areas by the scroll offset
-  (`PetTransitionMath.frameFor`): the pet shrinks into the preview card, or grows out of it, with the
-  finger, and the health bar slides away with Pets. Nothing is reparented or resized, so nothing
+  page slides, and while only Customise and Pets are on screen it is interpolated between their pet
+  areas by the scroll offset (`PetTransitionMath.frameFor`): the pet shrinks into the preview card, or
+  grows out of it, with the finger, and the health bar slides away with Pets. Between Pets and Chat it
+  is interpolated the same way into Chat's backdrop (`chat_list`'s area, lift 0), and `PetStage` sets
+  the layer's alpha from the frame, fading to `PetTransitionMath.CHAT_PET_ALPHA` (0.2); from Chat on it
+  follows that backdrop (sliding away towards Stats). The alpha is the *layer*'s, so it doesn't clash
+  with the renderer's alpha-0-until-first-frame reveal. While the pager scrolls the layer is raised
+  above the pages, so the pet travels over the slot tabs, item grid and chat; at rest it drops back
+  behind them (Pets cards and Chat bubbles draw over it). Nothing is reparented or resized, so nothing
   jumps when the swipe settles. `MainActivity` sets `offscreenPageLimit(1)` so both viewports are laid
   out from the first frame. The page still refits to any size (`ResizeObserver` calling `fit()`).
 - **Touch forwarding:** `PetViewport` hands its touches to `PetStage` while its page is resumed and
@@ -944,9 +953,11 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
   `testImplementation` dependency. Tests can then call `AgentProfileLoader.parse(JSONObject)` on the
   real asset (unit tests run with `app/` as the working directory).
 - **Shared pet WebView:** the one WebView lives in `MainActivity`'s `pet_layer`, **behind** the
-  pager. Anything drawn over a pet viewport hides the pet: keep the pages and `pet_viewport` free of
-  backgrounds there (`bg_pet_viewport` is a stroke only). The WebView only gets touches forwarded by
-  `PetViewport`, so don't make the layer clickable or put the pager below it. It's created
+  pager at rest. Anything drawn over a pet viewport (or Chat's `chat_list`) hides the pet: keep the
+  pages, `pet_viewport` and `chat_list` free of backgrounds there (`bg_pet_viewport` is a stroke only).
+  While scrolling `PetStage` raises the layer *above* the pager, so `PetLayer.dispatchTouchEvent` must
+  keep returning false: touches then fall through to the pager. The WebView only gets touches
+  forwarded by `PetViewport`, so don't make the layer clickable. It's created
   with the viewport's (activity) context, so `PetStage` lives in `MainActivity` and is released
   in its `onDestroy`. Never hold it in a ViewModel or `AppContainer`: that would leak the activity.
 - **WebView (Maniengine):** an `OnTouchListener` on a WebView triggers lint
@@ -1177,8 +1188,11 @@ Debug helpers:
      the finger, into the preview card, its corners rounding as it goes, while the health bar slides
      away with Pets. It rises steadily as it shrinks (no dip halfway) and nothing moves when the swipe
      settles. Reverse the swipe halfway: it grows back. Tapping the Customise or Pets tab, and
-     Chat → Customise, animate the same way. Pets → Chat: the pet slides away with Pets, and no pet
-     shows through Chat. The health bar and Usage Access card draw over the pet; the Customise border
+     Chat → Customise, animate the same way. While swiping, the pet draws **over** the pages (slot
+     tabs, item grid, chat bubbles), and drops behind them once the swipe settles. Pets → Chat: the pet
+     stays centred, settles a little lower, refits above the input bar and fades to about 20%; on Chat
+     it keeps animating behind the bubbles, and the chat scrolls and types normally. Chat → Stats: the
+     faint pet slides away with Chat. The health bar and Usage Access card draw over the pet; the Customise border
      sits on the pet's edge. After any transition, turning, pinching and flicking the pet to change tab
      still work on both pages, and the item circles and Usage Access button still respond.
    - the selected slot tab and the current page survive rotation;
@@ -1292,8 +1306,9 @@ Known gaps and TODOs (not assigned to anyone yet):
 - To change HP for manual testing, use the debug panel (long-press the Pets tab). To start over,
   use the hidden reset (long-press the Wardrobe tab, or the panel). Whether it keeps Usage Access and
   the notification permission hasn't been checked on a device.
-- The stationary pet layer (the Pets ↔ Customise shrink, touch forwarding) is verified on the page
-  side (headless Edge) and by unit tests only; watch on a device for the frame trailing the finger
+- The stationary pet layer (the Pets ↔ Customise shrink, the Pets ↔ Chat fade, raising the layer
+  over the pages while scrolling, touch forwarding) is verified on the page side (headless Edge) and
+  by unit tests only; watch on a device for the frame trailing the finger
   (`evaluateJavascript` is asynchronous) and for touches on the pet (turn, pinch, flick to change tab).
 - No instrumented/UI tests yet. JVM tests only (`model`, `doomscroll`, `chat`, `maniengine`, `viewmodel`, `repository`, `stats`, `ui`).
 - Stats: token counts are those the provider reports (failed attempts aren't counted); there's no

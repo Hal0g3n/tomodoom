@@ -5,9 +5,11 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <!-- The pet (PetStage), behind the pages: they are transparent over their pet viewports, so it
-         shows through, and the Pets cards draw over it. Declared first so it is drawn below the
-         pager; the same size. It takes no touches itself (the viewports forward theirs). -->
+    <!-- The pet (PetStage), behind the pages at rest: they are transparent over their pet viewports
+         (and Chat's backdrop), so it shows through, and the Pets cards draw over it. Declared first
+         so it is drawn below the pager; while the pager scrolls, PetStage raises its translationZ
+         so the pet moves over the pages. The same size. It takes no touches itself (the viewports
+         forward theirs), so the pager gets them even while it is raised. -->
     <com.example.tomodoom.ui.PetLayer
         android:id="@+id/pet_layer"
         android:layout_width="0dp"
