@@ -1,4 +1,4 @@
-package com.example.tomodoom.trufar;
+package com.example.tomodoom.chat;
 
 import androidx.annotation.NonNull;
 

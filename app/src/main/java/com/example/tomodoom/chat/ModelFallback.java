@@ -1,4 +1,4 @@
-package com.example.tomodoom.trufar;
+package com.example.tomodoom.chat;
 
 import androidx.annotation.NonNull;
 
@@ -31,7 +31,7 @@ final class ModelFallback {
     }
 
     /**
-     * Splits the {@code TRUFAR_LLM_MODEL} value: a comma-separated list, primary first.
+     * Splits the {@code GEMINI_MODELS} value: a comma-separated list, primary first.
      * Blanks and duplicates are dropped; an empty value gives an empty list (keep the export's
      * model).
      */

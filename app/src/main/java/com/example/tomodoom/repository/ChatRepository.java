@@ -10,7 +10,7 @@ import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 
 import com.example.tomodoom.contracts.McpPetActionHandler;
-import com.example.tomodoom.contracts.TruFarChatService;
+import com.example.tomodoom.contracts.ChatService;
 import com.example.tomodoom.model.ChatMessage;
 import com.example.tomodoom.model.McpToolResult;
 import com.example.tomodoom.model.QuizEvaluation;
@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * App-scoped owner of the chat session. It keeps the transcript (in memory) and routes
- * {@link TruFarChatService} events, including passed quizzes and backend tool calls, to the
+ * {@link ChatService} events, including passed quizzes and backend tool calls, to the
  * {@link McpPetActionHandler}.
  *
  * <p>Because it is app-scoped, the transcript and quiz state survive tab switches and
@@ -42,7 +42,7 @@ public final class ChatRepository {
     static final int MAX_TRANSCRIPT_SIZE = 500;
 
     @NonNull
-    private final TruFarChatService chatService;
+    private final ChatService chatService;
     @NonNull
     private final McpPetActionHandler mcpHandler;
 
@@ -55,7 +55,7 @@ public final class ChatRepository {
     private final MutableLiveData<QuizPrompt> activeQuizLiveData = new MutableLiveData<>(null);
     private final AtomicBoolean started = new AtomicBoolean(false);
 
-    public ChatRepository(@NonNull TruFarChatService chatService, @NonNull McpPetActionHandler mcpHandler) {
+    public ChatRepository(@NonNull ChatService chatService, @NonNull McpPetActionHandler mcpHandler) {
         this.chatService = chatService;
         this.mcpHandler = mcpHandler;
         chatService.setListener(new ServiceListener());
@@ -143,7 +143,7 @@ public final class ChatRepository {
     }
 
     /** Receives service callbacks on arbitrary threads. */
-    private final class ServiceListener implements TruFarChatService.Listener {
+    private final class ServiceListener implements ChatService.Listener {
 
         @Override
         public void onBotMessage(@NonNull String text) {
@@ -186,8 +186,8 @@ public final class ChatRepository {
 
         @Override
         public void onError(@NonNull Throwable error) {
-            Log.w(TAG, "TruFar error", error);
-            append(ChatMessage.system("⚠ TruFar error: " + error.getMessage()));
+            Log.w(TAG, "chat error", error);
+            append(ChatMessage.system("⚠ Chat error: " + error.getMessage()));
         }
     }
 }

@@ -5,10 +5,10 @@ plugins {
 fun buildConfigString(value: String): String =
     "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
-// OpenAI-compatible endpoint that runs the bundled TruFar agent (Kafka); see CLAUDE.md §5.2.
-val trufarLlmUrl = providers.gradleProperty("TRUFAR_LLM_URL").orElse("").get()
-val trufarLlmApiKey = providers.gradleProperty("TRUFAR_LLM_API_KEY").orElse("").get()
-val trufarLlmModel = providers.gradleProperty("TRUFAR_LLM_MODEL").orElse("").get()
+// Gemini (OpenAI-compatible endpoint) running the bundled agent personas; see CLAUDE.md §5.2.
+val geminiApiUrl = providers.gradleProperty("GEMINI_API_URL").orElse("").get()
+val geminiApiKey = providers.gradleProperty("GEMINI_API_KEY").orElse("").get()
+val geminiModels = providers.gradleProperty("GEMINI_MODELS").orElse("").get()
 
 android {
     namespace = "com.example.tomodoom"
@@ -22,9 +22,9 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", "TRUFAR_LLM_URL", buildConfigString(trufarLlmUrl))
-        buildConfigField("String", "TRUFAR_LLM_API_KEY", buildConfigString(trufarLlmApiKey))
-        buildConfigField("String", "TRUFAR_LLM_MODEL", buildConfigString(trufarLlmModel))
+        buildConfigField("String", "GEMINI_API_URL", buildConfigString(geminiApiUrl))
+        buildConfigField("String", "GEMINI_API_KEY", buildConfigString(geminiApiKey))
+        buildConfigField("String", "GEMINI_MODELS", buildConfigString(geminiModels))
     }
 
     buildTypes {

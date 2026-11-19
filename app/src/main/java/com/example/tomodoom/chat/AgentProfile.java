@@ -1,10 +1,10 @@
-package com.example.tomodoom.trufar;
+package com.example.tomodoom.chat;
 
 import androidx.annotation.NonNull;
 
 /**
- * Immutable description of a TruFar agent (persona prompt and model settings), loaded from an
- * exported agent config such as {@code assets/trufar/kafka_agent.json} by
+ * Immutable description of a chat agent (persona prompt and model settings), loaded from an
+ * exported agent config such as {@code assets/agents/kafka_agent.json} by
  * {@link AgentProfileLoader}. Pure Java.
  */
 public final class AgentProfile {

@@ -20,7 +20,7 @@ and acceptance criteria are in the section listed.
 | The task mentions… | Your role | Read | You mainly touch |
 |---|---|---|---|
 | pet rendering, sprites, animation, clothes/accessory art, assets, the pet viewport, `AccessoryCatalog`, "Maniengine" | **Maniengine Agent** | §4 `ManiengineAssetRenderer`, §5.1 | new package `com.example.tomodoom.maniengine`, `model/AccessoryCatalog`, assets |
-| chatbot, TruFar, LLM, backend, quizzes, MCP tools, chat networking | **TruFar/MCP Agent** | §4 `TruFarChatService` + `McpPetActionHandler`, §5.2 | new package `com.example.tomodoom.trufar` (and/or `.mcp`), manifest INTERNET permission |
+| chatbot, Gemini, LLM, personas, quizzes, MCP tools, chat networking | **Chat/MCP Agent** | §4 `ChatService` + `McpPetActionHandler`, §5.2 | new package `com.example.tomodoom.chat` (and/or `.mcp`), manifest INTERNET permission |
 | doomscroll detection, usage stats, accessibility service, screen-time tracking, monitoring permissions | **Doom Scroll Agent** | §4 `DoomScrollMonitor`, §5.3 | new package `com.example.tomodoom.doomscroll`, manifest, permission UI on Pets |
 | anything else: UI polish, new screens, bug fixes, refactors, tests, build config, docs | **Core Agent** | §2, §3, §6 | the existing packages, following the dependency rules in §2 |
 
@@ -86,12 +86,12 @@ virtual pet whose **HP** reflects your digital habits:
 | Event | Effect | Subsystem |
 |---|---|---|
 | A doom-scroll session is detected | Pet **loses** HP | Doom Scroll monitor |
-| You pass a quiz from the TruFar chatbot | Pet **gains** HP (applied via an MCP tool) | TruFar chat + MCP bridge |
+| You pass a quiz from the chatbot | Pet **gains** HP (applied via an MCP tool) | Gemini chat + MCP bridge |
 | You equip clothes or accessories | The pet's look changes | Maniengine renderer |
 
 The app has three bottom-navigation tabs, left to right: **Customise** (live pet preview + slot tabs
 and a grid of item circles), **Pets** (HP and the pet viewport; the default page on launch) and **Chat**
-(TruFar chatbot + quizzes). There is no action bar on any tab. The bottom bar shows icons only: the
+(Gemini chatbot + quizzes). There is no action bar on any tab. The bottom bar shows icons only: the
 open tab widens, shows its label and enlarges its icon.
 
 ### Tech stack (fixed — don't change it without updating this file)
@@ -135,29 +135,29 @@ com.example.tomodoom
 │
 ├── contracts/                    Interfaces that downstream agents implement (see §4)
 │   ├── ManiengineAssetRenderer
-│   ├── TruFarChatService         (+ nested TruFarChatService.Listener)
+│   ├── ChatService         (+ nested ChatService.Listener)
 │   ├── McpPetActionHandler
 │   ├── DoomScrollMonitor
 │   └── DoomScrollListener
 │
 ├── repository/                   Reactive state holders and domain glue
 │   ├── PetStateRepository        SINGLE SOURCE OF TRUTH for pet state (SharedPreferences + LiveData)
-│   ├── ChatRepository            app-scoped chat transcript; routes TruFar events → MCP handler
+│   ├── ChatRepository            app-scoped chat transcript; routes chat events → MCP handler
 │   └── DoomScrollHpBridge        DoomScrollListener → PetStateRepository.decreaseHp(...)
 │
 ├── stubs/                        Stubs and default implementations of the contracts
 │   ├── PlaceholderManiengineRenderer   text-only placeholder in the pet viewport
-│   ├── MockTruFarChatService           echo bot + scripted quiz flow + /tool debug command
+│   ├── MockChatService                 echo bot + scripted quiz flow + /tool debug command
 │   ├── DefaultMcpPetActionHandler      REAL implementation wired to PetStateRepository
 │   └── StubDoomScrollMonitor           no-op monitor with a debug trigger
 │
-├── trufar/                       TruFar/MCP Agent: real chat clients (§5.2)
-│   ├── OpenAiCompatibleChatService   runs the Kafka agent export on any OpenAI-compatible endpoint
-│   ├── AgentProfile, AgentProfileLoader   TruFar agent export (assets/trufar/*.json) → persona + model settings
+├── chat/                         Chat/MCP Agent: the Gemini chat client (§5.2)
+│   ├── GeminiChatService         runs the agent export on Gemini's OpenAI-compatible endpoint
+│   ├── AgentProfile, AgentProfileLoader   agent export (assets/agents/*.json) → persona + model settings
 │   ├── QuizMarkerParser          pure Java: strips [[CORRECT]]/[[WRONG]] grading markers from replies
 │   ├── ChatHistoryWindow         pure Java: last-N-turns conversation memory
 │   ├── ModelFallback             pure Java: model list parsing + retry/fallback policy for overloaded LLMs
-│   └── JsonHttpClient            package-private HTTPS + JSON helper shared by both clients;
+│   └── JsonHttpClient            package-private HTTPS + JSON helper used by GeminiChatService;
 │                                 non-2xx → HttpStatusException (an IOException with the status code)
 │
 ├── maniengine/                   Maniengine Agent: the HTML (3D) pet page in a WebView (§5.1)
@@ -205,7 +205,7 @@ floating over it; both cards are transparent),
 `activity_main.xml` (`main_pager` ViewPager2 + `nav_view`), `activity_onboarding.xml` (title,
 `pet_name_layout`/`pet_name_input`, `start_button`), `res/menu/bottom_nav_menu.xml`.
 `res/values/dimens.xml` (`pet_viewport_stroke`).
-Assets: `assets/trufar/kafka_agent.json` (the Kafka TruFar agent export, icon stripped; §5.2),
+Assets: `assets/agents/kafka_agent.json` (the Kafka agent export from the TruFar editor, icon stripped; §5.2),
 `assets/maniengine/index.html` (the pet page, §5.1), `pet-scene.js` (model setup + add-ons, shared with the
 thumbnail tool), `pet-model.js` (GENERATED from the scene-3 export) and `vendor/three/` (three.js 0.187.0).
 Tools: `tools/maniengine/extract_model.py` (+ `source/scene-3.html`), `make_thumbnails.py` (+ `thumbnails.html`).
@@ -234,7 +234,7 @@ ui  ──►  viewmodel  ──►  repository  ──►  contracts  ◄──
                               ChatRepository.sendUserMessage()
                                          │  (active quiz? → submitQuizAnswer : sendMessage)
                                          ▼
-                              TruFarChatService  (Mock now, real TruFar later)
+                              ChatService  (Gemini, or the offline mock)
                                          │  Listener callbacks — ANY thread
                                          ▼
                               ChatRepository.onQuizEvaluated(passed)
@@ -284,7 +284,7 @@ ui  ──►  viewmodel  ──►  repository  ──►  contracts  ◄──
 | Repositories publish **only with `postValue()`, called while holding the repository lock**, and **never** call `setValue()` | Mixing the two lets an older pending `postValue` overwrite a newer `setValue`. With all posts under one lock, the last value delivered is always the newest snapshot |
 | A consequence of the above: right after a mutation, `getPetState().getValue()` may be one frame stale | Use `getCurrentState()` (or the mutator's return value) when you need the value straight away |
 | SharedPreferences writes use `apply()`, never `commit()` | `apply()` updates memory synchronously and writes to disk asynchronously, so the caller never blocks |
-| Contract callbacks (`TruFarChatService.Listener`, `DoomScrollListener`) **may arrive on any thread** | Consumers (repositories) are thread-safe. UI code only sees LiveData, which is always delivered on the main thread |
+| Contract callbacks (`ChatService.Listener`, `DoomScrollListener`) **may arrive on any thread** | Consumers (repositories) are thread-safe. UI code only sees LiveData, which is always delivered on the main thread |
 | `DoomScrollMonitor.startFromForeground()` is **main-thread only**, called while the app is visible | Android 12+ blocks starting a foreground service from the background |
 | `ManiengineAssetRenderer` methods are **main-thread only** | They touch views. Do decoding/loading on a background thread inside the implementation, then post back to the main thread |
 | Don't block the main thread: no network or disk I/O apart from the repositories' first prefs load | ANR safety |
@@ -293,7 +293,7 @@ ui  ──►  viewmodel  ──►  repository  ──►  contracts  ◄──
 ### 3.3 Other state
 
 - `ChatRepository` keeps the chat transcript **in memory only** (it survives tab switches and
-  rotation, but not process death). Persisting it is up to the TruFar agent, if needed.
+  rotation, but not process death). Persisting it is up to the Chat/MCP agent, if needed.
 - ViewModels hold only UI state (e.g. the selected customisation tab). Domain state lives in
   repositories.
 
@@ -304,8 +304,8 @@ ui  ──►  viewmodel  ──►  repository  ──►  contracts  ◄──
 | Interface | Implementation (stub in `stubs`) | Owner agent | Where it's wired |
 |---|---|---|---|
 | `ManiengineAssetRenderer` | `maniengine.HtmlManiengineRenderer` (stub: `PlaceholderManiengineRenderer`) | **Maniengine Agent** | `AppContainer.createAssetRenderer()` (factory: one instance per `MainActivity`, held by `ui.PetStage`) |
-| `TruFarChatService` | `MockTruFarChatService` | **TruFar/MCP Agent** | `AppContainer` constructor, `// SWAP POINT (TruFar/MCP Agent)` |
-| `McpPetActionHandler` | `DefaultMcpPetActionHandler` (production-capable) | **TruFar/MCP Agent** | `AppContainer` constructor, `// SWAP POINT (TruFar/MCP Agent)` |
+| `ChatService` | `MockChatService` | **Chat/MCP Agent** | `AppContainer` constructor, `// SWAP POINT (Chat/MCP Agent)` |
+| `McpPetActionHandler` | `DefaultMcpPetActionHandler` (production-capable) | **Chat/MCP Agent** | `AppContainer` constructor, `// SWAP POINT (Chat/MCP Agent)` |
 | `DoomScrollMonitor` (+ `DoomScrollListener`) | `StubDoomScrollMonitor` | **Doom Scroll Agent** | `AppContainer` constructor, `// SWAP POINT (Doom Scroll Agent)` |
 
 The full Javadoc on each interface is normative. What follows is a summary.
@@ -336,7 +336,7 @@ The full Javadoc on each interface is normative. What follows is a summary.
 - The asset format is **HTML**: Maniengine exports a 3D scene as a web page, which
   `HtmlManiengineRenderer` shows (§5.1). Nothing outside the renderer may depend on that.
 
-### `TruFarChatService`
+### `ChatService`
 ```java
 void setListener(@Nullable Listener listener);
 void connect();      void disconnect();      boolean isConnected();
@@ -500,26 +500,26 @@ How the page is hosted (`HtmlManiengineRenderer`):
   or switching tabs doesn't leak views (`release` cleans up). Nothing happens off the main thread
   in `render`. The export loads offline from `assets/maniengine/` and reacts to `tomodoom:petstate`.
 
-### 5.2 TruFar/MCP Agent — chatbot backend & MCP tool bridge
-- **Implement:** `contracts.TruFarChatService` (network client) and, optionally, extend
+### 5.2 Chat/MCP Agent — Gemini chatbot & MCP tool bridge
+- **Implement:** `contracts.ChatService` (network client) and, optionally, extend
   `stubs.DefaultMcpPetActionHandler` or replace it with your own `contracts.McpPetActionHandler`.
-- **Replace:** `stubs.MockTruFarChatService` (and optionally the handler) in `AppContainer`.
+- **Replace:** `stubs.MockChatService` (and optionally the handler) in `AppContainer`.
 - **Must:** deliver `QuizPrompt`s via `onQuizPrompt`, evaluate answers from `submitQuizAnswer`
   and report the result via `onQuizEvaluated` (with `hpReward` set when passed). Advertise the
   tools in `getSupportedToolNames()` to the model, and forward model tool calls through
   `Listener.onToolCallRequested` (call it off the main thread), sending the returned
-  `McpToolResult` back to the backend.
+  `McpToolResult` back to the model.
 - **Must not:** call `PetStateRepository` directly from the chat service. HP changes always go
   through `McpPetActionHandler`, which keeps the anti-replay and award caps in one place.
 - **Network:** add `<uses-permission android:name="android.permission.INTERNET"/>` to the manifest
   when you add networking. Do I/O on your own executor.
-- **Acceptance:** the manual E2E script in §8 passes against the real backend. No main-thread
+- **Acceptance:** the manual E2E script in §8 passes against the real Gemini API. No main-thread
   network. Errors show up as SYSTEM messages via `onError`.
 
 #### Kafka agent (the chatbot in use)
 
 The chatbot is **Kafka**, a TruFar agent exported from the TruFar editor as JSON. The export is
-bundled as `assets/trufar/kafka_agent.json`, a copy of the export without the base64 icon. To
+bundled as `assets/agents/kafka_agent.json`, a copy of the export without the base64 icon. To
 change the bot, edit or replace that file; no code change is needed. `AgentProfileLoader` reads:
 - `agent_basic_info.name`
 - `config.pre_prompt` (the persona)
@@ -538,9 +538,9 @@ Set these Gradle properties in the untracked `~/.gradle/gradle.properties` (neve
 
 | Property | Meaning |
 |---|---|
-| `TRUFAR_LLM_URL` | HTTPS base URL; `/chat/completions` is appended. In use: `https://generativelanguage.googleapis.com/v1beta/openai` (Gemini) |
-| `TRUFAR_LLM_API_KEY` | bearer token. For Gemini, a free key from aistudio.google.com/apikey (no card). It's compiled into the APK: dev/testing only; never ship a long-lived production key in a mobile app |
-| `TRUFAR_LLM_MODEL` | optional; overrides the export's model name (`deepseek-v4-pro`). May be a **comma-separated list**: the primary first, then fallbacks for when it's overloaded. In use: `gemini-3.1-flash-lite,gemini-flash-lite-latest,gemini-3.5-flash` |
+| `GEMINI_API_URL` | HTTPS base URL; `/chat/completions` is appended. In use: `https://generativelanguage.googleapis.com/v1beta/openai` (Gemini) |
+| `GEMINI_API_KEY` | bearer token. For Gemini, a free key from aistudio.google.com/apikey (no card). It's compiled into the APK: dev/testing only; never ship a long-lived production key in a mobile app |
+| `GEMINI_MODELS` | optional; overrides the export's model name (`deepseek-v4-pro`). May be a **comma-separated list**: the primary first, then fallbacks for when it's overloaded. In use: `gemini-3.1-flash-lite,gemini-flash-lite-latest,gemini-3.5-flash` |
 
 Gemini was verified with the real persona (2026-11-19):
 - `gemini-3.1-flash-lite` answers in ~2 s. It greets in character and grades both ways
@@ -551,10 +551,10 @@ Gemini was verified with the real persona (2026-11-19):
   404 for this key.
 - List the models available to a key with `GET {base}/models`.
 
-`AppContainer` uses `OpenAiCompatibleChatService` when `TRUFAR_LLM_URL` is set, otherwise
-`MockTruFarChatService` (offline demo).
+`AppContainer` uses `GeminiChatService` when `GEMINI_API_URL` is set, otherwise
+`MockChatService` (offline demo).
 
-How `OpenAiCompatibleChatService` behaves:
+How `GeminiChatService` behaves:
 - `connect()` loads the asset on the worker thread. It then sends the hidden user turn `__START__`,
   which the persona prompt answers with Kafka's greeting. `__START__` never appears in the transcript.
   Only an asset-load failure leaves the service disconnected. If the greeting request fails, the
@@ -568,13 +568,13 @@ How `OpenAiCompatibleChatService` behaves:
   - A timeout skips straight to the next model, because a hanging model costs a full 90 s read
     timeout per try.
   - 400/401/403/404 fail at once, so a bad key or model name is reported immediately.
-  - Retries are logged under `OpenAiChatService` (model and status only). The user sees an
+  - Retries are logged under `GeminiChatService` (model and status only). The user sees an
     error only if every attempt fails.
 - **HP / quiz protocol:** Kafka quizzes in free text, so the service never emits `QuizPrompt`s. The
   app appends `APP_PROTOCOL_PROMPT` to the persona, which asks the model to end any reply that grades
   an answer with `[[CORRECT]]` or `[[WRONG]]`. `QuizMarkerParser` strips the markers (it's lenient
   about case and brackets, and the last marker wins). A graded reply is delivered as
-  `onQuizEvaluated(quizId = "trufar-agent:<session UUID>:<n>", hpReward = CORRECT_ANSWER_HP = 10)`.
+  `onQuizEvaluated(quizId = "gemini-chat:<session UUID>:<n>", hpReward = CORRECT_ANSWER_HP = 10)`.
   `ChatRepository` shows it as one bot bubble and, when it passed, calls `onQuizPassed`, so the
   replay guard and cap still apply. Ungraded replies arrive through `onBotMessage`. A marker in the
   greeting is ignored.
@@ -701,18 +701,18 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
   lint warnings.
 - **Gemini free tier (the LLM in use):**
   - Popular models often return **503 "high demand"** or simply hang. That's why
-    `TRUFAR_LLM_MODEL` lists fallbacks and `ModelFallback` retries automatically; a single 503
-    used to surface as `⚠ TruFar error … HTTP 503` and, on the greeting, left the chat
+    `GEMINI_MODELS` lists fallbacks and `ModelFallback` retries automatically; a single 503
+    used to surface as `⚠ Chat error … HTTP 503` and, on the greeting, left the chat
     "not connected" until restart (fixed).
   - The free tier has rate limits, and some projects report "free tier unavailable". If every
     listed model fails, change the list (`GET {base}/models` shows what the key can use), or use
     another free OpenAI-compatible provider. No code change is needed either way.
   - Worst case with all models hanging is about 3 × 90 s before the error appears. Fast-failing
     503s are retried within seconds.
-  - Changing any `TRUFAR_LLM_*` property needs a rebuild and reinstall, because they're compiled
+  - Changing any `GEMINI_*` property needs a rebuild and reinstall, because they're compiled
     into `BuildConfig`.
 - **LLM-graded HP is persuadable:** a user can talk Kafka into emitting `[[CORRECT]]`. Each award
-  is bounded by `OpenAiCompatibleChatService.CORRECT_ANSWER_HP` (10) and the per-award cap, but
+  is bounded by `GeminiChatService.CORRECT_ANSWER_HP` (10) and the per-award cap, but
   there's no rate limit. Add one in the handler if it gets abused.
 - **org.json in JVM tests:** android.jar only has throwing stubs, so `org.json:json` is a
   `testImplementation` dependency. Tests can then call `AgentProfileLoader.parse(JSONObject)` on the
@@ -788,7 +788,7 @@ Requires **JDK 17** (Android Studio's bundled JBR works) and the Android SDK wit
 (`sdk.dir` in `local.properties`, which Android Studio generates and which is never committed).
 Some machines have no Android Studio or SDK; one known example has only a standalone JDK at
 `C:\Program Files\Eclipse Adoptium\jdk-17.0.16.8-hotspot`. There Gradle can't build, so the most
-you can do is a `javac --release 8 -Xlint:all -Werror` check of pure-Java/`trufar` code against
+you can do is a `javac --release 8 -Xlint:all -Werror` check of pure-Java/`chat` code against
 stubs, plus running the JUnit tests directly. Say so in the report.
 
 **macOS / Linux (JDK 17 on PATH, Linux/macOS SDK):**
@@ -858,7 +858,7 @@ Debug helpers available in the debug build:
 - **`StubDoomScrollMonitor.simulateDoomScroll(pkg, durationMs, penalty)`:** tests the
   monitor → listener path in code.
 - **Logcat tags:** `PetStateRepository` (every HP change with its reason), `ChatRepository`,
-  `DefaultMcpHandler`, `MockTruFarChatService`, `OpenAiChatService`, `StubDoomScrollMonitor`,
+  `DefaultMcpHandler`, `MockChatService`, `GeminiChatService`, `StubDoomScrollMonitor`,
   `HtmlManiengine` (WebView failures, missing assets).
 - **Maniengine page:** in a debug build, open `chrome://inspect` on a desktop Chrome with the
   device connected to inspect and live-edit the pet page.
@@ -900,12 +900,12 @@ Debug helpers available in the debug build:
 7. On **Customise**, equip an item and note the current HP.
 8. Kill and relaunch the app. HP and equipped items persist (SharedPreferences). Onboarding doesn't show again. The chat transcript resets (in memory only). To start over, clear the app's data in Android Settings.
 
-**Kafka (real LLM, Gemini in use)**: build with `TRUFAR_LLM_URL`/`TRUFAR_LLM_API_KEY`/`TRUFAR_LLM_MODEL` set (§5.2):
+**Kafka (real LLM, Gemini in use)**: build with `GEMINI_API_URL`/`GEMINI_API_KEY`/`GEMINI_MODELS` set (§5.2):
 
 9. Open **Chat**. Kafka sends a sarcastic three-sentence greeting asking for a topic. No `__START__` bubble appears.
 10. Name a topic and answer Kafka's question correctly. The reply shows no `[[…]]` marker, and a SYSTEM
     message shows **"+10 HP awarded via MCP!"**. A wrong answer gets a roast and no HP.
-11. Use a bad key or URL. A SYSTEM `⚠ TruFar error: … HTTP 401…` message appears and the app doesn't crash.
+11. Use a bad key or URL. A SYSTEM `⚠ Chat error: … HTTP 401…` message appears and the app doesn't crash.
 
 **Doom-scroll detection (real device, watched app installed):**
 
@@ -932,7 +932,7 @@ Update this table in the same commit when your task changes a subsystem's status
 | Chat UI | ✅ Skeleton done | `ChatFragment` / `ChatViewModel` / `ChatRepository` |
 | Pet rendering | ✅ scene-3 rabbit (three.js, offline) via the HTML/WebView pipeline; add-ons are primitive placeholders | `HtmlManiengineRenderer` + `assets/maniengine/` |
 | Item catalog | ⏳ Placeholder (6 hard-coded items: hats and accessories) | `AccessoryCatalog` → Maniengine Agent |
-| TruFar backend | ✅ Kafka persona on Google's free Gemini API (`gemini-3.1-flash-lite` with fallbacks, retries on 503/429/timeouts) via the in-app OpenAI-compatible client. It's verified from a PC; on a device, the first build hit a 503, and the fix is not yet re-tested there. Mock when unconfigured | `OpenAiCompatibleChatService` (`TRUFAR_LLM_URL`) / `MockTruFarChatService` |
+| Chatbot (Gemini) | ✅ Kafka persona on Google's free Gemini API (`gemini-3.1-flash-lite` with fallbacks, retries on 503/429/timeouts) via the in-app OpenAI-compatible client. It's verified from a PC; on a device, the first build hit a 503, and the fix is not yet re-tested there. Mock when unconfigured | `GeminiChatService` (`GEMINI_API_URL`) / `MockChatService` |
 | Doom-scroll detection | ✅ Usage Access polling in a foreground service; portrait only, 1 HP per minute, warnings every 10 minutes (not yet tested on a device) | `UsageStatsDoomScrollMonitor` |
 
 Known gaps and TODOs (not assigned to anyone yet):
@@ -942,4 +942,4 @@ Known gaps and TODOs (not assigned to anyone yet):
 - Nothing happens yet when HP reaches 0 beyond the "Fainted" status label.
 - The app has no built-in way to lower HP or reset the pet for manual testing. Use real doom-scroll
   detection, or clear the app's data to start over.
-- No instrumented/UI tests yet. JVM tests only (`model`, `doomscroll`, `trufar`, `maniengine`).
+- No instrumented/UI tests yet. JVM tests only (`model`, `doomscroll`, `chat`, `maniengine`).

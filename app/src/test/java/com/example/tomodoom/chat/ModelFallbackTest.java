@@ -1,4 +1,4 @@
-package com.example.tomodoom.trufar;
+package com.example.tomodoom.chat;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -100,10 +100,10 @@ public class ModelFallbackTest {
     public void httpStatusException_keepsTheUserFacingMessage() {
         HttpStatusException error = http(503);
         assertEquals(503, error.getStatusCode());
-        assertEquals("TruFar agent request failed with HTTP 503", error.getMessage());
+        assertEquals("Gemini request failed with HTTP 503", error.getMessage());
     }
 
     private static HttpStatusException http(int status) {
-        return new HttpStatusException(status, "TruFar agent request failed with HTTP " + status);
+        return new HttpStatusException(status, "Gemini request failed with HTTP " + status);
     }
 }

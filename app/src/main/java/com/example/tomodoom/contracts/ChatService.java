@@ -12,7 +12,7 @@ import com.example.tomodoom.model.QuizPrompt;
 import java.util.Map;
 
 /**
- * Contract for the <b>TruFar/MCP Agent</b>: client for the TruFar chatbot backend, which
+ * Contract for the <b>Chat/MCP Agent</b>: client for the chatbot (Gemini running the agent persona), which
  * converses with the user, issues structured quizzes, evaluates answers and may invoke the
  * app's MCP pet tools.
  *
@@ -39,9 +39,9 @@ import java.util.Map;
  *     HP through {@link McpPetActionHandler#onQuizPassed}.</li>
  * </ol>
  *
- * <p>Default implementation: {@code stubs.MockTruFarChatService}.</p>
+ * <p>Default implementation: {@code stubs.MockChatService}.</p>
  */
-public interface TruFarChatService {
+public interface ChatService {
 
     /**
      * Receives everything the backend produces. Callbacks may arrive on <b>any thread</b>, in
@@ -56,7 +56,7 @@ public interface TruFarChatService {
         /**
          * The bot asks a structured quiz question. Until the matching
          * {@link #onQuizEvaluated} arrives, the user's next message is routed to
-         * {@link TruFarChatService#submitQuizAnswer(String, String)}. A new prompt replaces
+         * {@link ChatService#submitQuizAnswer(String, String)}. A new prompt replaces
          * any previously active one.
          */
         @AnyThread

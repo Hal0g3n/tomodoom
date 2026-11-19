@@ -1,4 +1,4 @@
-package com.example.tomodoom.trufar;
+package com.example.tomodoom.chat;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
@@ -19,7 +19,7 @@ import java.nio.file.Files;
 public class AgentProfileTest {
 
     /** Unit tests run with the module directory ({@code app/}) as working directory. */
-    private static final File KAFKA_ASSET = new File("src/main/assets/trufar/kafka_agent.json");
+    private static final File KAFKA_ASSET = new File("src/main/assets/agents/kafka_agent.json");
 
     @Test
     public void bundledKafkaConfig_parsesWithExportedSettings() throws Exception {

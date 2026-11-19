@@ -33,14 +33,14 @@ public class ManiengineAssetsTest {
                 "/assets/maniengine/index.html"));
         assertNull(ManiengineAssets.assetPathFor("https", "example.com",
                 "/assets/maniengine/index.html"));
-        assertNull(resolve("/assets/trufar/kafka_agent.json"));
+        assertNull(resolve("/assets/agents/kafka_agent.json"));
         assertNull(resolve("/res/maniengine/index.html"));
         assertNull(resolve(null));
     }
 
     @Test
     public void rejectsTraversalAndOddSegments() {
-        assertNull(resolve("/assets/maniengine/../trufar/kafka_agent.json"));
+        assertNull(resolve("/assets/maniengine/../agents/kafka_agent.json"));
         assertNull(resolve("/assets/maniengine/./index.html"));
         assertNull(resolve("/assets/maniengine//index.html"));
         assertNull(resolve("/assets/maniengine/a\\b.js"));

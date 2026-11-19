@@ -16,7 +16,7 @@ public final class ChatMessage {
     public enum Type {
         /** Typed by the user. */
         USER,
-        /** Produced by the TruFar chatbot (including quiz prompts and feedback). */
+        /** Produced by the chatbot (including quiz prompts and feedback). */
         BOT,
         /** App/system notices, e.g. MCP tool results ("+10 HP awarded via MCP!") or errors. */
         SYSTEM

@@ -1,4 +1,4 @@
-package com.example.tomodoom.trufar;
+package com.example.tomodoom.chat;
 
 import android.content.Context;
 import android.util.Log;
@@ -8,7 +8,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.WorkerThread;
 
-import com.example.tomodoom.contracts.TruFarChatService;
+import com.example.tomodoom.contracts.ChatService;
 import com.example.tomodoom.model.QuizEvaluation;
 
 import org.json.JSONArray;
@@ -24,9 +24,10 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Runs a TruFar agent export (e.g. Kafka, {@code assets/trufar/kafka_agent.json}) against any
- * OpenAI-compatible {@code POST /chat/completions} endpoint: the agent's {@code pre_prompt} becomes
- * the system prompt, with its model, temperature and memory window.
+ * Runs an agent export (e.g. Kafka, {@code assets/agents/kafka_agent.json}) on Google Gemini
+ * through its OpenAI-compatible {@code POST /chat/completions} endpoint (any compatible endpoint
+ * works): the agent's {@code pre_prompt} becomes the system prompt, with its model, temperature
+ * and memory window.
  *
  * <h3>Quizzes and HP</h3>
  * The agent quizzes the user in free text, so no {@code QuizPrompt}s are emitted. Instead,
@@ -41,9 +42,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Public methods return immediately. Asset loading, network I/O and every listener callback run
  * on a private serial worker; the conversation state below is confined to that worker.
  */
-public final class OpenAiCompatibleChatService implements TruFarChatService {
+public final class GeminiChatService implements ChatService {
 
-    private static final String TAG = "OpenAiChatService";
+    private static final String TAG = "GeminiChatService";
     /** LLM completions (especially reasoning models) can take a while. */
     private static final int READ_TIMEOUT_MILLIS = 90_000;
     private static final String COMPLETIONS_PATH = "/chat/completions";
@@ -73,7 +74,7 @@ public final class OpenAiCompatibleChatService implements TruFarChatService {
     private final JsonHttpClient http;
     @NonNull
     private final ExecutorService worker = Executors.newSingleThreadExecutor(r -> {
-        Thread thread = new Thread(r, "trufar-agent-chat");
+        Thread thread = new Thread(r, "gemini-chat");
         thread.setDaemon(true);
         return thread;
     });
@@ -94,14 +95,14 @@ public final class OpenAiCompatibleChatService implements TruFarChatService {
 
     /**
      * @param context        any context; only the application context is kept.
-     * @param agentAssetPath TruFar agent export inside {@code assets/}.
+     * @param agentAssetPath agent export inside {@code assets/}.
      * @param baseUrl        HTTPS base URL; {@value #COMPLETIONS_PATH} is appended.
      * @param apiKey         bearer token; may be empty for gateways without auth.
      * @param modelOverride  model to use instead of the export's, or a comma-separated list
      *                       (primary first, then fallbacks for when it is overloaded); empty keeps
      *                       the export's model.
      */
-    public OpenAiCompatibleChatService(@NonNull Context context,
+    public GeminiChatService(@NonNull Context context,
                                        @NonNull String agentAssetPath,
                                        @NonNull String baseUrl,
                                        @NonNull String apiKey,
@@ -112,7 +113,7 @@ public final class OpenAiCompatibleChatService implements TruFarChatService {
         this.modelOverride = models.isEmpty() ? "" : models.get(0);
         this.fallbackModels = models.size() > 1 ? models.subList(1, models.size())
                 : Collections.<String>emptyList();
-        this.http = new JsonHttpClient(baseUrl, apiKey, "TruFar agent", READ_TIMEOUT_MILLIS);
+        this.http = new JsonHttpClient(baseUrl, apiKey, "Gemini", READ_TIMEOUT_MILLIS);
     }
 
     @AnyThread
@@ -187,7 +188,7 @@ public final class OpenAiCompatibleChatService implements TruFarChatService {
         }
         worker.execute(() -> {
             if (!connected) {
-                reportError(new IllegalStateException("TruFar agent is not connected"));
+                reportError(new IllegalStateException("Gemini chat is not connected"));
                 return;
             }
             try {
@@ -218,7 +219,7 @@ public final class OpenAiCompatibleChatService implements TruFarChatService {
         AgentProfile currentProfile = profile;
         ChatHistoryWindow currentHistory = history;
         if (currentProfile == null || currentHistory == null) {
-            throw new IOException("TruFar agent is not connected");
+            throw new IOException("Gemini chat is not connected");
         }
         List<String> plan = ModelFallback.attemptPlan(currentProfile.getModel(), fallbackModels);
         String reply = null;
@@ -234,7 +235,7 @@ public final class OpenAiCompatibleChatService implements TruFarChatService {
                     Log.i(TAG, "attempt " + (attempt + 1) + " succeeded with " + model);
                 }
             } catch (JSONException exception) {
-                throw new IOException("TruFar agent returned an invalid response", exception);
+                throw new IOException("Gemini returned an invalid response", exception);
             } catch (IOException exception) {
                 int next = ModelFallback.nextAttemptIndex(plan, attempt, exception);
                 if (next < 0) {
@@ -259,7 +260,7 @@ public final class OpenAiCompatibleChatService implements TruFarChatService {
             Thread.sleep(delay);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
-            throw new IOException("TruFar agent request was interrupted", exception);
+            throw new IOException("Gemini request was interrupted", exception);
         }
     }
 
@@ -327,7 +328,7 @@ public final class OpenAiCompatibleChatService implements TruFarChatService {
             return;
         }
         gradedAnswerCount++;
-        String quizId = "trufar-agent:" + sessionId + ":" + gradedAnswerCount;
+        String quizId = "gemini-chat:" + sessionId + ":" + gradedAnswerCount;
         boolean passed = result.getVerdict() == QuizMarkerParser.Verdict.CORRECT;
         currentListener.onQuizEvaluated(
                 new QuizEvaluation(quizId, passed, CORRECT_ANSWER_HP, result.getText()));
@@ -335,12 +336,12 @@ public final class OpenAiCompatibleChatService implements TruFarChatService {
 
     @AnyThread
     private void reportNotConnected() {
-        worker.execute(() -> reportError(new IllegalStateException("TruFar agent is not connected")));
+        worker.execute(() -> reportError(new IllegalStateException("Gemini chat is not connected")));
     }
 
     @AnyThread
     private void reportError(@NonNull Throwable error) {
-        Log.w(TAG, "TruFar agent request failed", error);
+        Log.w(TAG, "Gemini request failed", error);
         Listener currentListener = listener;
         if (currentListener != null) {
             currentListener.onError(error);

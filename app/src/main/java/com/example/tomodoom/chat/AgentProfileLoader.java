@@ -1,4 +1,4 @@
-package com.example.tomodoom.trufar;
+package com.example.tomodoom.chat;
 
 import android.content.Context;
 
@@ -14,8 +14,8 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Reads a TruFar agent export (the JSON downloaded from the TruFar agent editor) from the APK
- * assets. Disk I/O: call it off the main thread.
+ * Reads an agent export (the JSON downloaded from the TruFar agent editor, the only TruFar
+ * piece still used) from the APK assets. Disk I/O: call it off the main thread.
  *
  * <p>Fields used: {@code agent_basic_info.name}, {@code config.pre_prompt},
  * {@code config.model.name}, {@code config.model.params.temperature},

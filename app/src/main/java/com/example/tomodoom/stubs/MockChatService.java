@@ -8,7 +8,7 @@ import androidx.annotation.Nullable;
 import androidx.annotation.WorkerThread;
 
 import com.example.tomodoom.contracts.McpPetActionHandler;
-import com.example.tomodoom.contracts.TruFarChatService;
+import com.example.tomodoom.contracts.ChatService;
 import com.example.tomodoom.model.McpToolResult;
 import com.example.tomodoom.model.QuizEvaluation;
 import com.example.tomodoom.model.QuizPrompt;
@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Local stand-in for the TruFar backend, so the chat UI and the quiz → MCP → HP loop can be
+ * Local stand-in for the Gemini chatbot, so the chat UI and the quiz → MCP → HP loop can be
  * tested without a network.
  *
  * <h3>Behaviour</h3>
@@ -41,9 +41,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * short simulated latency. That deliberately exercises the "callbacks on any thread" contract.
  * Mutable fields other than {@link #listener} are confined to that thread.
  */
-public final class MockTruFarChatService implements TruFarChatService {
+public final class MockChatService implements ChatService {
 
-    private static final String TAG = "MockTruFarChatService";
+    private static final String TAG = "MockChatService";
     private static final long REPLY_DELAY_MS = 400L;
     static final int QUIZ_HP_REWARD = 10;
 
@@ -79,7 +79,7 @@ public final class MockTruFarChatService implements TruFarChatService {
     };
 
     private final ScheduledExecutorService worker = Executors.newSingleThreadScheduledExecutor(r -> {
-        Thread t = new Thread(r, "mock-trufar");
+        Thread t = new Thread(r, "mock-chat");
         t.setDaemon(true);
         return t;
     });
@@ -104,7 +104,7 @@ public final class MockTruFarChatService implements TruFarChatService {
             runLater(() -> {
                 Listener l = listener;
                 if (l != null) {
-                    l.onBotMessage("Hi! I'm TruFar (mock). Type \"quiz\" to earn HP for your pet, "
+                    l.onBotMessage("Hi! I'm the mock chatbot. Type \"quiz\" to earn HP for your pet, "
                             + "or \"help\" for more commands.");
                 }
             });
@@ -157,7 +157,7 @@ public final class MockTruFarChatService implements TruFarChatService {
         if (lower.startsWith("/tool")) {
             handleToolCommand(l, text.trim());
         } else if (lower.equals("help") || lower.equals("/help")) {
-            l.onBotMessage("Mock TruFar commands:\n"
+            l.onBotMessage("Mock chat commands:\n"
                     + "• quiz: answer a question to earn " + QUIZ_HP_REWARD + " HP\n"
                     + "• /tool get_pet_state\n"
                     + "• /tool award_hp amount=5\n"
@@ -235,7 +235,7 @@ public final class MockTruFarChatService implements TruFarChatService {
         runLater(() -> {
             Listener l = listener;
             if (l != null) {
-                l.onError(new IllegalStateException("TruFar session is not connected"));
+                l.onError(new IllegalStateException("Mock chat is not connected"));
             }
         });
         return false;
@@ -247,7 +247,7 @@ public final class MockTruFarChatService implements TruFarChatService {
                 task.run();
             } catch (RuntimeException e) {
                 // Exceptions in scheduled tasks are otherwise swallowed silently.
-                Log.e(TAG, "mock TruFar task failed", e);
+                Log.e(TAG, "mock chat task failed", e);
             }
         }, REPLY_DELAY_MS, TimeUnit.MILLISECONDS);
     }

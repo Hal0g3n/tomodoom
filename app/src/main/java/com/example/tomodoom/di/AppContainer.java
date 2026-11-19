@@ -11,7 +11,7 @@ import com.example.tomodoom.contracts.DoomScrollListener;
 import com.example.tomodoom.contracts.DoomScrollMonitor;
 import com.example.tomodoom.contracts.ManiengineAssetRenderer;
 import com.example.tomodoom.contracts.McpPetActionHandler;
-import com.example.tomodoom.contracts.TruFarChatService;
+import com.example.tomodoom.contracts.ChatService;
 import com.example.tomodoom.doomscroll.DoomScrollNotifier;
 import com.example.tomodoom.doomscroll.UsageStatsDoomScrollMonitor;
 import com.example.tomodoom.maniengine.HtmlManiengineRenderer;
@@ -19,8 +19,8 @@ import com.example.tomodoom.repository.ChatRepository;
 import com.example.tomodoom.repository.DoomScrollHpBridge;
 import com.example.tomodoom.repository.PetStateRepository;
 import com.example.tomodoom.stubs.DefaultMcpPetActionHandler;
-import com.example.tomodoom.stubs.MockTruFarChatService;
-import com.example.tomodoom.trufar.OpenAiCompatibleChatService;
+import com.example.tomodoom.stubs.MockChatService;
+import com.example.tomodoom.chat.GeminiChatService;
 
 /**
  * Hand-written service locator: the <b>only</b> place where concrete implementations are chosen.
@@ -34,15 +34,15 @@ import com.example.tomodoom.trufar.OpenAiCompatibleChatService;
  */
 public final class AppContainer {
 
-    /** The TruFar agent export (persona + model settings) the chat runs. */
-    private static final String KAFKA_AGENT_ASSET = "trufar/kafka_agent.json";
+    /** The agent export (persona + model settings) the chat runs. */
+    private static final String KAFKA_AGENT_ASSET = "agents/kafka_agent.json";
 
     @NonNull
     private final PetStateRepository petStateRepository;
     @NonNull
     private final McpPetActionHandler mcpPetActionHandler;
     @NonNull
-    private final TruFarChatService truFarChatService;
+    private final ChatService chatService;
     @NonNull
     private final ChatRepository chatRepository;
     @NonNull
@@ -56,20 +56,20 @@ public final class AppContainer {
         // Single source of truth for pet state. Never replace or duplicate it.
         petStateRepository = new PetStateRepository(appContext);
 
-        // SWAP POINT (TruFar/MCP Agent): MCP pet tool bridge (the default is production-capable).
+        // SWAP POINT (Chat/MCP Agent): MCP pet tool bridge (the default is production-capable).
         mcpPetActionHandler = new DefaultMcpPetActionHandler(petStateRepository);
 
-        // SWAP POINT (TruFar/MCP Agent): the Kafka agent on an OpenAI-compatible endpoint, else the
+        // SWAP POINT (Chat/MCP Agent): the Kafka agent on Gemini, else the
         // offline mock (CLAUDE.md §5.2).
-        if (!BuildConfig.TRUFAR_LLM_URL.trim().isEmpty()) {
-            truFarChatService = new OpenAiCompatibleChatService(appContext, KAFKA_AGENT_ASSET,
-                    BuildConfig.TRUFAR_LLM_URL, BuildConfig.TRUFAR_LLM_API_KEY,
-                    BuildConfig.TRUFAR_LLM_MODEL);
+        if (!BuildConfig.GEMINI_API_URL.trim().isEmpty()) {
+            chatService = new GeminiChatService(appContext, KAFKA_AGENT_ASSET,
+                    BuildConfig.GEMINI_API_URL, BuildConfig.GEMINI_API_KEY,
+                    BuildConfig.GEMINI_MODELS);
         } else {
-            truFarChatService = new MockTruFarChatService();
+            chatService = new MockChatService();
         }
 
-        chatRepository = new ChatRepository(truFarChatService, mcpPetActionHandler);
+        chatRepository = new ChatRepository(chatService, mcpPetActionHandler);
 
         // SWAP POINT (Doom Scroll Agent): Usage Access-based foreground-app session detector.
         doomScrollMonitor = new UsageStatsDoomScrollMonitor(appContext);
@@ -109,8 +109,8 @@ public final class AppContainer {
     }
 
     @NonNull
-    public TruFarChatService getTruFarChatService() {
-        return truFarChatService;
+    public ChatService getChatService() {
+        return chatService;
     }
 
     @NonNull

@@ -1,4 +1,4 @@
-package com.example.tomodoom.trufar;
+package com.example.tomodoom.chat;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -17,7 +17,7 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Minimal HTTPS + JSON request helper shared by the TruFar chat clients. Blocking: call it only
+ * Minimal HTTPS + JSON request helper used by the chat client. Blocking: call it only
  * from a background worker. Plain HTTP is refused.
  */
 final class JsonHttpClient {
@@ -37,7 +37,7 @@ final class JsonHttpClient {
     /**
      * @param baseUrl           HTTPS origin/base URL; trailing slashes are ignored.
      * @param bearerToken       sent as {@code Authorization: Bearer …} when non-empty.
-     * @param label             service name used in error messages (e.g. "TruFar").
+     * @param label             service name used in error messages (e.g. "Gemini").
      * @param readTimeoutMillis socket read timeout (LLM completions can be slow).
      */
     JsonHttpClient(@NonNull String baseUrl, @NonNull String bearerToken,

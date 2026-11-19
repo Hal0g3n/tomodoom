@@ -1,4 +1,4 @@
-package com.example.tomodoom.trufar;
+package com.example.tomodoom.chat;
 
 import androidx.annotation.NonNull;
 
@@ -9,7 +9,7 @@ import java.util.List;
 
 /**
  * Rolling conversation memory: keeps only the last {@code maxTurns} user/assistant exchanges,
- * mirroring the TruFar agent's {@code chat_memory_window.window_size}. Not thread-safe: confine it
+ * mirroring the agent export's {@code chat_memory_window.window_size}. Not thread-safe: confine it
  * to one worker thread.
  */
 public final class ChatHistoryWindow {
