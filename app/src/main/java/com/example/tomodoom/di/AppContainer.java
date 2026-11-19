@@ -61,6 +61,8 @@ public final class AppContainer {
     @NonNull
     private final DoomScrollMonitor doomScrollMonitor;
     @NonNull
+    private final DoomScrollListener doomScrollListener;
+    @NonNull
     private final WatchedAppsRepository watchedAppsRepository;
     @NonNull
     private final Supplier<List<InstalledApp>> installedAppsSource;
@@ -101,8 +103,9 @@ public final class AppContainer {
 
         // Doom-scroll detections → HP loss. Keep this wiring when swapping the monitor.
         doomScrollHpBridge = new DoomScrollHpBridge(petStateRepository);
-        doomScrollMonitor.setListener(new DoomScrollNotifier(appContext,
-                new StatsRecordingDoomScrollListener(statsRepository, doomScrollHpBridge)));
+        doomScrollListener = new DoomScrollNotifier(appContext,
+                new StatsRecordingDoomScrollListener(statsRepository, doomScrollHpBridge));
+        doomScrollMonitor.setListener(doomScrollListener);
     }
 
     /** @return the process-wide container held by {@link TomodoomApplication}. */
@@ -166,11 +169,11 @@ public final class AppContainer {
     }
 
     /**
-     * The listener that applies doom-scroll penalties. Exposed so debug tooling can inject
-     * synthetic {@code DoomScrollEvent}s through the same path real detections take.
+     * The monitor's listener (notifier → stats → HP bridge). Exposed so the debug panel can inject
+     * synthetic events and warnings through the same path real detections take.
      */
     @NonNull
     public DoomScrollListener getDoomScrollListener() {
-        return doomScrollHpBridge;
+        return doomScrollListener;
     }
 }

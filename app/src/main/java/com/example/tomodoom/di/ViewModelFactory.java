@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModelProvider;
 
 import com.example.tomodoom.viewmodel.ChatViewModel;
 import com.example.tomodoom.viewmodel.CustomiseViewModel;
+import com.example.tomodoom.viewmodel.DebugViewModel;
 import com.example.tomodoom.viewmodel.OnboardingViewModel;
 import com.example.tomodoom.viewmodel.PetsViewModel;
 import com.example.tomodoom.viewmodel.WatchedAppsViewModel;
@@ -51,6 +52,11 @@ public final class ViewModelFactory implements ViewModelProvider.Factory {
         if (modelClass.isAssignableFrom(WatchedAppsViewModel.class)) {
             return (T) new WatchedAppsViewModel(container.getWatchedAppsRepository(),
                     container.getInstalledAppsSource());
+        }
+        if (modelClass.isAssignableFrom(DebugViewModel.class)) {
+            return (T) new DebugViewModel(container.getPetStateRepository(),
+                    container.getMcpPetActionHandler(), container.getChatRepository(),
+                    container.getDoomScrollMonitor(), container.getDoomScrollListener());
         }
         throw new IllegalArgumentException("Unknown ViewModel class: " + modelClass.getName());
     }

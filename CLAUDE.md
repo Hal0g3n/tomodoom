@@ -120,7 +120,8 @@ com.example.tomodoom
 │                                 counts started activities → ChatRepository background/foreground
 ├── MainActivity.java             Main activity (not exported); swipeable ViewPager2 (Customise | Pets | Chat) ↔ BottomNavigationView;
 │                                 starts on Pets; Back off Pets → Pets; no action bar (NoActionBar theme);
-│                                 hidden reset: long-press the Wardrobe tab → confirm → wipe all data
+│                                 hidden reset: long-press the Wardrobe tab → confirm → wipe all data;
+│                                 hidden debug panel: long-press the Pets tab (all builds)
 │
 ├── model/                        Immutable, pure-Java value objects (no android.* imports)
 │   ├── PetState                  name, currentHp, maxHp, equipped items (slot → itemId), petSpecies
@@ -188,7 +189,8 @@ com.example.tomodoom
 │   └── ViewModelFactory          constructor injection for ViewModels
 │
 ├── viewmodel/
-│   ├── PetsViewModel             exposes PetState + debug actions
+│   ├── PetsViewModel             exposes PetState
+│   ├── DebugViewModel            debug panel actions, each through the feature's real path (§8)
 │   ├── CustomiseViewModel        exposes PetState, selected slot, catalog items, equip action
 │   ├── OnboardingViewModel       onboarding flag, suggested name, species list + selectedSpecies, submitName()
 │   ├── ChatViewModel             exposes transcript + active quiz, sends messages
@@ -201,6 +203,8 @@ com.example.tomodoom
     ├── MainPagerAdapter          FragmentStateAdapter: page index ↔ bottom-nav item id
     │                             (Customise=0, Pets=1 = default, Chat=2)
     ├── PetStage                  MainActivity's ONE pet renderer, lent to the resumed page's viewport
+    ├── AppReset                  the hidden full reset (confirm dialog + clearApplicationUserData)
+    ├── debug/DebugPanelFragment  hidden debug bottom sheet (long-press the Pets tab)
     ├── customise/CustomiseFragment   pet preview viewport (via PetStage) + full-width slot tabs + item grid
     ├── customise/AccessoryGridAdapter, AccessoryThumbnails   two-column item circles; item ID → thumbnail
     ├── pets/PetsFragment         full-page pet viewport (FrameLayout) under the Usage Access card and health bar
@@ -224,7 +228,8 @@ launcher icon: `mipmap-anydpi-v26/ic_launcher{,_round}.xml` (adaptive: `@color/l
 + GENERATED `drawable/ic_launcher_foreground.xml` / `ic_launcher_monochrome.xml`) and GENERATED legacy
 `mipmap-*/ic_launcher{,_round}.webp` for API 24–25,
 `activity_main.xml` (`main_pager` ViewPager2 + `nav_view`), `activity_onboarding.xml` (title,
-`pet_choices` grid, `pet_name_layout`/`pet_name_input`, `start_button`), `res/menu/bottom_nav_menu.xml`.
+`pet_choices` grid, `pet_name_layout`/`pet_name_input`, `start_button`), `res/menu/bottom_nav_menu.xml`,
+`fragment_debug_panel.xml` + `values/strings_debug.xml` + `values/styles_debug.xml` (debug panel).
 `res/values/dimens.xml` (`pet_viewport_stroke`).
 `res/font/` + `res/font-v26/` (`playpen_sans`, `unkempt` families and their static TTFs; §6.3), with
 the font licences in `assets/licenses/`.
@@ -302,7 +307,8 @@ ui  ──►  viewmodel  ──►  repository  ──►  contracts  ◄──
   `equipped.<slotId>`, `onboarding_complete`, `pet_species` (a `PetSpecies` ID; missing or unknown →
   `rabbit`). **Only `PetStateRepository` may read or write this file.** A write that
   bypasses it won't reach LiveData observers and will be overwritten.
-- **Hidden reset** (`MainActivity.resetApp`, long-press the Wardrobe tab, then confirm): calls
+- **Hidden reset** (`ui.AppReset`, from a long-press on the Wardrobe tab or the debug panel's
+  Reset button, then confirm): calls
   `ActivityManager.clearApplicationUserData()`, which wipes *all* app data (this prefs file,
   WebView storage) and kills the process, so the next launch is a fresh install with onboarding.
   It's the one sanctioned bypass of the repository, since nothing survives to observe it.
@@ -450,7 +456,8 @@ interface DoomScrollListener {                         // callbacks: ANY thread
   `PetStateRepository.decreaseHp(event.getHpPenalty(), "doom_scroll:" + pkg)`. **The monitor never
   touches the repository directly.** It reports events, and the monitor decides `hpPenalty`
   (the real monitor charges 1 HP per minute; `DoomScrollEvent.DEFAULT_HP_PENALTY` = 5 is for the
-  stub and the debug button).
+  stub). `AppContainer.getDoomScrollListener()` returns that whole chain (notifier → stats → bridge),
+  so the debug panel's synthetic minutes and warnings take the real path.
 - `TomodoomApplication.onCreate()` calls `startMonitoring()` if `isPermissionGranted()`. The Pets
   page calls `startFromForeground()` on resume, which starts the foreground service.
 
@@ -984,7 +991,13 @@ for your feature) as "manual verification needed", and add those new steps to §
 
 ## 8. Manual end-to-end check (debug build, with the stubs)
 
-Debug helpers available in the debug build:
+Debug helpers:
+- **Debug panel (all builds):** long-press the **Pets** tab. A bottom sheet shows the live pet state
+  (name, species, HP, mood, equipped) and offers: HP −10/−1/+1/+10, set HP to 0/30/50/80/max,
+  unequip all; simulate one doom-scroll minute (−1 HP) or the 10-minute warning notification, Usage
+  Access status and settings; chat backend (mock or Gemini + models), simulate a quiz pass (+10 HP
+  through `McpPetActionHandler.onQuizPassed`), replay it (the replay guard should reject it), start a
+  new conversation; version and the hidden reset. HP changes use reason `debug`.
 - **Mock chat commands:** `quiz` (new quiz), `help`, `/tool <name> key=value …` (calls an MCP tool
   as if the backend had), anything else is echoed back.
 - **`StubDoomScrollMonitor.simulateDoomScroll(pkg, durationMs, penalty)`:** tests the
@@ -1037,6 +1050,11 @@ Debug helpers available in the debug build:
 8. Kill and relaunch the app. HP and equipped items persist (SharedPreferences). Onboarding doesn't show again. The chat transcript resets (in memory only). To start over, long-press the **Wardrobe** tab
    and confirm **Reset** (Cancel changes nothing): the app closes and the next launch shows onboarding
    again with HP 50 / 100 and nothing equipped. A plain tap on Wardrobe still just opens the page.
+8a. Long-press the **Pets** tab: the debug panel opens fully expanded (a plain tap still just opens
+   Pets; a second long-press doesn't stack a second panel). −10 lowers the health bar at once; set 0
+   tips the pet over, 80 makes it hop. Simulate quiz pass shows "+10 HP awarded via MCP!", Replay shows
+   "⚠ Quiz debug:… was already rewarded." Simulate warning posts "Time to look up". New conversation
+   clears the Chat transcript and greets again. Reset all data shows the same confirm dialog as Wardrobe.
 
 **Personas on Gemini (real LLM)**: build with `GEMINI_API_URL`/`GEMINI_API_KEY`/`GEMINI_MODELS` set (§5.2):
 
@@ -1094,7 +1112,7 @@ Known gaps and TODOs (not assigned to anyone yet):
 - The pet species is chosen once, at onboarding; there's no way to change it later short of the
   hidden reset. Add-ons are positioned for the rabbit, so they may sit oddly on the cat.
 - Nothing happens yet when HP reaches 0 beyond the "Fainted" status label.
-- The app has no built-in way to lower HP for manual testing; use real doom-scroll detection. To
-  start over, use the hidden reset (long-press the Wardrobe tab). Whether it keeps Usage Access and
+- To change HP for manual testing, use the debug panel (long-press the Pets tab). To start over,
+  use the hidden reset (long-press the Wardrobe tab, or the panel). Whether it keeps Usage Access and
   the notification permission hasn't been checked on a device.
-- No instrumented/UI tests yet. JVM tests only (`model`, `doomscroll`, `chat`, `maniengine`).
+- No instrumented/UI tests yet. JVM tests only (`model`, `doomscroll`, `chat`, `maniengine`, `viewmodel`).

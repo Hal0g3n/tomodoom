@@ -19,6 +19,7 @@ import com.example.tomodoom.databinding.ActivityMainBinding;
 import com.example.tomodoom.ui.AppReset;
 import com.example.tomodoom.ui.MainPagerAdapter;
 import com.example.tomodoom.ui.PetStage;
+import com.example.tomodoom.ui.debug.DebugPanelFragment;
 
 /**
  * Single activity hosting the three top-level pages (Customise, Pets, Chat) in a swipeable
@@ -82,6 +83,15 @@ public class MainActivity extends AppCompatActivity implements PetStage.Host {
             wardrobeTab.setOnLongClickListener(v -> {
                 v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
                 AppReset.confirm(this);
+                return true; // consumed: no tooltip
+            });
+        }
+        // Hidden on purpose: long-pressing the Pets tab opens the debug panel (all builds).
+        View petsTab = binding.navView.findViewById(R.id.navigation_pets);
+        if (petsTab != null) {
+            petsTab.setOnLongClickListener(v -> {
+                v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                DebugPanelFragment.show(getSupportFragmentManager());
                 return true; // consumed: no tooltip
             });
         }
