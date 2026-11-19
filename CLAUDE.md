@@ -241,7 +241,7 @@ com.example.tomodoom
     ├── debug/DebugPanelFragment  hidden debug bottom sheet (long-press the Pets tab)
     ├── customise/CustomiseFragment   pet preview viewport (via PetStage) + full-width slot tabs + item grid
     ├── customise/AccessoryGridAdapter, AccessoryThumbnails   two-column item circles; item ID → thumbnail
-    ├── pets/PetsFragment         full-page pet viewport (FrameLayout) under the Usage Access card and health bar
+    ├── pets/PetsFragment         full-page pet viewport (FrameLayout) under the health bar
     ├── chat/ChatFragment, ChatAdapter   RecyclerView (3 view types) + input bar; `chat_list` is the pet
     │                             backdrop (`PetStage.registerBackdrop`), the pet at 20% alpha behind it;
     │                             bot bubbles: prose (Markdown + LaTeX) and code blocks, in order
@@ -254,13 +254,12 @@ com.example.tomodoom
     ├── stats/HpLineChartView, BarChartView   Canvas charts in the palette (no chart library)
     ├── stats/StatsFormatter      durations, token counts and app labels → display text
     └── watchedapps/WatchedAppsActivity, WatchedAppsAdapter   picker: one switch per launcher app
-                                  (opened from the Pets Usage Access card; not exported)
+                                  (opened from the Settings Tracked apps card; not exported)
 ```
 
 Resources: `res/values/colors.xml` + `res/values/themes.xml` (palette and theme, §6.3; no
 `values-night/`), `res/layout/fragment_pets.xml` (a `ConstraintLayout`: a borderless `pet_viewport` fills the page, with
-`usage_access_card` (Usage Access prompt, §5.3) at the top and `hp_card` (the health bar) at the bottom
-floating over it; both cards are transparent),
+`hp_card` (the health bar, transparent) floating over its bottom; there is no Usage Access card, §5.3),
 `fragment_customise.xml` (`pet_viewport` at 40% of the page height, at the top with no title, `slot_tabs`,
 `item_grid` RecyclerView), `fragment_chat.xml`, `item_chat_{user,bot,system}.xml`
 (`item_chat_bot.xml` is an empty `message_container` filled with `item_chat_bot_prose.xml` and
@@ -848,13 +847,14 @@ How `GeminiChatService` behaves:
 
 `doomscroll.UsageStatsDoomScrollMonitor` uses the special Android Usage Access setting. Onboarding's
 second step asks for it first and then for notifications (Android 13+), each skippable with **Not now**.
-As a fallback the Pets tab has a card with a button to open that setting, starts the monitor when the
-user returns with access granted, and asks for notifications once per launch unless onboarding already
-asked in that launch (`ui.NotificationPrompt`).
+As a fallback the Settings page's **Tracked apps** card offers **Enable** (opens that setting) while
+access is missing. The Pets tab has no card any more; it starts the monitor on resume once access is
+granted, and asks for notifications once per launch unless onboarding already asked in that launch
+(`ui.NotificationPrompt`).
 
 **Watched apps are the user's choice.** Only time in a watched app can cost HP; any other app (a
 work or study app) never counts.
-- Once access is granted, the same Pets card says so, and its **Choose apps** button opens
+- Once access is granted, the Settings **Tracked apps** card's **Choose apps** button opens
   `ui.watchedapps.WatchedAppsActivity`: a switch per launcher app (`LauncherAppsQuery`, which needs
   the manifest's `<queries>` MAIN/LAUNCHER intent on Android 11+; Tomodoom itself isn't listed).
   Watched apps come first, sorted once so rows don't jump while toggling.
@@ -1006,7 +1006,7 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
   checks `isOnboardingComplete()` before inflating anything and forwards to `MainActivity` if set.
   **Start** completes onboarding *before* the permission step, so that step exists only while the
   activity lives: a restore with the saved `permissions_step` flag (rotation) shows it again instead of
-  forwarding, and a relaunch after process death skips it (Pets' card is the fallback).
+  forwarding, and a relaunch after process death skips it (Settings' Tracked apps card is the fallback).
   Anything that should run on every launch belongs in `TomodoomApplication` or `MainActivity`,
   not in the onboarding screen.
 - **On-device checks are possible on this Windows machine:** the SDK has an AVD
@@ -1087,8 +1087,8 @@ Rules:
   (jet) with `chat_code_block_text` (floral_white) and `chat_code_block_label` (eggshell); inline
   code sits on `chat_inline_code_background` (floral_white); LaTeX is drawn in `chat_math_text` (jet).
 - `eggshell` on `floral_white` has very low contrast. Borders that must be visible use a 2dp stroke
-  (as the Customise pet viewport does). The Pets cards are flat, transparent and have no stroke, because
-  they float over the pet.
+  (as the Customise pet viewport does). The Pets health bar card is flat, transparent and has no stroke, because
+  it floats over the pet.
 - `slate_grey` on `floral_white` is about 3.0:1 (`jet` is about 10.7:1, `eggshell` about 1.06:1), so keep it for secondary or large text. Body text
   uses `jet`.
 - Renderers (Maniengine) may use their own art colours inside the viewport, but the chrome around
@@ -1235,15 +1235,14 @@ Debug helpers:
    lists **Track app usage** (ringed) and **Notifications** (Android 13+ only). **Allow usage tracking**
    opens the Usage Access settings; grant it and go back: the row shows "✓ Allowed", the ring moves to
    Notifications and the button reads **Allow notifications**, which shows the system prompt. Then
-   **Continue**: the Pets tab opens with no Usage Access card and no second notification prompt, and its
-   health bar shows `Mochi`. **Not now** skips a step ("Skipped…"); after skipping usage the Pets card is
-   still there. Rotating on the permission screen keeps it. Rotation keeps the typed text. Relaunching skips onboarding. (The steps
+   **Continue**: the Pets tab opens with no second notification prompt, and its
+   health bar shows `Mochi`. **Not now** skips a step ("Skipped…"); after skipping usage, Settings'
+   Tracked apps card offers **Enable**. Rotating on the permission screen keeps it. Rotation keeps the typed text. Relaunching skips onboarding. (The steps
    below assume you kept `Tomo` and the Rabbit.)
 1. The home-screen icon is the phone with a pet peeking out of its pocket, on eggshell (with any
    mask shape; on Android 13+ with themed icons on, a tinted line drawing). Launch the app. The **Pets** tab has **no action bar** and no debug buttons. The health bar sits below
-   the rabbit and shows `Tomo`, **HP 50 / 100** and status "Okay". Until Usage Access is granted, a Usage Access card with an **Enable** button
-   sits at the top of the page. Once access is granted it reads "Only scrolling in the apps you
-   choose costs HP." with a **Choose apps** button (step 20). The bottom bar shows five icons (Settings, Customise, Pets, Chat, Stats). Pets is open: its tile is wider, its icon is larger and only it shows a label.
+   the rabbit and shows `Tomo`, **HP 50 / 100** and status "Okay". There is no Usage Access card at the top of the page (that lives in Settings,
+   step 27). The bottom bar shows five icons (Settings, Customise, Pets, Chat, Stats). Pets is open: its tile is wider, its icon is larger and only it shows a label.
 2. Swipe right (or tap **Customise**). The Customise page shows no title: a pet preview at the top and
    full-width Hat / Accessory tabs above a two-column grid of circles showing each item's model
    (None first). Tap the **Cap** circle on the Hat tab: its ring darkens and the preview (the 3D
@@ -1259,9 +1258,9 @@ Debug helpers:
      tabs, item grid, chat bubbles), and drops behind them once the swipe settles. Pets → Chat: the pet
      stays centred, settles a little lower, refits above the input bar and fades to about 20%; on Chat
      it keeps animating behind the bubbles, and the chat scrolls and types normally. Chat → Stats: the
-     faint pet slides away with Chat. The health bar and Usage Access card draw over the pet; the Customise border
+     faint pet slides away with Chat. The health bar draws over the pet; the Customise border
      sits on the pet's edge. After any transition, turning, pinching and flicking the pet to change tab
-     still work on both pages, and the item circles and Usage Access button still respond.
+     still work on both pages, and the item circles still respond.
    - the selected slot tab and the current page survive rotation;
    - Back on Customise or Chat returns to Pets; Back on Pets leaves the app;
    - **Swiping:** from Pets, swipe left to Chat and right to Customise, either from the 16dp page
@@ -1271,7 +1270,7 @@ Debug helpers:
      includes the health bar) turns the pet both ways without changing page. Slow drags are precise,
      faster ones turn further, and the release speed sets how far it coasts. Starting slowly then
      speeding up stays on the page. The rug stays still, worn items turn with the rabbit, and the angle
-     is kept when moving between the two pages. The Usage Access button still responds.
+     is kept when moving between the two pages.
    - On Pets the pet has no border and fills the page behind transparent cards. Pinching with two
      fingers zooms it evenly (0.75x to 3x) without changing page.
    - Mood: HP ≥ the thriving threshold makes the rabbit hop, struggling droops its head and
@@ -1323,7 +1322,7 @@ Debug helpers:
 17. Play a fullscreen landscape YouTube video. HP stops dropping, then resumes when you return to portrait.
 18. Leave watched apps for over a minute, then return. The next warning comes 10 minutes into the new session.
 19. Revoke Usage Access. Monitoring stops and its notification disappears.
-20. With access granted, tap **Choose apps** on Pets. "Watched apps" lists your launcher apps with
+20. With access granted, tap **Choose apps** in Settings → Tracked apps. "Watched apps" lists your launcher apps with
     the default social apps switched on and listed first, and "N apps watched" under the text.
     Switch YouTube off and scroll YouTube Shorts for 2 minutes: HP doesn't drop. Switch on a
     non-social app (e.g. Chrome) and use it in portrait: HP drops by 1 each minute. Rotation keeps

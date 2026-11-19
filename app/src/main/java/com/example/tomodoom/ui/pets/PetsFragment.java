@@ -1,8 +1,6 @@
 package com.example.tomodoom.ui.pets;
 
-import android.content.Intent;
 import android.os.Bundle;
-import android.provider.Settings;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -25,14 +23,13 @@ import com.example.tomodoom.model.PetState;
 import com.example.tomodoom.ui.NotificationPrompt;
 import com.example.tomodoom.ui.MainPagerAdapter;
 import com.example.tomodoom.ui.PetStage;
-import com.example.tomodoom.ui.watchedapps.WatchedAppsActivity;
 import com.example.tomodoom.viewmodel.PetsViewModel;
 import com.google.android.material.snackbar.Snackbar;
 
 /**
  * Pets page (the default tab): the pet viewport (drawn by the activity's shared pet renderer,
- * {@link PetStage}, while this page is resumed), the Usage Access prompt and the health bar below
- * the pet. Customisation is its own page ({@code ui.customise.CustomiseFragment}).
+ * {@link PetStage}) and the health bar below the pet. Usage Access is asked for in onboarding and
+ * on the Settings page. Customisation is its own page ({@code ui.customise.CustomiseFragment}).
  */
 public class PetsFragment extends Fragment {
 
@@ -61,14 +58,6 @@ public class PetsFragment extends Fragment {
                 .get(PetsViewModel.class);
         doomScrollMonitor = AppContainer.from(requireContext()).getDoomScrollMonitor();
 
-        binding.usageAccessButton.setOnClickListener(v -> {
-            boolean granted = doomScrollMonitor != null && doomScrollMonitor.isPermissionGranted();
-            startActivity(granted
-                    ? new Intent(requireContext(), WatchedAppsActivity.class)
-                    : new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS));
-        });
-        updateUsageAccessCard();
-
         viewModel.getPetState().observe(getViewLifecycleOwner(), this::renderState);
         viewModel.getDecayNotice().observe(getViewLifecycleOwner(), loss -> showDecayNotice());
         stage().registerViewport(MainPagerAdapter.PAGE_PETS, binding.petViewport);
@@ -86,7 +75,6 @@ public class PetsFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
-        updateUsageAccessCard();
         if (doomScrollMonitor != null && doomScrollMonitor.isPermissionGranted()) {
             doomScrollMonitor.startFromForeground();
             requestNotificationsOnce();
@@ -146,18 +134,6 @@ public class PetsFragment extends Fragment {
             default:
                 return R.string.pet_status_struggling;
         }
-    }
-
-    private void updateUsageAccessCard() {
-        if (binding == null || doomScrollMonitor == null) {
-            return;
-        }
-        // Before access: ask for it. After: the way into the watched-apps picker.
-        boolean granted = doomScrollMonitor.isPermissionGranted();
-        binding.usageAccessMessage.setText(
-                granted ? R.string.usage_access_watching : R.string.usage_access_explanation);
-        binding.usageAccessButton.setText(
-                granted ? R.string.usage_access_choose_apps : R.string.usage_access_open_settings);
     }
 
     /**

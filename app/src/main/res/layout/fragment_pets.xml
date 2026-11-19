@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Pets page: the pet fills the page; the Usage Access prompt (top) and health bar (bottom) float
-     over it on transparent cards.
+<!-- Pets page: the pet fills the page; the health bar floats over its bottom on a transparent card.
+     Usage Access lives in onboarding and the Settings page.
      Customisation is its own page (fragment_customise.xml). -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -83,50 +83,6 @@
                 android:layout_marginTop="4dp"
                 android:textAppearance="?attr/textAppearanceBody2"
                 tools:text="HP 50 / 100" />
-        </LinearLayout>
-    </com.google.android.material.card.MaterialCardView>
-
-    <!-- Usage Access prompt (Doom Scroll Agent). Once access is granted, PetsFragment turns it into
-         the way into the watched-apps picker ("Choose apps"). -->
-    <com.google.android.material.card.MaterialCardView
-        android:id="@+id/usage_access_card"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:layout_marginStart="16dp"
-        android:layout_marginEnd="16dp"
-        app:cardBackgroundColor="@android:color/transparent"
-        app:cardCornerRadius="16dp"
-        app:cardElevation="0dp"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:strokeWidth="0dp">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:padding="12dp">
-
-            <TextView
-                android:id="@+id/usage_access_message"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
-                android:text="@string/usage_access_explanation"
-                android:textAppearance="?attr/textAppearanceBody2" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/usage_access_button"
-                style="?attr/materialButtonOutlinedStyle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/usage_access_open_settings"
-                app:strokeColor="@color/eggshell" />
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 </androidx.constraintlayout.widget.ConstraintLayout>

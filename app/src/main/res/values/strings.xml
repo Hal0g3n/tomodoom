@@ -36,9 +36,7 @@
     <string name="slot_hat">Hat</string>
     <string name="slot_accessory">Accessory</string>
     <string name="item_none">None</string>
-    <string name="usage_access_explanation">Allow Usage Access so Tomodoom can notice portrait scrolling in social and video apps. Your pet loses 1 HP for every minute of scrolling.</string>
     <string name="usage_access_open_settings">Enable</string>
-    <string name="usage_access_watching">Only scrolling in the apps you choose costs HP.</string>
     <string name="usage_access_choose_apps">Choose apps</string>
 
     <!-- Watched-apps picker -->
