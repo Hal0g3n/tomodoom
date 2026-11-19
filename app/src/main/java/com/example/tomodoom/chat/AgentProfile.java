@@ -2,6 +2,9 @@ package com.example.tomodoom.chat;
 
 import androidx.annotation.NonNull;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 /**
  * Immutable description of a chat agent (persona prompt and model settings), loaded from an
  * exported agent config such as {@code assets/agents/kafka_agent.json} by
@@ -68,6 +71,24 @@ public final class AgentProfile {
             return this;
         }
         return new AgentProfile(name, systemPrompt, modelOverride, temperature, memoryWindowTurns);
+    }
+
+    /**
+     * A copy that speaks as the user's pet: every whole-word occurrence of this agent's own name
+     * in the prompt (e.g. "You are Kafka") is replaced by {@code petName}, which also becomes the
+     * profile name. A blank {@code petName}, or one equal to the current name, returns this.
+     */
+    @NonNull
+    public AgentProfile withPetName(@NonNull String petName) {
+        String newName = petName.trim();
+        if (newName.isEmpty() || newName.equals(name)) {
+            return this;
+        }
+        String prompt = Pattern.compile("(?<![\\p{L}\\p{N}_])" + Pattern.quote(name)
+                        + "(?![\\p{L}\\p{N}_])")
+                .matcher(systemPrompt)
+                .replaceAll(Matcher.quoteReplacement(newName));
+        return new AgentProfile(newName, prompt, model, temperature, memoryWindowTurns);
     }
 
     @NonNull

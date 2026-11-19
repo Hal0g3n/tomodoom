@@ -8,7 +8,9 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.WorkerThread;
 
+import com.example.tomodoom.chat.PersonaSelector.Persona;
 import com.example.tomodoom.contracts.ChatService;
+import com.example.tomodoom.model.PetState;
 import com.example.tomodoom.model.QuizEvaluation;
 
 import org.json.JSONArray;
@@ -22,12 +24,21 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 
 /**
- * Runs an agent export (e.g. Kafka, {@code assets/agents/kafka_agent.json}) on Google Gemini
- * through its OpenAI-compatible {@code POST /chat/completions} endpoint (any compatible endpoint
- * works): the agent's {@code pre_prompt} becomes the system prompt, with its model, temperature
- * and memory window.
+ * Runs the pet's two agent personas ({@code assets/agents/*.json}) on Google Gemini through its
+ * OpenAI-compatible {@code POST /chat/completions} endpoint (any compatible endpoint works): an
+ * agent's {@code pre_prompt} becomes the system prompt, with its model and temperature.
+ *
+ * <h3>Personas</h3>
+ * Before every request the service reads the pet's state and lets {@link PersonaSelector} pick
+ * the low-HP persona (Kafka) or the high-HP one (Charon), with hysteresis. Either persona speaks
+ * as the pet: its own name in the prompt is replaced by the pet's name
+ * ({@link AgentProfile#withPetName}). Both share one conversation memory, and the first reply
+ * after a switch carries a hidden {@link PersonaPrompts#moodShiftNote}, so the change reads as
+ * the pet's mood shifting rather than a new bot. The state is only read, never written: HP still
+ * changes only through {@code McpPetActionHandler}.
  *
  * <h3>Quizzes and HP</h3>
  * The agent quizzes the user in free text, so no {@code QuizPrompt}s are emitted. Instead,
@@ -63,7 +74,12 @@ public final class GeminiChatService implements ChatService {
     @NonNull
     private final Context appContext;
     @NonNull
-    private final String agentAssetPath;
+    private final String lowHpAgentAsset;
+    @NonNull
+    private final String highHpAgentAsset;
+    /** Read-only view of the pet (name and HP); any-thread safe. */
+    @NonNull
+    private final Supplier<PetState> petState;
     /** Primary model override; empty keeps the export's model. */
     @NonNull
     private final String modelOverride;
@@ -86,7 +102,11 @@ public final class GeminiChatService implements ChatService {
 
     // Worker-confined conversation state.
     @Nullable
-    private AgentProfile profile;
+    private AgentProfile lowHpProfile;
+    @Nullable
+    private AgentProfile highHpProfile;
+    @NonNull
+    private final PersonaSelector personaSelector = new PersonaSelector(null);
     @Nullable
     private ChatHistoryWindow history;
     @Nullable
@@ -94,8 +114,10 @@ public final class GeminiChatService implements ChatService {
     private int gradedAnswerCount;
 
     /**
-     * @param context        any context; only the application context is kept.
-     * @param agentAssetPath agent export inside {@code assets/}.
+     * @param context          any context; only the application context is kept.
+     * @param lowHpAgentAsset  agent export inside {@code assets/} used while HP is low.
+     * @param highHpAgentAsset agent export inside {@code assets/} used while HP is high.
+     * @param petState         current pet snapshot; called on the worker thread.
      * @param baseUrl        HTTPS base URL; {@value #COMPLETIONS_PATH} is appended.
      * @param apiKey         bearer token; may be empty for gateways without auth.
      * @param modelOverride  model to use instead of the export's, or a comma-separated list
@@ -103,12 +125,16 @@ public final class GeminiChatService implements ChatService {
      *                       the export's model.
      */
     public GeminiChatService(@NonNull Context context,
-                                       @NonNull String agentAssetPath,
+                                       @NonNull String lowHpAgentAsset,
+                                       @NonNull String highHpAgentAsset,
+                                       @NonNull Supplier<PetState> petState,
                                        @NonNull String baseUrl,
                                        @NonNull String apiKey,
                                        @NonNull String modelOverride) {
         this.appContext = context.getApplicationContext();
-        this.agentAssetPath = agentAssetPath;
+        this.lowHpAgentAsset = lowHpAgentAsset;
+        this.highHpAgentAsset = highHpAgentAsset;
+        this.petState = petState;
         List<String> models = ModelFallback.parseModels(modelOverride);
         this.modelOverride = models.isEmpty() ? "" : models.get(0);
         this.fallbackModels = models.size() > 1 ? models.subList(1, models.size())
@@ -123,8 +149,8 @@ public final class GeminiChatService implements ChatService {
     }
 
     /**
-     * Loads the agent, starts a fresh conversation and sends the hidden greeting trigger. Only a
-     * failure to load the agent leaves the service disconnected: if just the greeting request
+     * Loads both agents, starts a fresh conversation and sends the hidden greeting trigger. Only a
+     * failure to load the agents leaves the service disconnected: if just the greeting request
      * fails (e.g. the provider is overloaded), the error is reported but the session stays open,
      * so the user's next message starts the conversation ({@code ChatRepository} connects once).
      */
@@ -136,10 +162,13 @@ public final class GeminiChatService implements ChatService {
         }
         worker.execute(() -> {
             try {
-                if (profile == null) {
-                    profile = AgentProfileLoader.load(appContext, agentAssetPath)
+                if (lowHpProfile == null || highHpProfile == null) {
+                    lowHpProfile = AgentProfileLoader.load(appContext, lowHpAgentAsset)
                             .withModelOverride(modelOverride);
-                    Log.i(TAG, "loaded " + profile + ", fallbacks " + fallbackModels);
+                    highHpProfile = AgentProfileLoader.load(appContext, highHpAgentAsset)
+                            .withModelOverride(modelOverride);
+                    Log.i(TAG, "loaded " + lowHpProfile + " and " + highHpProfile
+                            + ", fallbacks " + fallbackModels);
                 }
             } catch (IOException exception) {
                 connected = false;
@@ -147,7 +176,8 @@ public final class GeminiChatService implements ChatService {
                 reportError(exception);
                 return;
             }
-            history = new ChatHistoryWindow(profile.getMemoryWindowTurns());
+            history = new ChatHistoryWindow(Math.max(lowHpProfile.getMemoryWindowTurns(),
+                    highHpProfile.getMemoryWindowTurns()));
             sessionId = UUID.randomUUID().toString();
             gradedAnswerCount = 0;
             connected = true;
@@ -216,11 +246,20 @@ public final class GeminiChatService implements ChatService {
      */
     @WorkerThread
     private void exchange(@NonNull String userText, boolean isGreeting) throws IOException {
-        AgentProfile currentProfile = profile;
+        AgentProfile low = lowHpProfile;
+        AgentProfile high = highHpProfile;
         ChatHistoryWindow currentHistory = history;
-        if (currentProfile == null || currentHistory == null) {
+        if (low == null || high == null || currentHistory == null) {
             throw new IOException("Gemini chat is not connected");
         }
+        PetState pet = petState.get();
+        Persona previous = personaSelector.getCurrent();
+        Persona persona = personaSelector.select(pet.getCurrentHp());
+        AgentProfile currentProfile = (persona == Persona.HIGH_HP ? high : low)
+                .withPetName(pet.getPetName());
+        // A new conversation simply opens in the current mood; only mid-chat switches get a note.
+        String moodShift = isGreeting ? null : PersonaPrompts.moodShiftNote(
+                previous, persona, pet.getCurrentHp(), pet.getMaxHp());
         List<String> plan = ModelFallback.attemptPlan(currentProfile.getModel(), fallbackModels);
         String reply = null;
         int attempt = 0;
@@ -229,7 +268,7 @@ public final class GeminiChatService implements ChatService {
             sleepBeforeAttempt(attempt);
             try {
                 JSONObject response = http.requestJson("POST", COMPLETIONS_PATH,
-                        buildRequest(currentProfile, model, currentHistory, userText));
+                        buildRequest(currentProfile, moodShift, model, currentHistory, userText));
                 reply = extractReply(response);
                 if (attempt > 0) {
                     Log.i(TAG, "attempt " + (attempt + 1) + " succeeded with " + model);
@@ -247,6 +286,11 @@ public final class GeminiChatService implements ChatService {
             }
         }
         currentHistory.addTurn(userText, reply);
+        if (previous != persona) {
+            Log.i(TAG, "persona " + previous + " -> " + persona + " at " + pet.getCurrentHp()
+                    + "/" + pet.getMaxHp() + " HP");
+        }
+        personaSelector.commit(persona);
         deliver(QuizMarkerParser.parse(reply), isGreeting);
     }
 
@@ -275,11 +319,14 @@ public final class GeminiChatService implements ChatService {
 
     @NonNull
     private static JSONObject buildRequest(@NonNull AgentProfile profile,
+                                           @Nullable String moodShift,
                                            @NonNull String model,
                                            @NonNull ChatHistoryWindow history,
                                            @NonNull String userText) throws JSONException {
         JSONArray messages = new JSONArray();
-        messages.put(message("system", profile.getSystemPrompt() + APP_PROTOCOL_PROMPT));
+        String system = profile.getSystemPrompt() + (moodShift == null ? "" : moodShift)
+                + APP_PROTOCOL_PROMPT;
+        messages.put(message("system", system));
         for (ChatHistoryWindow.Message past : history.getMessages()) {
             messages.put(message(past.getRole(), past.getContent()));
         }

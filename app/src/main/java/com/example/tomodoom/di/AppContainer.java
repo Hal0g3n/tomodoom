@@ -34,8 +34,9 @@ import com.example.tomodoom.chat.GeminiChatService;
  */
 public final class AppContainer {
 
-    /** The agent export (persona + model settings) the chat runs. */
+    /** Agent exports (persona + model settings): Kafka speaks while HP is low, Charon while high. */
     private static final String KAFKA_AGENT_ASSET = "agents/kafka_agent.json";
+    private static final String CHARON_AGENT_ASSET = "agents/charon_agent.json";
 
     @NonNull
     private final PetStateRepository petStateRepository;
@@ -59,10 +60,11 @@ public final class AppContainer {
         // SWAP POINT (Chat/MCP Agent): MCP pet tool bridge (the default is production-capable).
         mcpPetActionHandler = new DefaultMcpPetActionHandler(petStateRepository);
 
-        // SWAP POINT (Chat/MCP Agent): the Kafka agent on Gemini, else the
+        // SWAP POINT (Chat/MCP Agent): the Kafka/Charon personas on Gemini, else the
         // offline mock (CLAUDE.md §5.2).
         if (!BuildConfig.GEMINI_API_URL.trim().isEmpty()) {
             chatService = new GeminiChatService(appContext, KAFKA_AGENT_ASSET,
+                    CHARON_AGENT_ASSET, petStateRepository::getCurrentState,
                     BuildConfig.GEMINI_API_URL, BuildConfig.GEMINI_API_KEY,
                     BuildConfig.GEMINI_MODELS);
         } else {

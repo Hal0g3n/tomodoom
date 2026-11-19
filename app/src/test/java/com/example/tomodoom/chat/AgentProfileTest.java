@@ -1,6 +1,7 @@
 package com.example.tomodoom.chat;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
@@ -20,6 +21,12 @@ public class AgentProfileTest {
 
     /** Unit tests run with the module directory ({@code app/}) as working directory. */
     private static final File KAFKA_ASSET = new File("src/main/assets/agents/kafka_agent.json");
+    private static final File CHARON_ASSET = new File("src/main/assets/agents/charon_agent.json");
+
+    private static AgentProfile load(File asset) throws Exception {
+        String json = new String(Files.readAllBytes(asset.toPath()), StandardCharsets.UTF_8);
+        return AgentProfileLoader.parse(new JSONObject(json));
+    }
 
     @Test
     public void bundledKafkaConfig_parsesWithExportedSettings() throws Exception {
@@ -66,5 +73,49 @@ public class AgentProfileTest {
         assertSame(p, p.withModelOverride("  "));
         assertEquals("deepseek-chat", p.withModelOverride("deepseek-chat").getModel());
         assertEquals(0.5, p.withModelOverride("deepseek-chat").getTemperature(), 1e-9);
+    }
+
+    @Test
+    public void bundledCharonConfig_parsesWithExportedSettings() throws Exception {
+        AgentProfile p = load(CHARON_ASSET);
+        assertEquals("Charon", p.getName());
+        assertEquals(0.95, p.getTemperature(), 1e-9);
+        assertEquals(5, p.getMemoryWindowTurns());
+        assertTrue(p.getSystemPrompt().contains(AgentProfile.GREETING_TRIGGER));
+    }
+
+    @Test
+    public void withPetName_replacesTheAgentsOwnNameInBothBundledPersonas() throws Exception {
+        for (File asset : new File[]{KAFKA_ASSET, CHARON_ASSET}) {
+            AgentProfile original = load(asset);
+            AgentProfile pet = original.withPetName("Mochi");
+            assertEquals("Mochi", pet.getName());
+            assertFalse(pet.getSystemPrompt().contains(original.getName()));
+            assertTrue(pet.getSystemPrompt().contains("You are Mochi"));
+            assertEquals(original.getTemperature(), pet.getTemperature(), 1e-9);
+            assertEquals(original.getModel(), pet.getModel());
+        }
+    }
+
+    @Test
+    public void withPetName_onlyReplacesWholeWords() {
+        AgentProfile p = new AgentProfile("Kafka", "You are Kafka. Kafkaesque, Kafka's, Kafka2.",
+                "m", 0.5, 5);
+        assertEquals("You are Tomo. Kafkaesque, Tomo's, Kafka2.",
+                p.withPetName("Tomo").getSystemPrompt());
+    }
+
+    @Test
+    public void withPetName_treatsSpecialCharactersLiterally() {
+        AgentProfile p = new AgentProfile("Ka.ka", "I am Ka.ka, not Kafka.", "m", 0.5, 5);
+        assertEquals("I am $1 \\o/, not Kafka.",
+                p.withPetName("$1 \\o/").getSystemPrompt());
+    }
+
+    @Test
+    public void withPetName_blankOrSameName_returnsSameProfile() {
+        AgentProfile p = new AgentProfile("Kafka", "You are Kafka.", "m", 0.5, 5);
+        assertSame(p, p.withPetName("  "));
+        assertSame(p, p.withPetName("Kafka"));
     }
 }

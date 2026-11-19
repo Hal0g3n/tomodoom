@@ -152,8 +152,11 @@ com.example.tomodoom
 │   └── StubDoomScrollMonitor           no-op monitor with a debug trigger
 │
 ├── chat/                         Chat/MCP Agent: the Gemini chat client (§5.2)
-│   ├── GeminiChatService         runs the agent export on Gemini's OpenAI-compatible endpoint
-│   ├── AgentProfile, AgentProfileLoader   agent export (assets/agents/*.json) → persona + model settings
+│   ├── GeminiChatService         runs the pet's personas on Gemini's OpenAI-compatible endpoint
+│   ├── AgentProfile, AgentProfileLoader   agent export (assets/agents/*.json) → persona + model settings;
+│   │                             withPetName() swaps the agent's name for the pet's
+│   ├── PersonaSelector           pure Java: Kafka (low HP) / Charon (high HP) with 40/60 hysteresis
+│   ├── PersonaPrompts            pure Java: the one-turn hidden mood-shift note after a switch
 │   ├── QuizMarkerParser          pure Java: strips [[CORRECT]]/[[WRONG]] grading markers from replies
 │   ├── ChatHistoryWindow         pure Java: last-N-turns conversation memory
 │   ├── ModelFallback             pure Java: model list parsing + retry/fallback policy for overloaded LLMs
@@ -205,7 +208,7 @@ floating over it; both cards are transparent),
 `activity_main.xml` (`main_pager` ViewPager2 + `nav_view`), `activity_onboarding.xml` (title,
 `pet_name_layout`/`pet_name_input`, `start_button`), `res/menu/bottom_nav_menu.xml`.
 `res/values/dimens.xml` (`pet_viewport_stroke`).
-Assets: `assets/agents/kafka_agent.json` (the Kafka agent export from the TruFar editor, icon stripped; §5.2),
+Assets: `assets/agents/kafka_agent.json` and `charon_agent.json` (the two persona exports from the TruFar editor, icons stripped; §5.2),
 `assets/maniengine/index.html` (the pet page, §5.1), `pet-scene.js` (model setup + add-ons, shared with the
 thumbnail tool), `pet-model.js` (GENERATED from the scene-3 export) and `vendor/three/` (three.js 0.187.0).
 Tools: `tools/maniengine/extract_model.py` (+ `source/scene-3.html`), `make_thumbnails.py` (+ `thumbnails.html`).
@@ -516,15 +519,21 @@ How the page is hosted (`HtmlManiengineRenderer`):
 - **Acceptance:** the manual E2E script in §8 passes against the real Gemini API. No main-thread
   network. Errors show up as SYSTEM messages via `onError`.
 
-#### Kafka agent (the chatbot in use)
+#### The pet's two personas (Kafka and Charon)
 
-The chatbot is **Kafka**, a TruFar agent exported from the TruFar editor as JSON. The export is
-bundled as `assets/agents/kafka_agent.json`, a copy of the export without the base64 icon. To
-change the bot, edit or replace that file; no code change is needed. `AgentProfileLoader` reads:
+The chatbot is the pet itself, with two personalities exported from the TruFar editor as JSON
+and bundled without their base64 icons:
+- `assets/agents/kafka_agent.json`: **Kafka**, bitter and sarcastic, speaks while HP is **low**.
+- `assets/agents/charon_agent.json`: **Charon**, cheerful and encouraging, speaks while HP is
+  **high**.
+
+The originals (with icons) may sit untracked in the repo root (`Kafka.json`, `Charon.json`).
+To change a persona, edit or replace its asset; no code change is needed. `AgentProfileLoader`
+reads:
 - `agent_basic_info.name`
 - `config.pre_prompt` (the persona)
 - `config.model.name` (`deepseek-v4-pro`)
-- `config.model.params.temperature` (0.84)
+- `config.model.params.temperature` (Kafka 0.84, Charon 0.95)
 - `config.chat_memory_window.window_size` (5 turns)
 
 Everything else in the export (icon, tools, opening statement) is ignored.
@@ -554,9 +563,29 @@ Gemini was verified with the real persona (2026-11-19):
 `AppContainer` uses `GeminiChatService` when `GEMINI_API_URL` is set, otherwise
 `MockChatService` (offline demo).
 
+**Persona selection (`PersonaSelector`, hysteresis 40 / 60):**
+- Before **every** request, `GeminiChatService` reads the pet through a read-only
+  `Supplier<PetState>` (`PetStateRepository::getCurrentState`) and picks the persona:
+  - no persona yet: HP ≥ 50 → Charon, otherwise Kafka (the default 50/100 pet starts with
+    Charon);
+  - while Charon: Kafka takes over once HP < 40;
+  - while Kafka: Charon returns once HP ≥ 60.
+- A choice is committed only when its reply succeeds, so a failed request doesn't swallow the
+  switch. Switches happen between turns, never mid-reply.
+- **Pet name:** `AgentProfile.withPetName` replaces every whole-word occurrence of the export's
+  own name in its prompt ("You are Kafka") with the onboarding name, so both personas speak as
+  the pet. It's read fresh for each request.
+- **Seamless switch:**
+  - both personas share one `ChatHistoryWindow`, session ID and quiz counter, so the topic and
+    the open question carry over;
+  - the first reply after a switch gets a hidden one-turn `PersonaPrompts.moodShiftNote`
+    ("…your mood has soured / brightened… don't greet again… open with one short in-character
+    line showing the change, then carry on").
+- Switches are logged under `GeminiChatService` (persona and HP only).
+
 How `GeminiChatService` behaves:
-- `connect()` loads the asset on the worker thread. It then sends the hidden user turn `__START__`,
-  which the persona prompt answers with Kafka's greeting. `__START__` never appears in the transcript.
+- `connect()` loads both assets on the worker thread. It then sends the hidden user turn
+  `__START__`, which the current persona's prompt answers with its greeting. `__START__` never appears in the transcript.
   Only an asset-load failure leaves the service disconnected. If the greeting request fails, the
   error is shown, but the session stays open (`ChatRepository` calls `connect()` only once), so
   the user's next message starts the conversation.
@@ -570,7 +599,7 @@ How `GeminiChatService` behaves:
   - 400/401/403/404 fail at once, so a bad key or model name is reported immediately.
   - Retries are logged under `GeminiChatService` (model and status only). The user sees an
     error only if every attempt fails.
-- **HP / quiz protocol:** Kafka quizzes in free text, so the service never emits `QuizPrompt`s. The
+- **HP / quiz protocol:** both personas quiz in free text, so the service never emits `QuizPrompt`s. The
   app appends `APP_PROTOCOL_PROMPT` to the persona, which asks the model to end any reply that grades
   an answer with `[[CORRECT]]` or `[[WRONG]]`. `QuizMarkerParser` strips the markers (it's lenient
   about case and brackets, and the last marker wins). A graded reply is delivered as
@@ -578,7 +607,7 @@ How `GeminiChatService` behaves:
   `ChatRepository` shows it as one bot bubble and, when it passed, calls `onQuizPassed`, so the
   replay guard and cap still apply. Ungraded replies arrive through `onBotMessage`. A marker in the
   greeting is ignored.
-- No MCP tools are advertised (the export has none). HTTP errors include the server's
+- No MCP tools are advertised (the exports have none). HTTP errors include the server's
   `error.message` and surface as SYSTEM messages via `onError`.
 
 ### 5.3 Doom Scroll Agent — doomscroll detection
@@ -711,7 +740,7 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
     503s are retried within seconds.
   - Changing any `GEMINI_*` property needs a rebuild and reinstall, because they're compiled
     into `BuildConfig`.
-- **LLM-graded HP is persuadable:** a user can talk Kafka into emitting `[[CORRECT]]`. Each award
+- **LLM-graded HP is persuadable:** a user can talk either persona into emitting `[[CORRECT]]`. Each award
   is bounded by `GeminiChatService.CORRECT_ANSWER_HP` (10) and the per-award cap, but
   there's no rate limit. Add one in the handler if it gets abused.
 - **org.json in JVM tests:** android.jar only has throwing stubs, so `org.json:json` is a
@@ -900,21 +929,25 @@ Debug helpers available in the debug build:
 7. On **Customise**, equip an item and note the current HP.
 8. Kill and relaunch the app. HP and equipped items persist (SharedPreferences). Onboarding doesn't show again. The chat transcript resets (in memory only). To start over, clear the app's data in Android Settings.
 
-**Kafka (real LLM, Gemini in use)**: build with `GEMINI_API_URL`/`GEMINI_API_KEY`/`GEMINI_MODELS` set (§5.2):
+**Personas on Gemini (real LLM)**: build with `GEMINI_API_URL`/`GEMINI_API_KEY`/`GEMINI_MODELS` set (§5.2):
 
-9. Open **Chat**. Kafka sends a sarcastic three-sentence greeting asking for a topic. No `__START__` bubble appears.
-10. Name a topic and answer Kafka's question correctly. The reply shows no `[[…]]` marker, and a SYSTEM
-    message shows **"+10 HP awarded via MCP!"**. A wrong answer gets a roast and no HP.
+9. Fresh install at 50 HP, pet named `Mochi`. Open **Chat**: Charon's warm three-sentence greeting
+   appears, calling itself Mochi (never "Charon"). No `__START__` bubble appears.
+10. Name a topic and answer correctly. The reply shows no `[[…]]` marker, and a SYSTEM
+    message shows **"+10 HP awarded via MCP!"**. A first wrong answer gets a hint and no HP.
 11. Use a bad key or URL. A SYSTEM `⚠ Chat error: … HTTP 401…` message appears and the app doesn't crash.
+12. Doom-scroll until HP < 40, then send a message. The reply opens with one line showing a soured
+    mood, then continues the same topic in Kafka's sarcastic tone, still as Mochi. Between 40 and
+    59 HP the persona doesn't change. Earn HP back to ≥ 60: the next reply brightens, then Charon.
 
 **Doom-scroll detection (real device, watched app installed):**
 
-12. Grant Usage Access and allow notifications. A low-priority "Tomodoom is watching over your pet" notification appears.
-13. Scroll Instagram or YouTube Shorts in portrait. HP drops by 1 each minute.
-14. Keep going to 10 and 20 minutes. A "Time to look up" notification appears each time.
-15. Play a fullscreen landscape YouTube video. HP stops dropping, then resumes when you return to portrait.
-16. Leave watched apps for over a minute, then return. The next warning comes 10 minutes into the new session.
-17. Revoke Usage Access. Monitoring stops and its notification disappears.
+13. Grant Usage Access and allow notifications. A low-priority "Tomodoom is watching over your pet" notification appears.
+14. Scroll Instagram or YouTube Shorts in portrait. HP drops by 1 each minute.
+15. Keep going to 10 and 20 minutes. A "Time to look up" notification appears each time.
+16. Play a fullscreen landscape YouTube video. HP stops dropping, then resumes when you return to portrait.
+17. Leave watched apps for over a minute, then return. The next warning comes 10 minutes into the new session.
+18. Revoke Usage Access. Monitoring stops and its notification disappears.
 
 ---
 
@@ -932,7 +965,7 @@ Update this table in the same commit when your task changes a subsystem's status
 | Chat UI | ✅ Skeleton done | `ChatFragment` / `ChatViewModel` / `ChatRepository` |
 | Pet rendering | ✅ scene-3 rabbit (three.js, offline) via the HTML/WebView pipeline; add-ons are primitive placeholders | `HtmlManiengineRenderer` + `assets/maniengine/` |
 | Item catalog | ⏳ Placeholder (6 hard-coded items: hats and accessories) | `AccessoryCatalog` → Maniengine Agent |
-| Chatbot (Gemini) | ✅ Kafka persona on Google's free Gemini API (`gemini-3.1-flash-lite` with fallbacks, retries on 503/429/timeouts) via the in-app OpenAI-compatible client. It's verified from a PC; on a device, the first build hit a 503, and the fix is not yet re-tested there. Mock when unconfigured | `GeminiChatService` (`GEMINI_API_URL`) / `MockChatService` |
+| Chatbot (Gemini) | ✅ Kafka (low HP) / Charon (high HP) personas, 40/60 hysteresis, speaking as the pet's name, on Google's free Gemini API (`gemini-3.1-flash-lite` with fallbacks, retries on 503/429/timeouts) via the in-app OpenAI-compatible client. It's verified from a PC; on a device, the first build hit a 503, and the fix is not yet re-tested there. Mock when unconfigured | `GeminiChatService` (`GEMINI_API_URL`) / `MockChatService` |
 | Doom-scroll detection | ✅ Usage Access polling in a foreground service; portrait only, 1 HP per minute, warnings every 10 minutes (not yet tested on a device) | `UsageStatsDoomScrollMonitor` |
 
 Known gaps and TODOs (not assigned to anyone yet):
