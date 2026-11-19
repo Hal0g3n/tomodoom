@@ -200,10 +200,11 @@ com.example.tomodoom
     ├── onboarding/PetChoiceAdapter, PetPortraits   two-column pet portrait cards; species ID → portrait/name
     ├── MainPagerAdapter          FragmentStateAdapter: page index ↔ bottom-nav item id
     │                             (Customise=0, Pets=1 = default, Chat=2)
-    ├── PetStage                  MainActivity's ONE pet renderer, lent to the resumed page's viewport;
-    │                             drives the Pets ↔ Customise shrink transition from pager scrolls
-    ├── PetTransitionMath         pure Java: which scrolls are Pets ↔ Customise, frame interpolation
-    ├── PassThroughFrameLayout    touch-transparent layer (`pet_transition_layer`) holding the pet mid-transition
+    ├── PetStage                  MainActivity's ONE pet renderer, kept in `pet_layer` behind the pager and
+    │                             framed onto the resumed page's viewport (shrinks Pets ↔ Customise on swipe)
+    ├── PetTransitionMath         pure Java: frame for a pager position (lift included), model box
+    ├── PetLayer                  `pet_layer`: holds the pet for good; takes only forwarded touches
+    ├── PetViewport               `pet_viewport` on Pets/Customise: forwards its touches to the PetLayer
     ├── customise/CustomiseFragment   pet preview viewport (via PetStage) + full-width slot tabs + item grid
     ├── customise/AccessoryGridAdapter, AccessoryThumbnails   two-column item circles; item ID → thumbnail
     ├── pets/PetsFragment         full-page pet viewport (FrameLayout) under the Usage Access card and health bar
@@ -224,7 +225,7 @@ launcher icon: `mipmap-anydpi-v26/ic_launcher{,_round}.xml` (adaptive: `@color/l
 + GENERATED `drawable/ic_launcher_foreground.xml` / `ic_launcher_monochrome.xml`) and GENERATED legacy
 `mipmap-*/ic_launcher{,_round}.webp` for API 24–25, GENERATED `drawable/ic_notification.xml` (notification
 small icon, used by both doom-scroll notifications),
-`activity_main.xml` (`main_pager` ViewPager2, `pet_transition_layer` over it, `nav_view`), `activity_onboarding.xml` (`name_step`: title,
+`activity_main.xml` (`pet_layer` under `main_pager` ViewPager2, `nav_view`), `activity_onboarding.xml` (`name_step`: title,
 `pet_choices` grid, `pet_name_layout`/`pet_name_input`, `start_button`; then `permissions_step`:
 `usage_row`/`notifications_row` (the current one drawn selected), `permission_button`, `permission_skip_button`), `res/menu/bottom_nav_menu.xml`.
 `res/values/dimens.xml` (`pet_viewport_stroke`, `pet_viewport_corner_radius`).
@@ -368,18 +369,27 @@ The full Javadoc on each interface is normative. What follows is a summary.
 @MainThread void release(@NonNull ViewGroup container);
 @MainThread default void pause(@NonNull ViewGroup container) {}    // page onPause() via PetStage
 @MainThread default void resume(@NonNull ViewGroup container) {}   // page onResume() via PetStage
-@MainThread default boolean supportsFramedTransition() { return false; }
-@MainThread default void setFrame(@NonNull ViewGroup container, @Nullable RectF frame, float cornerRadiusPx) {}
+@MainThread default boolean supportsFrames() { return false; }
+@MainThread default void setFrame(@NonNull ViewGroup container, @Nullable RectF frame, float cornerRadiusPx, float lift) {}
+@MainThread default void setTouchBox(@NonNull ViewGroup container, @Nullable RectF box) {}
 ```
 - **One renderer per `MainActivity`**, so only one pet is rendered at a time. `ui.PetStage` owns it
   and lends it to whichever page is resumed (Customise or Pets): the page calls
   `attach(viewport, state)` in `onResume`, `detach(viewport)` in `onPause`/`onDestroyView`, and
   `render(viewport, state)` on each emission (ignored unless that page owns the pet).
-- `container` is the visible page's `FrameLayout` `R.id.pet_viewport` (`fragment_pets.xml` or
-  `fragment_customise.xml`). The renderer owns all of its children. Nothing else adds views to it.
-- **The container changes between calls.** `render` with a new container must *move* the existing
-  views there (remove from the old parent, keep loaded state); it must not rebuild or reload. A
-  hidden page's viewport may keep the paused view until another page takes it.
+- **Frame-capable renderers** (`supportsFrames()`, as `HtmlManiengineRenderer` is) get **one fixed
+  container for their whole life**: `MainActivity`'s `pet_layer` (a `ui.PetLayer` the size of the
+  pager, *behind* it). They are never moved or resized; `PetStage` places the pet with `setFrame`
+  (container px, rounded corners, plus a 0–1 `lift`: 1 on Pets, where the health bar floats over the
+  bottom, 0 on Customise), sent on every scroll frame and layout change, so keep it cheap. The pet is
+  drawn only in the frame, framed as in a viewport of that size, and the rest stays transparent;
+  `null` = the whole container. `setTouchBox` says where drags turn the pet (`null` while scrolling).
+  Touches arrive forwarded from the visible `ui.PetViewport`, already in layer coordinates.
+- **Other renderers** (the placeholder): `container` is the visible page's `R.id.pet_viewport`
+  (`fragment_pets.xml` or `fragment_customise.xml`). The renderer owns all of its children. **The
+  container changes between calls**: `render` with a new container must *move* the existing views
+  there (remove from the old parent, keep loaded state); it must not rebuild or reload. A hidden
+  page's viewport may keep the paused view until another page takes it.
 - `render` is called on **every** `PetState` emission (HP changes as well as equip changes), so it
   must be idempotent and cheap: diff against what's already displayed and update in place.
 - `release` is called once from `MainActivity.onDestroy()` (rotation included) with the last
@@ -387,11 +397,9 @@ The full Javadoc on each interface is normative. What follows is a summary.
   afterwards (the new activity gets a new instance).
 - `pause`/`resume` bracket the time the current container's page is visible (pages stay alive,
   `STARTED`, while hidden). Stop per-frame work while paused. Both are optional default no-ops.
-- `setFrame` (only if `supportsFramedTransition()`): draw the pet only inside `frame` (container px,
-  rounded corners), framed as in a viewport of that size, the rest transparent; `null` = the whole
-  container. `container` may be the one the next `render` will move the pet to (a frame can be sent
-  first). Called every animation frame of a page transition, so keep it cheap.
-  `HtmlManiengineRenderer` forwards it as `ManiengineProtocol.frameScript` (deduplicated).
+- `HtmlManiengineRenderer` forwards `setFrame`/`setTouchBox` as `ManiengineProtocol.frameScript` /
+  `touchBoxScript` (deduplicated, re-sent after a page load), and keeps the WebView at alpha 0 until
+  its first frame has been delivered, so a full-size pet never flashes.
 - The asset format is **HTML**: Maniengine exports a 3D scene as a web page, which
   `HtmlManiengineRenderer` shows (§5.1). Nothing outside the renderer may depend on that.
 
@@ -526,9 +534,11 @@ How the page is hosted (`HtmlManiengineRenderer`):
 - JavaScript and DOM storage are on. File/content access is off, there's no JS interface, and the
   main frame can't navigate off the origin. Network URLs (e.g. a CDN script) still load, but bundle
   libraries locally so the pet works offline.
-- The WebView background is transparent (the window's `floral_white` shows through). In a viewport
-  with a background (Customise) it is inset by `@dimen/pet_viewport_stroke` and clipped to the rounded
-  corners; in the borderless Pets viewport it fills the page edge to edge.
+- The WebView background is transparent (the window's `floral_white` shows through), and it fills
+  `pet_layer`. The pages are transparent over their viewports, so the pet shows through them: in the
+  bordered Customise viewport (stroke only, no fill) the frame is inset by `@dimen/pet_viewport_stroke`
+  with corner radius `pet_viewport_corner_radius - pet_viewport_stroke`; in the borderless Pets
+  viewport it is the whole viewport, and the Pets cards draw over the pet.
 - `pause`/`resume` call `WebView.onPause()`/`onResume()`. A page should still stop its own
   `requestAnimationFrame` loop on `visibilitychange` if it does heavy work.
 - If there's no usable WebView, or the render process dies (e.g. a WebGL crash), the viewport shows
@@ -548,8 +558,9 @@ How the page is hosted (`HtmlManiengineRenderer`):
 - **Touch:** by default, horizontal drags on the pet swipe between tabs. A page that needs drags
   declares a policy with `<meta name="tomodoom-touch" content="…">`. `capture` keeps every drag that
   *starts* on the viewport. `centre` (used by `index.html`) keeps drags starting in the **model box**.
-  `HtmlManiengineRenderer` works the box out and publishes it as `window.tomodoomTouchBox`
-  (`{left, top, right, bottom}`, viewport fractions): on Pets its left, right and bottom line up with
+  `PetStage` works the box out (`PetTransitionMath.modelBox`, for the resumed page while the pager is
+  idle) and the renderer publishes it as `window.tomodoomTouchBox` (`{left, top, right, bottom}`,
+  fractions of the page): on Pets its left, right and bottom line up with
   `hp_card`, so the transparent health bar below the pet is inside it, and its top is
   `@dimen/pet_model_box_inset` from the page top. Without a health bar (Customise) it starts at the top
   with that side inset and ends 20% above the viewport's bottom.
@@ -559,32 +570,33 @@ How the page is hosted (`HtmlManiengineRenderer`):
   speed over the last 100 ms, so slow drags are precise, fast ones turn further and the release speed
   sets how far it coasts. The rug stays still. A second finger always keeps the gesture in the page (`PetWebView` blocks the pager on
   `ACTION_POINTER_DOWN`), which is how `index.html` pinch-zooms (`camera.zoom`, 0.75x to 3x).
-- **Transition frame:** while the host animates the pet between pages, it sets
-  `window.tomodoomFrame = { x, y, w, h, r, hostW, hostH }` (CSS px) and dispatches **`tomodoom:frame`**
+- **Frame:** the host places the pet by setting
+  `window.tomodoomFrame = { x, y, w, h, r, lift, hostW, hostH }` (CSS px; `lift` 0–1) and dispatching **`tomodoom:frame`**
   (`ManiengineProtocol.frameScript`; `CLEAR_FRAME_SCRIPT` sends `null`). The page draws the pet only
   inside that rect, with corner radius `r` (`setViewport`/`setScissor` plus a CSS `clip-path`), framed
   exactly as `fit()` frames a viewport of that size; the rest of the canvas stays transparent. A frame
   applies **only while the page's size is `hostW` x `hostH`** (±1px), so a frame sent just before or after
-  a resize is harmless. `fit()` blends `TALL_LIFT` over aspects `TALL_ASPECT - TALL_BLEND`…`TALL_ASPECT`
-  so a frame narrowing from tall to wide never jumps, and resizes the drawing buffer only when the size changes.
+  a resize is harmless. While framed, the pet is raised by `TALL_LIFT * lift`; the host blends `lift`
+  with the rect, so the pet never dips mid-swipe. (Unframed, e.g. the thumbnail tool, `fit()` still
+  lifts tall viewports, blended over aspects `TALL_ASPECT - TALL_BLEND`…`TALL_ASPECT`.) Drag speeds are
+  measured in frame widths. `fit()` resizes the drawing buffer only when the size changes.
 - The page talks only one way (app → page). If it ever needs to call back (e.g. "item tapped"),
   extend `ManiengineProtocol` and this section together.
-- **Layout note:** there is **one** WebView, moved (not reloaded) between two viewports: the large
-  one on Pets and a preview at 40% of the page height on Customise, above the slot tabs and item
-  circles. On Pets the cards float over the pet, so `fit()` sits the pet higher in tall viewports,
-  clear of the health bar below it. The page is resized on each move, so it must refit to any size without distorting the
-  model (`index.html` does, with a `ResizeObserver` calling `fit()`). The page that isn't shown has an empty viewport.
-- **Pets ↔ Customise transition** (`PetStage`, renderers with `supportsFramedTransition()`): when the
-  pager starts scrolling between pages 0 and 1, the pet moves into `pet_transition_layer` (over the
-  pager, the same size) and every `onPageScrolled` sends `setFrame` with the rect between the two
-  viewports' pet areas (Pets: whole viewport, radius 0; Customise: inside the border, radius
-  `pet_viewport_corner_radius - pet_viewport_stroke`), interpolated by the offset. So the pet shrinks
-  into the preview card (or grows out of it) with the finger, and the health bar slides away with the
-  Pets page. The frame is sent before the move, so growing out of Customise never flashes a full-size pet.
-  The settled page's `attach` (or, for a cancelled swipe, `SCROLL_STATE_IDLE`) clears the frame and
-  moves the pet back into a viewport; the endpoint frames match that viewport's own framing, so nothing
-  jumps. A scroll that brings Chat in ends the transition and leaves the pet in the Pets viewport.
-  `MainActivity` sets `offscreenPageLimit(1)` so both viewports are laid out from the first frame.
+- **Layout note:** there is **one** WebView, and it never moves: it fills `pet_layer` behind the
+  pager. `PetStage` frames it onto the large viewport on Pets or the preview at 40% of the page height
+  on Customise (above the slot tabs and item circles). The frame follows the Pets viewport as its
+  page slides (so the pet leaves with Pets towards Chat, and is off screen on Chat), and while only
+  Customise and Pets are on screen it is interpolated between their pet areas by the scroll offset
+  (`PetTransitionMath.frameFor`): the pet shrinks into the preview card, or grows out of it, with the
+  finger, and the health bar slides away with Pets. Nothing is reparented or resized, so nothing
+  jumps when the swipe settles. `MainActivity` sets `offscreenPageLimit(1)` so both viewports are laid
+  out from the first frame. The page still refits to any size (`ResizeObserver` calling `fit()`).
+- **Touch forwarding:** `PetViewport` hands its touches to `PetStage` while its page is resumed and
+  the pager is idle (decided at `ACTION_DOWN`); they are offset into layer coordinates and dispatched
+  through `PetLayer.forward`. `PetLayer.requestDisallowInterceptTouchEvent` passes the request on to
+  the viewport's parents, so `PetWebView`'s pager blocking and flick hand-off work as if it were in
+  the viewport; the pager's `ACTION_CANCEL` is forwarded too. Touches that fall through to the layer
+  itself are ignored.
 - **Acceptance:** equipping/unequipping on the Customise tab updates the viewport immediately. Rotating
   or switching tabs doesn't leak views (`release` cleans up). Nothing happens off the main thread
   in `render`. The export loads offline from `assets/maniengine/` and reacts to `tomodoom:petstate`.
@@ -845,9 +857,10 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
 - **org.json in JVM tests:** android.jar only has throwing stubs, so `org.json:json` is a
   `testImplementation` dependency. Tests can then call `AgentProfileLoader.parse(JSONObject)` on the
   real asset (unit tests run with `app/` as the working directory).
-- **Shared pet WebView:** `PetStage` reparents one WebView between page viewports, and during a
-  Pets ↔ Customise scroll into the activity's `pet_transition_layer` (which ignores touches, so
-  nothing on the pet responds until the pager is idle). Its touch box isn't meaningful there. It's created
+- **Shared pet WebView:** the one WebView lives in `MainActivity`'s `pet_layer`, **behind** the
+  pager. Anything drawn over a pet viewport hides the pet: keep the pages and `pet_viewport` free of
+  backgrounds there (`bg_pet_viewport` is a stroke only). The WebView only gets touches forwarded by
+  `PetViewport`, so don't make the layer clickable or put the pager below it. It's created
   with the viewport's (activity) context, so `PetStage` lives in `MainActivity` and is released
   in its `onDestroy`. Never hold it in a ViewModel or `AppContainer`: that would leak the activity.
 - **WebView (Maniengine):** an `OnTouchListener` on a WebView triggers lint
@@ -906,8 +919,7 @@ Rules:
 - **No raw hex values** in layouts, drawables or Java. Reach for a theme attribute first
   (`?attr/colorPrimary`, `?android:attr/textColorSecondary`), then a palette token.
 - For a component-specific colour, add a **semantic alias** in `colors.xml` that points at a token
-  (as `bubble_bot_background`, `system_notice_background`, `viewport_background` and
-  `viewport_stroke` do) rather than a new hex value. Adding a new token means a palette change:
+  (as `bubble_bot_background`, `system_notice_background` and `viewport_stroke` do) rather than a new hex value. Adding a new token means a palette change:
   update the table above in the same commit.
 - `eggshell` on `floral_white` has very low contrast. Borders that must be visible use a 2dp stroke
   (as the Customise pet viewport does). The Pets cards are flat, transparent and have no stroke, because
@@ -1059,9 +1071,12 @@ Debug helpers available in the debug build:
    lists a single page target. Also check:
    - **Transition:** swipe slowly from Pets to Customise. The pet stays on screen and shrinks, with
      the finger, into the preview card, its corners rounding as it goes, while the health bar slides
-     away with Pets. It lands with no jump. Reverse the swipe halfway: it grows back. Tapping the
-     Customise or Pets tab, and Chat → Customise, animate the same way. Pets → Chat is unchanged (the
-     pet slides away with Pets). After any transition, turning and pinching still work on both pages.
+     away with Pets. It rises steadily as it shrinks (no dip halfway) and nothing moves when the swipe
+     settles. Reverse the swipe halfway: it grows back. Tapping the Customise or Pets tab, and
+     Chat → Customise, animate the same way. Pets → Chat: the pet slides away with Pets, and no pet
+     shows through Chat. The health bar and Usage Access card draw over the pet; the Customise border
+     sits on the pet's edge. After any transition, turning, pinching and flicking the pet to change tab
+     still work on both pages, and the item circles and Usage Access button still respond.
    - the selected slot tab and the current page survive rotation;
    - Back on Customise or Chat returns to Pets; Back on Pets leaves the app;
    - **Swiping:** from Pets, swipe left to Chat and right to Customise, either from the 16dp page
@@ -1139,8 +1154,7 @@ Known gaps and TODOs (not assigned to anyone yet):
 - The app has no built-in way to lower HP for manual testing; use real doom-scroll detection. To
   start over, use the hidden reset (long-press the Wardrobe tab). Whether it keeps Usage Access and
   the notification permission hasn't been checked on a device.
-- The Pets ↔ Customise shrink transition is verified only on the page side (headless Edge) and by
-  unit tests; it hasn't been watched on a device yet. Watch for a blank frame when the WebView grows
-  from the Customise size into the full-size layer, and for the frame trailing the finger
-  (`evaluateJavascript` is asynchronous).
+- The stationary pet layer (the Pets ↔ Customise shrink, touch forwarding) is verified on the page
+  side (headless Edge) and by unit tests only; watch on a device for the frame trailing the finger
+  (`evaluateJavascript` is asynchronous) and for touches on the pet (turn, pinch, flick to change tab).
 - No instrumented/UI tests yet. JVM tests only (`model`, `doomscroll`, `chat`, `maniengine`, `viewmodel`).

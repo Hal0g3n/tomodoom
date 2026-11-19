@@ -13,7 +13,6 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
-import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.webkit.RenderProcessGoneDetail;
@@ -80,10 +79,18 @@ public final class HtmlManiengineRenderer implements ManiengineAssetRenderer {
     /** The {@code PetSpecies} the WebView's page was loaded with. */
     @Nullable
     private String loadedSpecies;
+    /** Latest model box script (see {@link #setTouchBox}), or null for none. */
+    @Nullable
+    private String latestTouchBox;
     /** Last model box script sent to the loaded page. */
     @Nullable
     private String deliveredTouchBox;
-    /** Last transition frame script sent to the loaded page, or null while it has none. */
+    /** Latest model box, in WebView px; empty for none. */
+    private final RectF touchBox = new RectF();
+    /** Latest frame script (see {@link #setFrame}), or null if the host never framed the pet. */
+    @Nullable
+    private String latestFrame;
+    /** Last frame script sent to the loaded page. */
     @Nullable
     private String deliveredFrame;
 
@@ -129,39 +136,48 @@ public final class HtmlManiengineRenderer implements ManiengineAssetRenderer {
 
     @MainThread
     @Override
-    public boolean supportsFramedTransition() {
+    public boolean supportsFrames() {
         return true;
     }
 
     @MainThread
     @Override
     public void setFrame(@NonNull ViewGroup container, @Nullable RectF frame,
-                         float cornerRadiusPx) {
-        PetWebView view = webView;
-        if (view == null || !pageReady) {
-            return; // nothing to frame; the page starts unframed
-        }
-        String script;
+                         float cornerRadiusPx, float lift) {
         if (frame == null) {
-            if (deliveredFrame == null) {
-                return;
-            }
-            script = ManiengineProtocol.CLEAR_FRAME_SCRIPT;
+            latestFrame = ManiengineProtocol.CLEAR_FRAME_SCRIPT;
         } else {
             // The WebView fills the container minus webViewParams' inset; the page counts CSS px.
             int inset = insetFor(container);
             float density = container.getResources().getDisplayMetrics().density;
-            script = ManiengineProtocol.frameScript((frame.left - inset) / density,
+            latestFrame = ManiengineProtocol.frameScript((frame.left - inset) / density,
                     (frame.top - inset) / density, frame.width() / density,
-                    frame.height() / density, cornerRadiusPx / density,
+                    frame.height() / density, cornerRadiusPx / density, lift,
                     (container.getWidth() - 2 * inset) / density,
                     (container.getHeight() - 2 * inset) / density);
-            if (script.equals(deliveredFrame)) {
-                return;
-            }
         }
-        view.evaluateJavascript(script, null);
-        deliveredFrame = frame == null ? null : script;
+        deliverFrameIfReady();
+    }
+
+    @MainThread
+    @Override
+    public void setTouchBox(@NonNull ViewGroup container, @Nullable RectF box) {
+        if (box == null) {
+            touchBox.setEmpty();
+            latestTouchBox = null;
+        } else {
+            int inset = insetFor(container);
+            float width = Math.max(1, container.getWidth() - 2 * inset);
+            float height = Math.max(1, container.getHeight() - 2 * inset);
+            touchBox.set(box.left - inset, box.top - inset, box.right - inset,
+                    box.bottom - inset);
+            latestTouchBox = ManiengineProtocol.touchBoxScript(touchBox.left / width,
+                    touchBox.top / height, touchBox.right / width, touchBox.bottom / height);
+        }
+        if (webView != null) {
+            webView.setModelBox(touchBox.left, touchBox.top, touchBox.right, touchBox.bottom);
+        }
+        deliverTouchBoxIfReady();
     }
 
     @MainThread
@@ -205,8 +221,7 @@ public final class HtmlManiengineRenderer implements ManiengineAssetRenderer {
 
         view.setBackgroundColor(Color.TRANSPARENT); // the viewport background shows while loading
         view.setWebViewClient(new Client(context.getAssets()));
-        view.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight,
-                                        oldBottom) -> v.post(this::updateTouchBox));
+        view.setModelBox(touchBox.left, touchBox.top, touchBox.right, touchBox.bottom);
 
         container.setClipToOutline(true);
         container.addView(view, webViewParams(container));
@@ -226,6 +241,9 @@ public final class HtmlManiengineRenderer implements ManiengineAssetRenderer {
         deliveredTouchBox = null;
         deliveredFrame = null;
         loadedSpecies = species;
+        if (latestFrame != null) {
+            view.setAlpha(0f); // the page draws full-size until it has its frame
+        }
         view.loadUrl(ManiengineAssets.entryUrl(species));
     }
 
@@ -290,42 +308,32 @@ public final class HtmlManiengineRenderer implements ManiengineAssetRenderer {
         deliveredJson = latestJson;
     }
 
-    /**
-     * Works out where drags rotate the pet: lined up with the health bar when the page has one,
-     * otherwise inset from the viewport's sides. Sends the page the box whenever it changes.
-     */
+    /** Sends the latest frame once the page can take it; the first one also reveals the pet. */
     @MainThread
-    private void updateTouchBox() {
+    private void deliverFrameIfReady() {
         PetWebView view = webView;
-        if (view == null || !(view.getParent() instanceof ViewGroup)
-                || view.getWidth() == 0 || view.getHeight() == 0) {
+        if (view == null || !pageReady || latestFrame == null
+                || latestFrame.equals(deliveredFrame)) {
             return;
         }
-        ViewGroup container = (ViewGroup) view.getParent();
-        int width = view.getWidth();
-        int height = view.getHeight();
-        float inset = view.getResources().getDimension(R.dimen.pet_model_box_inset);
-        float left = inset;
-        float top = 0f;
-        float right = width - inset;
-        float bottom = height * (1f - (float) ManiengineProtocol.TAB_SWIPE_BOTTOM_FRACTION);
-        ViewParent page = container.getParent();
-        View healthBar = page instanceof ViewGroup
-                ? ((ViewGroup) page).findViewById(R.id.hp_card) : null;
-        if (healthBar != null) { // the bar sits below the rabbit and stays inside the box
-            int offsetX = container.getLeft() + view.getLeft();
-            left = healthBar.getLeft() - offsetX;
-            top = inset;
-            right = healthBar.getRight() - offsetX;
-            bottom = healthBar.getBottom() - (container.getTop() + view.getTop());
+        boolean reveal = deliveredFrame == null;
+        view.evaluateJavascript(latestFrame, reveal ? result -> {
+            if (view == webView) {
+                view.setAlpha(1f); // the page has drawn the pet in its frame
+            }
+        } : null);
+        deliveredFrame = latestFrame;
+    }
+
+    @MainThread
+    private void deliverTouchBoxIfReady() {
+        PetWebView view = webView;
+        if (view == null || !pageReady || latestTouchBox == null
+                || latestTouchBox.equals(deliveredTouchBox)) {
+            return;
         }
-        view.setModelBox(left, top, right, bottom);
-        String script = ManiengineProtocol.touchBoxScript(left / width, top / height,
-                right / width, bottom / height);
-        if (pageReady && !script.equals(deliveredTouchBox)) {
-            view.evaluateJavascript(script, null);
-            deliveredTouchBox = script;
-        }
+        view.evaluateJavascript(latestTouchBox, null);
+        deliveredTouchBox = latestTouchBox;
     }
 
     @MainThread
@@ -341,7 +349,11 @@ public final class HtmlManiengineRenderer implements ManiengineAssetRenderer {
                 webView.capturesCentre = ManiengineProtocol.TOUCH_CENTRE.equals(policy);
             }
         });
-        updateTouchBox();
+        if (latestFrame == null) {
+            view.setAlpha(1f); // not framed by the host: nothing to wait for
+        }
+        deliverFrameIfReady();
+        deliverTouchBoxIfReady();
         deliverIfReady();
     }
 

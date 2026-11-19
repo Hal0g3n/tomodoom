@@ -122,8 +122,9 @@ public class ManiengineProtocolTest {
     public void frameScript_publishesAndDispatchesTheFrame() {
         assertEquals("(function(f){window.tomodoomFrame=f;window.dispatchEvent("
                         + "new CustomEvent('tomodoom:frame',{detail:f}));})"
-                        + "({x:16.00,y:8.50,w:328.00,h:280.25,r:16.00,hostW:360.00,hostH:700.00});",
-                ManiengineProtocol.frameScript(16f, 8.5f, 328f, 280.25f, 16f, 360f, 700f));
+                        + "({x:16.00,y:8.50,w:328.00,h:280.25,r:16.00,lift:0.250,hostW:360.00,"
+                        + "hostH:700.00});",
+                ManiengineProtocol.frameScript(16f, 8.5f, 328f, 280.25f, 16f, 0.25f, 360f, 700f));
     }
 
     @Test

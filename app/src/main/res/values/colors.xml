@@ -12,7 +12,6 @@
     <color name="system_notice_background">@color/eggshell</color>
 
     <!-- Pets -->
-    <color name="viewport_background">@color/floral_white</color>
     <color name="viewport_stroke">@color/eggshell</color>
 
     <!-- Customise -->

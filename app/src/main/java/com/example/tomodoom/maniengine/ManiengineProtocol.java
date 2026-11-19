@@ -34,9 +34,9 @@ import java.util.Map;
  * of the viewport to the tab pager). Under {@code centre} the host publishes the box with
  * {@link #touchBoxScript}, and a fast flick inside it still changes tab ({@link #isTabFlick}).</p>
  *
- * <p>While the host animates the pet between two pages it runs {@link #frameScript}: the page
- * draws the pet only inside that rect (rounded corners, CSS px) of its transparent canvas, framed
- * as it would be in a viewport of the rect's size. A frame applies only while the page's size is
+ * <p>The host places the pet with {@link #frameScript}: the page draws it only inside that rect
+ * (rounded corners, CSS px) of its transparent canvas, framed as it would be in a viewport of the
+ * rect's size. A frame applies only while the page's size is
  * the frame's {@code hostW} x {@code hostH}, so a frame sent just before or after a resize is
  * harmless. {@link #CLEAR_FRAME_SCRIPT} goes back to the whole canvas.</p>
  */
@@ -56,14 +56,12 @@ public final class ManiengineProtocol {
     public static final String TOUCH_BOX_GLOBAL = "tomodoomTouchBox";
     /** Event dispatched on {@code window} with the frame (or null) as {@code event.detail}. */
     public static final String FRAME_EVENT = "tomodoom:frame";
-    /** Global holding the transition frame {@code {x, y, w, h, r, hostW, hostH}}, or null. */
+    /** Global holding the frame {@code {x, y, w, h, r, lift, hostW, hostH}}, or null. */
     public static final String FRAME_GLOBAL = "tomodoomFrame";
     /** Clears the transition frame: the pet fills the whole page again. */
     public static final String CLEAR_FRAME_SCRIPT = "(function(){window." + FRAME_GLOBAL
             + "=null;window.dispatchEvent(new CustomEvent('" + FRAME_EVENT
             + "',{detail:null}));})();";
-    /** Height of the bottom strip left to the tab pager, as a fraction of the viewport height. */
-    public static final double TAB_SWIPE_BOTTOM_FRACTION = 0.20;
     /** Horizontal speed from which a drag in the model box is a tab flick. */
     public static final float TAB_FLICK_MIN_DP_PER_SEC = 1200f;
     /** A flick must reach that speed this soon after touching down; later drags stay rotations. */
@@ -158,17 +156,19 @@ public final class ManiengineProtocol {
     }
 
     /**
-     * @return JavaScript publishing a transition frame; every argument is in CSS px. {@code x}/
-     * {@code y} are the rect's top-left corner inside the page, {@code radius} its corner radius,
-     * and {@code hostWidth}/{@code hostHeight} the page size the rect was worked out for.
+     * @return JavaScript publishing a frame. {@code x}/{@code y} are the rect's top-left corner
+     * inside the page, {@code radius} its corner radius and {@code hostWidth}/{@code hostHeight}
+     * the page size the rect was worked out for, all in CSS px. {@code lift} (0-1) is how much to
+     * raise the pet clear of a health bar below it: 1 on Pets, 0 on Customise.
      */
     @NonNull
     public static String frameScript(float x, float y, float width, float height, float radius,
-                                     float hostWidth, float hostHeight) {
+                                     float lift, float hostWidth, float hostHeight) {
         return String.format(Locale.ROOT,
                 "(function(f){window.%s=f;window.dispatchEvent(new CustomEvent('%s',{detail:f}));})"
-                        + "({x:%.2f,y:%.2f,w:%.2f,h:%.2f,r:%.2f,hostW:%.2f,hostH:%.2f});",
-                FRAME_GLOBAL, FRAME_EVENT, x, y, width, height, radius, hostWidth, hostHeight);
+                        + "({x:%.2f,y:%.2f,w:%.2f,h:%.2f,r:%.2f,lift:%.3f,hostW:%.2f,hostH:%.2f});",
+                FRAME_GLOBAL, FRAME_EVENT, x, y, width, height, radius, lift, hostWidth,
+                hostHeight);
     }
 
     /**

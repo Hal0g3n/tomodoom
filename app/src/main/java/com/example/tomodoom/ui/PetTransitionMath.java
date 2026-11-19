@@ -1,30 +1,48 @@
 package com.example.tomodoom.ui;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 /**
- * Pure-Java maths for the pet's Pets ↔ Customise page transition ({@link PetStage}): which pager
- * scrolls it covers, and the rect the pet is drawn into part-way through.
+ * Pure-Java maths for where {@link PetStage} draws the pet: the frame for a pager position
+ * (sliding and shrinking between the Pets and Customise viewports), and the model box where drags
+ * turn the pet.
  */
 public final class PetTransitionMath {
+
+    /** Without a health bar, the box ends this fraction of the viewport's height above its bottom. */
+    public static final float MODEL_BOX_BOTTOM_FRACTION = 0.20f;
 
     private PetTransitionMath() {
     }
 
-    /** An axis-aligned rect with a corner radius, in px. Immutable. */
+    /**
+     * An axis-aligned rect with a corner radius, in px, and the pet's {@code lift} there (0-1: how
+     * far to raise it clear of a health bar). Immutable.
+     */
     public static final class Frame {
         public final float left;
         public final float top;
         public final float right;
         public final float bottom;
         public final float radius;
+        public final float lift;
 
-        public Frame(float left, float top, float right, float bottom, float radius) {
+        public Frame(float left, float top, float right, float bottom, float radius, float lift) {
             this.left = left;
             this.top = top;
             this.right = right;
             this.bottom = bottom;
             this.radius = radius;
+            this.lift = lift;
+        }
+
+        public float width() {
+            return right - left;
+        }
+
+        public float height() {
+            return bottom - top;
         }
 
         public boolean isEmpty() {
@@ -57,7 +75,43 @@ public final class PetTransitionMath {
         float k = clamp01(t);
         return new Frame(lerp(from.left, to.left, k), lerp(from.top, to.top, k),
                 lerp(from.right, to.right, k), lerp(from.bottom, to.bottom, k),
-                lerp(from.radius, to.radius, k));
+                lerp(from.radius, to.radius, k), lerp(from.lift, to.lift, k));
+    }
+
+    /**
+     * @param pets      the Pets viewport's pet area, or null if it isn't laid out.
+     * @param customise the Customise viewport's pet area, or null if it isn't laid out.
+     * @return where the pet goes at this pager scroll: between the two while only they are on
+     * screen, otherwise the Pets area (sliding away with its page). Null if that one is missing.
+     */
+    @Nullable
+    public static Frame frameFor(int position, float offset, @Nullable Frame pets,
+                                 @Nullable Frame customise) {
+        if (pets == null) {
+            return position == MainPagerAdapter.PAGE_CUSTOMISE && offset == 0f ? customise : null;
+        }
+        if (customise == null || !showsOnlyCustomiseAndPets(position, offset)) {
+            return pets;
+        }
+        return between(pets, customise, towardsCustomise(position, offset));
+    }
+
+    /**
+     * @param area      the viewport's pet area.
+     * @param inset     how far the box stays in from the sides (and, with a health bar, the top).
+     * @param healthBar the health bar floating over the area's bottom, or null.
+     * @return where one-finger drags turn the pet: lined up with the health bar (which is inside
+     * it), otherwise inset from the sides and ending {@link #MODEL_BOX_BOTTOM_FRACTION} above the
+     * bottom. The rest of the area is left to page swipes.
+     */
+    @NonNull
+    public static Frame modelBox(@NonNull Frame area, float inset, @Nullable Frame healthBar) {
+        if (healthBar != null) {
+            return new Frame(healthBar.left, area.top + inset, healthBar.right, healthBar.bottom,
+                    0f, 0f);
+        }
+        return new Frame(area.left + inset, area.top, area.right - inset,
+                area.top + area.height() * (1f - MODEL_BOX_BOTTOM_FRACTION), 0f, 0f);
     }
 
     static float lerp(float a, float b, float t) {

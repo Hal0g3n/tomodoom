@@ -9,9 +9,10 @@
     android:layout_height="match_parent"
     tools:context=".ui.pets.PetsFragment">
 
-    <!-- Pet viewport: fills the page behind the cards. Owned entirely by ManiengineAssetRenderer.
-         Add no children here. -->
-    <FrameLayout
+    <!-- Pet viewport: fills the page behind the cards. The pet itself is drawn behind the pager
+         (PetStage), lined up with this view, which forwards its touches. Keep it transparent and
+         add no children here. -->
+    <com.example.tomodoom.ui.PetViewport
         android:id="@+id/pet_viewport"
         android:layout_width="0dp"
         android:layout_height="0dp"
