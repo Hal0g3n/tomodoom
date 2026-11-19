@@ -21,6 +21,9 @@
     <string name="settings_apps_no_access">Usage Access is off, so no app is being tracked yet.</string>
     <string name="settings_chat_title">Chat text size</string>
     <string name="settings_chat_value">%1$d%%</string>
+    <string name="settings_music_title">Background music</string>
+    <string name="settings_music_value">%1$d%%</string>
+    <string name="settings_music_off">Off</string>
     <string name="settings_chat_preview">This is how your pet\'s messages will look.</string>
     <string name="reset_title">Reset Tomodoom?</string>
     <string name="reset_message">This erases your pet, its HP and items, and closes the app. Next time it opens, you\'ll start over.</string>

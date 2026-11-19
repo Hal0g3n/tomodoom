@@ -19,7 +19,7 @@ import java.util.function.BooleanSupplier;
 
 /**
  * ViewModel for the Settings page: the pet's name and species, the watched apps (edited in
- * {@code WatchedAppsActivity}) and the chat text size. Every change goes through its repository.
+ * {@code WatchedAppsActivity}), the chat text size and the background-music volume. Every change goes through its repository.
  */
 public class SettingsViewModel extends ViewModel {
 
@@ -126,5 +126,18 @@ public class SettingsViewModel extends ViewModel {
     /** Sets the chat text size to the {@link ChatTextScale} step at {@code index}. */
     public void setChatTextScaleIndex(int index) {
         settingsRepository.setChatTextScale(ChatTextScale.stepAt(index));
+    }
+
+    // ---- Background music ----
+
+    /** The background-music volume in percent (0 = silent). */
+    @NonNull
+    public LiveData<Integer> getMusicVolume() {
+        return settingsRepository.getMusicVolume();
+    }
+
+    /** Sets the background-music volume in percent; it snaps to a {@code MusicVolume} step. */
+    public void setMusicVolume(int percent) {
+        settingsRepository.setMusicVolume(percent);
     }
 }

@@ -22,6 +22,7 @@ import com.example.tomodoom.R;
 import com.example.tomodoom.databinding.FragmentSettingsBinding;
 import com.example.tomodoom.di.ViewModelFactory;
 import com.example.tomodoom.model.ChatTextScale;
+import com.example.tomodoom.model.MusicVolume;
 import com.example.tomodoom.model.PetNames;
 import com.example.tomodoom.model.PetState;
 import com.example.tomodoom.ui.MainPagerAdapter;
@@ -36,8 +37,8 @@ import com.google.android.material.snackbar.Snackbar;
 import java.util.Set;
 
 /**
- * Settings page: rename the pet, switch to another pet, choose the tracked apps and set the chat
- * text size. Holds no logic; every change goes through {@link SettingsViewModel}. The activity's
+ * Settings page: rename the pet, switch to another pet, choose the tracked apps, set the chat
+ * text size and the background-music volume. Holds no logic; every change goes through {@link SettingsViewModel}. The activity's
  * pet ({@link PetStage}) fades out on this page but keeps running.
  */
 public class SettingsFragment extends Fragment {
@@ -64,10 +65,12 @@ public class SettingsFragment extends Fragment {
         setUpPetChoices();
         setUpApps();
         setUpChatSize();
+        setUpMusic();
 
         viewModel.getPetState().observe(getViewLifecycleOwner(), this::renderPet);
         viewModel.getWatchedPackages().observe(getViewLifecycleOwner(), this::renderWatched);
         viewModel.getChatTextScale().observe(getViewLifecycleOwner(), this::renderChatSize);
+        viewModel.getMusicVolume().observe(getViewLifecycleOwner(), this::renderMusic);
         // The pet fades out here but keeps running, so it returns without a flash.
         stage().registerBackdrop(MainPagerAdapter.PAGE_SETTINGS, binding.getRoot(),
                 PetTransitionMath.HIDDEN_PET_ALPHA);
@@ -239,6 +242,29 @@ public class SettingsFragment extends Fragment {
                 getString(R.string.settings_chat_value, ChatTextScale.percent(value)));
         float base = getResources().getDimension(R.dimen.chat_bubble_text_size);
         binding.chatSizePreview.setTextSize(TypedValue.COMPLEX_UNIT_PX, base * value);
+    }
+
+    // ---- Background music ----
+
+    private void setUpMusic() {
+        binding.musicVolumeSlider.setValueFrom(MusicVolume.MIN);
+        binding.musicVolumeSlider.setValueTo(MusicVolume.MAX);
+        binding.musicVolumeSlider.setStepSize(MusicVolume.STEP);
+        binding.musicVolumeSlider.addOnChangeListener((slider, value, fromUser) -> {
+            if (fromUser) {
+                viewModel.setMusicVolume(Math.round(value));
+            }
+        });
+    }
+
+    private void renderMusic(@Nullable Integer volume) {
+        int percent = volume != null ? volume : MusicVolume.DEFAULT;
+        if (Math.round(binding.musicVolumeSlider.getValue()) != percent) {
+            binding.musicVolumeSlider.setValue(percent);
+        }
+        binding.musicVolumeValue.setText(percent == 0
+                ? getString(R.string.settings_music_off)
+                : getString(R.string.settings_music_value, percent));
     }
 
     // ---- Shared ----

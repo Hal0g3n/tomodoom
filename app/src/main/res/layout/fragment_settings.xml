@@ -227,5 +227,47 @@
                     android:textColor="?android:attr/textColorPrimary" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
+
+        <!-- 5. Background music volume -->
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Widget.Tomodoom.StatsCard">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/settings_music_title"
+                        android:textAppearance="@style/TextAppearance.Tomodoom.StatsCardTitle" />
+
+                    <TextView
+                        android:id="@+id/music_volume_value"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textAppearance="@style/TextAppearance.Tomodoom.StatsTileValue"
+                        tools:text="50%" />
+                </LinearLayout>
+
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/music_volume_slider"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:contentDescription="@string/settings_music_title"
+                    android:stepSize="10"
+                    android:valueFrom="0"
+                    android:valueTo="100"
+                    app:labelBehavior="gone" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>

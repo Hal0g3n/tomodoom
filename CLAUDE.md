@@ -91,11 +91,13 @@ virtual pet whose **HP** reflects your digital habits:
 | You equip clothes or accessories | The pet's look changes | Maniengine renderer |
 
 The app has five bottom-navigation tabs, left to right: **Settings** (rename the pet, switch to
-another pet, choose the tracked apps, chat text size), **Customise** (live pet preview + slot tabs
+another pet, choose the tracked apps, chat text size, background-music volume), **Customise** (live pet preview + slot tabs
 and a grid of item circles), **Pets** (HP and the pet viewport; the default page on launch), **Chat**
 (Gemini chatbot + quizzes) and **Stats** (time since the last doom-scroll, doom-scrolling per day and
 app, the pet's health over 24 h / 7 days, and LLM tokens per model). There is no action bar on any tab. The bottom bar shows icons only: the
-open tab widens, shows its label and enlarges its icon.
+open tab widens, shows its label and enlarges its icon. Calm background music
+(`res/raw/calm_bgm.ogg`) loops while the app is open and restarts from the beginning each time you
+leave and reopen the app.
 
 ### Tech stack (fixed — don't change it without updating this file)
 
@@ -141,7 +143,8 @@ com.example.tomodoom
 │   ├── DoomScrollEvent           sourcePackage, durationMillis, hpPenalty, timestamp
 │   ├── WatchedApps               default watched-app package IDs + set/sort helpers for the picker
 │   ├── InstalledApp              packageName, label (a launcher app in the watched-apps picker)
-│   └── ChatTextScale             chat text sizes offered in Settings (0.8–1.5×, default 1.0) + snapping
+│   ├── ChatTextScale             chat text sizes offered in Settings (0.8–1.5×, default 1.0) + snapping
+│   └── MusicVolume               background-music volume % (0–100, step 10, default 50) + gain curve
 │
 ├── contracts/                    Interfaces that downstream agents implement (see §4)
 │   ├── ManiengineAssetRenderer
@@ -159,7 +162,7 @@ com.example.tomodoom
 │   ├── DoomScrollHpBridge        DoomScrollListener → PetStateRepository.decreaseHp(...)
 │   ├── InactivityDecayPolicy     pure Java: HP lost to time away (30 min grace, keeps 70% per 8 h)
 │   ├── InactivityDecayTracker    time away (prefs tomodoom_decay) → decreaseHp on return + notice
-│   ├── SettingsRepository        Settings page preferences (prefs `tomodoom_settings` + LiveData): chat text scale
+│   ├── SettingsRepository        Settings page preferences (prefs `tomodoom_settings` + LiveData): chat text scale, music volume
 │   ├── WatchedAppsRepository     the user's watched apps (prefs `tomodoom_doomscroll` + LiveData); read by the monitor
 │   ├── StatsRepository           Stats page history (prefs `tomodoom_stats` + LiveData<StatsSnapshot>)
 │   └── StatsRecordingDoomScrollListener   records each DoomScrollEvent in StatsRepository, then forwards
@@ -205,6 +208,11 @@ com.example.tomodoom
 │   ├── DurationSplit             a duration → its two largest units ("2 h 15 min")
 │   └── DemoStats                 a seeded, plausible demo week (debug panel), HP line ending at the real HP
 │
+├── music/
+│   └── BackgroundMusicPlayer     loops res/raw/calm_bgm.ogg while the app is foregrounded (MediaPlayer,
+│                                 prepareAsync, audio focus); stop + rewind on leaving; main thread only;
+│                                 created in TomodoomApplication, volume from SettingsRepository
+│
 ├── di/
 │   ├── AppContainer              THE ONLY PLACE implementations are chosen ("SWAP POINT" comments)
 │   └── ViewModelFactory          constructor injection for ViewModels
@@ -218,7 +226,7 @@ com.example.tomodoom
 │   ├── OnboardingPermissionFlow  pure Java: next permission step (Usage Access → notifications → done)
 │   ├── ChatViewModel             exposes transcript + active quiz + PetState (for the pet backdrop), sends messages
 │   ├── StatsViewModel            StatsReport per snapshot / refresh(); selected health-chart range; PetState (hidden backdrop)
-│   ├── SettingsViewModel         rename (PetNames), species switch, watched-app count, chat text scale
+│   ├── SettingsViewModel         rename (PetNames), species switch, watched-app count, chat text scale, music volume
 │   └── WatchedAppsViewModel      installed apps (loaded once, off the main thread) + watched set, toggles
 │
 └── ui/
@@ -250,8 +258,9 @@ com.example.tomodoom
     ├── chat/MarkdownSegments     pure Java: a reply → prose / fenced-code segments
     ├── chat/LatexNormalizer      pure Java: \(…\), \[…\], $…$, $$…$$ → Markwon's $$-only syntax
     ├── stats/StatsFragment       four cards; refreshes every 30 s while visible; its root is a hidden (alpha 0) pet backdrop
-    ├── settings/SettingsFragment (root is a hidden pet backdrop) four cards: pet name, pet species, tracked apps (→ WatchedAppsActivity
-    │                             or Usage Access settings), chat text size slider + preview bubble
+    ├── settings/SettingsFragment (root is a hidden pet backdrop) five cards: pet name, pet species, tracked apps (→ WatchedAppsActivity
+    │                             or Usage Access settings), chat text size slider + preview bubble,
+    │                             background-music volume slider (0% shows "Off")
     ├── stats/HpLineChartView, BarChartView   Canvas charts in the palette (no chart library)
     ├── stats/StatsFormatter      durations, token counts and app labels → display text
     └── watchedapps/WatchedAppsActivity, WatchedAppsAdapter   picker: one switch per launcher app
@@ -281,6 +290,7 @@ small icon, used by both doom-scroll notifications),
 `usage_row`/`notifications_row` (the current one drawn selected), `permission_button`, `permission_skip_button`), `res/menu/bottom_nav_menu.xml`,
 `fragment_debug_panel.xml` + `values/strings_debug.xml` + `values/styles_debug.xml` (debug panel).
 `res/values/dimens.xml` (`pet_viewport_stroke`, `pet_viewport_corner_radius`).
+`res/raw/calm_bgm.ogg` (the background music, §3.3).
 `res/font/` + `res/font-v26/` (`playpen_sans`, `unkempt` families and their static TTFs; §6.3) and
 `res/font/fira_code_retina.ttf` (code), with the font licences in `assets/licenses/`.
 Assets: `assets/agents/kafka_agent.json` and `charon_agent.json` (the two persona exports from the TruFar editor, icons stripped; §5.2),
@@ -441,8 +451,16 @@ ui  ──►  viewmodel  ──►  repository  ──►  contracts  ◄──
   minute), so its "session" is wall-clock span, while the per-day minutes are counted time.
   `replaceAll(StatsSnapshot)` (the debug panel's demo week from `stats.DemoStats`) and
   `clear(PetState)` overwrite every ledger plus `tracking_since`; they never touch the pet.
-- `SettingsRepository` owns prefs file **`tomodoom_settings`**, key `chat_text_scale` (float, a
-  `ChatTextScale` step; missing → 1.0, other values snap to the nearest step). Same §3.2 rules.
+- `SettingsRepository` owns prefs file **`tomodoom_settings`**, keys `chat_text_scale` (float, a
+  `ChatTextScale` step; missing → 1.0, other values snap to the nearest step) and `music_volume`
+  (int percent, a `MusicVolume` step; missing → 50). Same §3.2 rules.
+- **Background music:** the same 1 → 0 / 0 → 1 started-activity count calls
+  `BackgroundMusicPlayer.onAppBackgrounded` (pause + `seekTo(0)`, abandon audio focus) /
+  `onAppForegrounded` (play), so leaving and reopening the app restarts the track; rotation and
+  switching our own activities don't. `TomodoomApplication` observes `getMusicVolume()` with
+  `observeForever` (app lifetime); 0% pauses and gives up audio focus. The player asks for
+  `AUDIOFOCUS_GAIN`, pauses when another app takes focus (until the next return to the app) and
+  ducks to 20% for notifications. A player error stops the music, never the app.
 - ViewModels hold only UI state (e.g. the selected customisation tab). Domain state lives in
   repositories.
 
@@ -1359,6 +1377,11 @@ Debug helpers:
     change at once; on Chat, user and bot bubbles, code blocks and LaTeX use the new size, and system
     notices don't. Rotation and relaunch keep it. *(26–28 verified on an API 37 emulator, 2026-11-19,
     except the chatbot reply, LaTeX and relaunch.)*
+29. **Background music**: launching the app plays a calm looping track. Home stops it; reopening
+    starts it from the beginning; rotating doesn't restart it. The **Background music** slider on
+    Settings (0–100%, 10% steps, default 50%) changes the loudness at once and reads "Off" at 0%,
+    which silences it; relaunch keeps the value. Playing music in another app pauses ours.
+    *(Not yet tested on a device.)*
 
 **Stats tab:**
 
@@ -1400,7 +1423,7 @@ Update this table in the same commit when your task changes a subsystem's status
 | Pet rendering | ✅ scene-3 rabbit (default) and scene-5 cat (three.js, offline) via the HTML/WebView pipeline; add-ons are primitive placeholders | `HtmlManiengineRenderer` + `assets/maniengine/` |
 | Item catalog | ⏳ Placeholder (6 hard-coded items: hats and accessories) | `AccessoryCatalog` → Maniengine Agent |
 | Chatbot (Gemini) | ✅ Kafka (low HP) / Charon (high HP) personas, 40/60 hysteresis, speaking as the pet's name, new conversation after 10 min in the background, on Google's free Gemini API (`gemini-3.1-flash-lite` with fallbacks, retries on 503/429/timeouts) via the in-app OpenAI-compatible client. It's verified from a PC; on a device, the first build hit a 503, and the fix is not yet re-tested there. Mock when unconfigured | `GeminiChatService` (`GEMINI_API_URL`) / `MockChatService` |
-| Settings tab | ✅ Rename the pet, switch species, tracked apps (count + picker / Usage Access), chat text size (80–150%) with a live preview; verified on an emulator | `SettingsFragment` / `SettingsViewModel` / `SettingsRepository` |
+| Settings tab | ✅ Rename the pet, switch species, tracked apps (count + picker / Usage Access), chat text size (80–150%) with a live preview; verified on an emulator. Background-music volume slider (music loops in the foreground, restarts on return; not yet tested on a device) | `SettingsFragment` / `SettingsViewModel` / `SettingsRepository` |
 | Stats tab | ✅ Time since the last doom-scroll, clean streaks, doom-scrolling per day/app/session, HP over 24 h / 7 d, HP by cause, tokens per model; tracking starts at install. Token and HP parts verified on an emulator; the doom-scroll parts are unit-tested only | `StatsRepository` / `StatsFragment` |
 | Doom-scroll detection | ✅ Usage Access polling in a foreground service; only the apps the user picks (default: social apps), portrait only, 1 HP per minute, warnings every 10 minutes (not yet tested on a device) | `UsageStatsDoomScrollMonitor` |
 
