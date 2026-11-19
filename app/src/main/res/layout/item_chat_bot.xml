@@ -19,6 +19,6 @@
         android:paddingBottom="8dp"
         android:textColor="?android:attr/textColorPrimary"
         android:textIsSelectable="true"
-        android:textAppearance="@style/TextAppearance.Tomodoom.ChatBubble"
+        style="@style/Widget.Tomodoom.ChatBubble"
         tools:text="📝 Quiz (+10 HP): What is 2 + 2?" />
 </FrameLayout>

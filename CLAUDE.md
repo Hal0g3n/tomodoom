@@ -833,6 +833,8 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
   in the background, where Android 12+ throws `ForegroundServiceStartNotAllowedException`.
 - **Switch on strings** works with the `AccessorySlot` / `McpPetActionHandler.TOOL_*` constants
   because they are compile-time constants. Keep new constants `static final` literals.
+- **Fonts:** the theme's Playpen Sans overrides the font of any `textAppearance`. Use a view
+  style for a different font (§6.3).
 - **Commit messages from Windows PowerShell 5.1:** `git commit -m @'…'@` with embedded double
   quotes gets split into pathspecs ("did not match any file(s)"). Write the message to a file in
   the scratchpad and use `git commit -F <file>`.
@@ -872,7 +874,8 @@ Rules:
   emblem fills the 72dp visible area. The monochrome (themed-icon) layer keeps only the `jet` line work.
 
 **Typography.** All UI text is **Playpen Sans**; user and bot chat bubbles use **Unkempt**
-(`TextAppearance.Tomodoom.ChatBubble`, 17sp). SYSTEM chat notices stay in Playpen Sans.
+(`Widget.Tomodoom.ChatBubble`, applied with `style=`; its text appearance sets 17sp). SYSTEM chat
+notices stay in Playpen Sans.
 - Both are bundled static Regular/Bold TTFs (Playpen Sans: OFL, from TypeTogether's repo, since
   Google Fonts ships only the variable font; Unkempt: Apache 2.0). Licences are in
   `assets/licenses/`.
@@ -882,7 +885,11 @@ Rules:
 - `Theme.Tomodoom` sets `fontFamily`/`android:fontFamily` and maps every Material
   `textAppearance*` the app uses to a `TextAppearance.Tomodoom.*` style, because the Material
   defaults hard-code `sans-serif`. A layout using a new `textAppearance*` attribute needs a new
-  override. Don't set `fontFamily` in layouts; use a text appearance.
+  override. Don't set `fontFamily` in layouts.
+- **A text appearance can't change the font.** The theme-level `fontFamily` counts as a TextView
+  attribute, which outranks `android:textAppearance`. A view that needs another font gets a
+  `Widget.Tomodoom.*` style (`style=`, which outranks the theme) setting `fontFamily` and
+  `android:fontFamily`, as the chat bubbles do.
 
 ## 7. Build & verification commands
 
