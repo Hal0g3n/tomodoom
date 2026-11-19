@@ -45,13 +45,16 @@ for (const id in ADDONS) {
   out[id] = renderer.domElement.toDataURL('image/png');
 }
 
-// Onboarding portraits: each pet whole, on its rug, without add-ons, in a fresh scene.
+// Onboarding portraits: each pet whole, without its rug or add-ons, in a fresh scene.
 const PORTRAIT_VIEW = new THREE.Vector3(.35, .3, 1).normalize();
 for (const id in PETS) {
   const s = new THREE.Scene(), cam = new THREE.PerspectiveCamera(30, 1, .01, 100);
   s.add(cam);
   const built = buildPetScene(THREE, s, renderer, (await loadPetModel(id)).model, id);
   for (const a in built.ADDONS) built.ADDONS[a].visible = false;
+  const inPet = new Set();
+  built.pet.traverse(o => inPet.add(o));
+  s.traverse(o => { if (o.isMesh && !inPet.has(o)) o.visible = false; });  // the rug
   s.background = null;
   s.fog = null;
   s.updateMatrixWorld(true);

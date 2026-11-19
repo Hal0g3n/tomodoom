@@ -19,8 +19,8 @@
         android:background="@drawable/bg_pet_choice"
         android:contentDescription="@null"
         android:importantForAccessibility="no"
-        android:padding="3dp"
-        android:scaleType="centerCrop"
+        android:padding="12dp"
+        android:scaleType="fitCenter"
         tools:src="@drawable/thumb_pet_rabbit" />
 
     <TextView

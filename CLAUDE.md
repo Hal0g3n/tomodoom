@@ -487,7 +487,7 @@ The Customise circles are PNGs of those add-ons. After changing an add-on, run
 **`python3 tools/maniengine/make_thumbnails.py`** (headless Edge) to regenerate
 `res/drawable-nodpi/thumb_<itemId>.png`. A new catalog item also needs a case in
 `ui/customise/AccessoryThumbnails`; `AccessoryThumbnailsTest` fails until it has one. The same run
-renders each `PETS` pet whole to `thumb_pet_<id>.png`, the onboarding portraits; a new pet needs a
+renders each `PETS` pet whole, without its rug, to `thumb_pet_<id>.png`, the onboarding portraits; a new pet needs a
 case in `ui/onboarding/PetPortraits` (portrait + name string), or `PetPortraitsTest` fails.
 
 How the page is hosted (`HtmlManiengineRenderer`):
