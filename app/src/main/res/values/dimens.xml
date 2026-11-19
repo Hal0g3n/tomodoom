@@ -11,4 +11,7 @@
     <dimen name="pet_model_box_inset">16dp</dimen>
     <!-- How far the open bottom bar tab's enlarged icon rises (MainActivity). -->
     <dimen name="nav_icon_lift">4dp</dimen>
+    <!-- Chat bubble text (also the LaTeX size, ChatMarkdown) -->
+    <dimen name="chat_bubble_text_size">17sp</dimen>
+    <dimen name="chat_code_text_size">14sp</dimen>
 </resources>

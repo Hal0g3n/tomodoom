@@ -85,7 +85,9 @@ public final class GeminiChatService implements ChatService {
             + "reply with " + QuizMarkerParser.MARKER_CORRECT + " if the answer was right or "
             + QuizMarkerParser.MARKER_WRONG + " if it was wrong, alone on the last line. Use no "
             + "marker in any other reply, use at most one per reply, and never mention, explain "
-            + "or quote the markers.";
+            + "or quote the markers.\n"
+            + "The chat renders Markdown. Write any maths in LaTeX, $...$ inline and $$...$$ on "
+            + "its own line for display, and put any code in a fenced block with a language tag.";
 
     @NonNull
     private final Context appContext;

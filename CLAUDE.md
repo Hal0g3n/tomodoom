@@ -234,7 +234,11 @@ com.example.tomodoom
     ├── customise/CustomiseFragment   pet preview viewport (via PetStage) + full-width slot tabs + item grid
     ├── customise/AccessoryGridAdapter, AccessoryThumbnails   two-column item circles; item ID → thumbnail
     ├── pets/PetsFragment         full-page pet viewport (FrameLayout) under the Usage Access card and health bar
-    ├── chat/ChatFragment, ChatAdapter   RecyclerView (3 view types) + input bar over the pet (via PetStage)
+    ├── chat/ChatFragment, ChatAdapter   RecyclerView (3 view types) + input bar over the pet (via PetStage);
+    │                             bot bubbles: prose (Markdown + LaTeX) and code blocks, in order
+    ├── chat/ChatMarkdown         Markwon (inline parser + JLatexMath) for bot prose; caches parsed text
+    ├── chat/MarkdownSegments     pure Java: a reply → prose / fenced-code segments
+    ├── chat/LatexNormalizer      pure Java: \(…\), \[…\], $…$, $$…$$ → Markwon's $$-only syntax
     ├── stats/StatsFragment       four cards; refreshes every 30 s while visible
     ├── stats/HpLineChartView, BarChartView   Canvas charts in the palette (no chart library)
     ├── stats/StatsFormatter      durations, token counts and app labels → display text
@@ -248,7 +252,9 @@ Resources: `res/values/colors.xml` + `res/values/themes.xml` (palette and theme,
 floating over it; both cards are transparent),
 `fragment_customise.xml` (`pet_viewport` at 40% of the page height, at the top with no title, `slot_tabs`,
 `item_grid` RecyclerView), `fragment_chat.xml` (a borderless full-page `pet_viewport` behind the
-transcript and the input bar, whose backgrounds are translucent, §6.3), `item_chat_{user,bot,system}.xml`,
+transcript and the input bar, whose backgrounds are translucent, §6.3), `item_chat_{user,bot,system}.xml`
+(`item_chat_bot.xml` is an empty `message_container` filled with `item_chat_bot_prose.xml` and
+`item_chat_code_block.xml` + `drawable/bg_chat_code_block.xml`),
 `item_accessory_circle.xml`, `activity_watched_apps.xml` + `item_watched_app.xml` (watched-apps
 picker), `res/drawable/bg_accessory_circle.xml`, `ic_item_none_24dp.xml`,
 `res/drawable-nodpi/thumb_<itemId>.png` and `thumb_pet_<speciesId>.png` (GENERATED item thumbnails and
@@ -983,6 +989,17 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
   because they are compile-time constants. Keep new constants `static final` literals.
 - **Fonts:** the theme's Playpen Sans overrides the font of any `textAppearance`. Use a view
   style for a different font (§6.3).
+- **Chat Markdown / LaTeX (Markwon 4.6.2):** bot replies only; user and SYSTEM text stays plain.
+  `ChatAdapter` first splits off fenced code (`MarkdownSegments`) into its own monospace block
+  (horizontal scroll, no wrapping, a **Copy** button; Android 13+ shows its own clipboard toast, so
+  the app's toast is for API < 33). The prose goes through `LatexNormalizer`, because Markwon's LaTeX
+  plugin reads **only** `$$…$$` (inline inside a sentence, a block on its own lines): don't feed it
+  raw LLM text. Single `$` follows Pandoc's rule, so currency like "$5 and $10" stays text.
+  JLatexMath typesets on Markwon's own executor and the formula appears when ready. Its first render
+  in a process loads fonts, so the first formula may pop in a moment late. `APP_PROTOCOL_PROMPT`
+  asks Gemini for `$…$` / `$$…$$` and language-tagged fences, the forms this handles best.
+- **`adb shell input text` on the slow emulator** drops or scrambles characters and stops at a comma.
+  Type short, punctuation-free test messages (`%s` for spaces).
 - **Commit messages from Windows PowerShell 5.1:** `git commit -m @'…'@` with embedded double
   quotes gets split into pathspecs ("did not match any file(s)"). Write the message to a file in
   the scratchpad and use `git commit -F <file>`.
@@ -1013,6 +1030,9 @@ Rules:
   (floral_white) are the palette hex at 60% alpha (`#99…`). This is the one place aliases carry a
   hex value: keep it the token's RGB with an alpha prefix. Put the alpha on backgrounds only, never
   `android:alpha` on a view, which would fade the text too.
+- **Chat code and maths are opaque:** code blocks in bot bubbles use `chat_code_block_background`
+  (jet) with `chat_code_block_text` (floral_white) and `chat_code_block_label` (eggshell); inline
+  code sits on `chat_inline_code_background` (floral_white); LaTeX is drawn in `chat_math_text` (jet).
 - `eggshell` on `floral_white` has very low contrast. Borders that must be visible use a 2dp stroke
   (as the Customise pet viewport does). The Pets cards are flat, transparent and have no stroke, because
   they float over the pet.
@@ -1033,8 +1053,9 @@ Rules:
   launcher size; only the API 24–25 webps are fixed-size (up to xxxhdpi, 192px).
 
 **Typography.** All UI text is **Playpen Sans**; user and bot chat bubbles use **Unkempt**
-(`Widget.Tomodoom.ChatBubble`, applied with `style=`: Unkempt Bold, 17sp from its text appearance). SYSTEM chat
-notices stay in Playpen Sans.
+(`Widget.Tomodoom.ChatBubble`, applied with `style=`: Unkempt Bold, `@dimen/chat_bubble_text_size` (17sp) from its
+text appearance; LaTeX uses the same size). SYSTEM chat notices stay in Playpen Sans. Code in bot bubbles is
+monospace (`Widget.Tomodoom.ChatCode`, `@dimen/chat_code_text_size`, 14sp).
 - Both are bundled static Regular/Bold TTFs (Playpen Sans: OFL, from TypeTogether's repo, since
   Google Fonts ships only the variable font; Unkempt: Apache 2.0). Licences are in
   `assets/licenses/`.
@@ -1190,6 +1211,12 @@ Debug helpers:
 3. Open **Chat**. There is no action bar; the transcript starts right under the status bar. The pet
    (the same one, not reloaded) fills the page behind the transcript and shows through the bubbles
    and the input bar, while the text stays solid. *(Verified on an API 37 emulator, 2026-11-19.)* The mock bot greets you. Type `quiz`, and the bot asks a question (e.g. "What is 2 + 2?").
+3a. **Markdown, maths and code** (bot bubbles): the mock bot echoes what you send, so send
+   `Euler $e^{i\pi}+1=0$ costs $5` and, on a new line, `$$\int_0^1 x^2 dx$$`. The echo shows a typeset
+   inline formula, "$5" as plain text and a centred display integral. Send a message with a
+   ```` ```python ```` fenced block: it shows as a dark, monospace block labelled "python" that scrolls
+   sideways instead of wrapping; **Copy** puts the code on the clipboard. `**bold**` is bold. With
+   Gemini, ask for "the quadratic formula in LaTeX and a short Python function".
 4. Answer correctly (`4`). The bot confirms, and a SYSTEM message shows **"+10 HP awarded via MCP! (60/100 HP)"**.
 5. Switch to **Pets**: **HP 60 / 100**.
 6. In Chat, type `/tool get_pet_state` (or `/tool award_hp amount=5`). A SYSTEM message shows the MCP result.
@@ -1269,7 +1296,7 @@ Update this table in the same commit when your task changes a subsystem's status
 | Pets UI (pet viewport, health bar below the pet) | ✅ Skeleton done | `PetsFragment` / `PetsViewModel` |
 | Customise UI (pet preview, slot tabs, item circle grid) | ✅ Skeleton done | `CustomiseFragment` / `CustomiseViewModel` |
 | Onboarding (choose and name the pet, then Usage Access and notifications) | ✅ Done (permission step not yet tested on a device) | `OnboardingActivity` / `OnboardingViewModel` |
-| Chat UI | ✅ Skeleton done | `ChatFragment` / `ChatViewModel` / `ChatRepository` |
+| Chat UI | ✅ Skeleton done; bot replies render Markdown, LaTeX (JLatexMath) and copyable code blocks (unit-tested; on a device only the plain greeting was seen through the new path) | `ChatFragment` / `ChatViewModel` / `ChatRepository` |
 | Pet rendering | ✅ scene-3 rabbit (default) and scene-5 cat (three.js, offline) via the HTML/WebView pipeline; add-ons are primitive placeholders | `HtmlManiengineRenderer` + `assets/maniengine/` |
 | Item catalog | ⏳ Placeholder (6 hard-coded items: hats and accessories) | `AccessoryCatalog` → Maniengine Agent |
 | Chatbot (Gemini) | ✅ Kafka (low HP) / Charon (high HP) personas, 40/60 hysteresis, speaking as the pet's name, new conversation after 10 min in the background, on Google's free Gemini API (`gemini-3.1-flash-lite` with fallbacks, retries on 503/429/timeouts) via the in-app OpenAI-compatible client. It's verified from a PC; on a device, the first build hit a 503, and the fix is not yet re-tested there. Mock when unconfigured | `GeminiChatService` (`GEMINI_API_URL`) / `MockChatService` |

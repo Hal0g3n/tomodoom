@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A run of prose in a bot bubble (ChatAdapter), rendered as Markdown with LaTeX. -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    style="@style/Widget.Tomodoom.ChatBubble"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="2dp"
+    android:layout_marginBottom="2dp"
+    android:textColor="?android:attr/textColorPrimary"
+    android:textIsSelectable="true"
+    tools:text="📝 Quiz (+10 HP): What is 2 + 2?" />
