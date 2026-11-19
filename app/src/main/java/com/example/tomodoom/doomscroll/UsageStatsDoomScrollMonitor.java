@@ -23,18 +23,17 @@ import com.example.tomodoom.contracts.DoomScrollListener;
 import com.example.tomodoom.contracts.DoomScrollMonitor;
 import com.example.tomodoom.model.DoomScrollEvent;
 
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
 /**
- * Detects doom-scrolling in common social/video apps using Android Usage Access. Polls every
- * 15 seconds and charges 1 HP per minute a watched app is on screen in portrait. Landscape (such
+ * Detects doom-scrolling in the apps the user watches using Android Usage Access. Polls every
+ * 15 seconds and charges 1 HP per minute a watched app is on screen in portrait. The watched set
+ * is read at every poll, so a change in the picker applies within one poll. Landscape (such
  * as fullscreen video) doesn't count. {@link DoomScrollSessionTracker} holds the session rules.
  */
 public final class UsageStatsDoomScrollMonitor implements DoomScrollMonitor {
@@ -51,18 +50,6 @@ public final class UsageStatsDoomScrollMonitor implements DoomScrollMonitor {
     private static final int EVENT_FOREGROUND = UsageEvents.Event.MOVE_TO_FOREGROUND;
     @SuppressWarnings("deprecation")
     private static final int EVENT_BACKGROUND = UsageEvents.Event.MOVE_TO_BACKGROUND;
-    private static final Set<String> DOOM_SCROLL_PACKAGES = Collections.unmodifiableSet(
-            new HashSet<>(Arrays.asList(
-                    "com.instagram.android",
-                    "com.zhiliaoapp.musically",
-                    "com.ss.android.ugc.trill",
-                    "com.reddit.frontpage",
-                    "com.google.android.youtube",
-                    "com.twitter.android",
-                    "com.facebook.katana",
-                    "com.snapchat.android"
-            )));
-
     @NonNull
     private final Context appContext;
     @Nullable
@@ -75,6 +62,8 @@ public final class UsageStatsDoomScrollMonitor implements DoomScrollMonitor {
     private final Object lock = new Object();
     @NonNull
     private final DoomScrollSessionTracker sessionTracker;
+    @NonNull
+    private final Supplier<Set<String>> watchedPackages;
     @Nullable
     private volatile DoomScrollListener listener;
     @Nullable
@@ -84,12 +73,18 @@ public final class UsageStatsDoomScrollMonitor implements DoomScrollMonitor {
     private long lastQueryMillis;
     private boolean monitoring;
 
-    public UsageStatsDoomScrollMonitor(@NonNull Context context) {
+    /**
+     * @param watchedPackages the package IDs to watch, read on the polling thread at every poll
+     *                        (e.g. {@code WatchedAppsRepository::getCurrent}).
+     */
+    public UsageStatsDoomScrollMonitor(@NonNull Context context,
+                                       @NonNull Supplier<Set<String>> watchedPackages) {
         appContext = context.getApplicationContext();
+        this.watchedPackages = watchedPackages;
         usageStatsManager = (UsageStatsManager) appContext.getSystemService(Context.USAGE_STATS_SERVICE);
         displayManager = (DisplayManager) appContext.getSystemService(Context.DISPLAY_SERVICE);
         powerManager = (PowerManager) appContext.getSystemService(Context.POWER_SERVICE);
-        sessionTracker = new DoomScrollSessionTracker(DOOM_SCROLL_PACKAGES, PENALTY_INTERVAL_MILLIS,
+        sessionTracker = new DoomScrollSessionTracker(watchedPackages.get(), PENALTY_INTERVAL_MILLIS,
                 WARNING_INTERVAL_MILLIS, AWAY_GRACE_MILLIS, MAX_POLL_GAP_MILLIS);
     }
 
@@ -209,12 +204,14 @@ public final class UsageStatsDoomScrollMonitor implements DoomScrollMonitor {
             begin = Math.max(0L, lastQueryMillis - 1L);
         }
         long now = System.currentTimeMillis();
+        Set<String> watched = watchedPackages.get();
         UsageEvents events = usageStatsManager.queryEvents(begin, now);
         synchronized (lock) {
             if (!monitoring) {
                 return;
             }
             lastQueryMillis = now;
+            sessionTracker.setMonitoredPackages(watched, begin);
         }
         UsageEvents.Event event = new UsageEvents.Event();
         while (events != null && events.hasNextEvent()) {

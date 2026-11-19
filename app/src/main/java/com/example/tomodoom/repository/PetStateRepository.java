@@ -48,7 +48,20 @@ public final class PetStateRepository {
     static final String KEY_ONBOARDING_COMPLETE = "onboarding_complete";
     static final String KEY_PET_SPECIES = "pet_species";
 
+    /**
+     * Told about every HP change, for the Stats page. Called <b>while the repository lock is
+     * held</b>, on the mutating thread: it must return quickly and must never call back into the
+     * repository.
+     */
+    public interface HpChangeListener {
+        @AnyThread
+        void onHpChanged(@NonNull PetState previous, @NonNull PetState next,
+                         @NonNull String reason);
+    }
+
     private final Object lock = new Object();
+    @Nullable
+    private volatile HpChangeListener hpChangeListener;
     @NonNull
     private final SharedPreferences prefs;
     @NonNull
@@ -69,6 +82,12 @@ public final class PetStateRepository {
         // Initial value is set via the constructor (not setValue/postValue), so observers
         // receive it immediately on subscription from any thread.
         this.petStateLiveData = new MutableLiveData<>(current);
+    }
+
+    /** Sets (or clears) the one {@link HpChangeListener}. Wired once in {@code AppContainer}. */
+    @AnyThread
+    public void setHpChangeListener(@Nullable HpChangeListener listener) {
+        this.hpChangeListener = listener;
     }
 
     /** Observe from the UI. Emissions are delivered on the main thread. */
@@ -213,7 +232,9 @@ public final class PetStateRepository {
             editor.putBoolean(KEY_ONBOARDING_COMPLETE, onboardingComplete);
             editor.apply();
             Log.i(TAG, "pet state reset");
+            PetState previous = current;
             publishLocked(fresh);
+            notifyHpChangeLocked(previous, fresh, "reset");
             return fresh;
         }
     }
@@ -231,8 +252,19 @@ public final class PetStateRepository {
             return current; // e.g. already at max/zero: nothing to persist or publish
         }
         prefs.edit().putInt(KEY_CURRENT_HP, next.getCurrentHp()).apply();
+        PetState previous = current;
         publishLocked(next);
+        notifyHpChangeLocked(previous, next, reason);
         return next;
+    }
+
+    private void notifyHpChangeLocked(@NonNull PetState previous, @NonNull PetState next,
+                                      @NonNull String reason) {
+        HpChangeListener listener = hpChangeListener;
+        if (listener != null && (previous.getCurrentHp() != next.getCurrentHp()
+                || previous.getMaxHp() != next.getMaxHp())) {
+            listener.onHpChanged(previous, next, reason);
+        }
     }
 
     private void publishLocked(@NonNull PetState next) {

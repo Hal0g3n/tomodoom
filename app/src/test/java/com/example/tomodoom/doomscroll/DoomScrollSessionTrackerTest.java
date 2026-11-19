@@ -3,6 +3,7 @@ package com.example.tomodoom.doomscroll;
 import org.junit.Test;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 
 import static org.junit.Assert.assertEquals;
@@ -200,6 +201,54 @@ public class DoomScrollSessionTrackerTest {
         assertNull(tracker.onPoll(60_000L - 15_000L, true));
         assertNull(tracker.onPoll(60_000L, true));
         assertEquals(1, tracker.onPoll(75_000L, true).penaltyIntervals);
+    }
+
+    @Test
+    public void unwatchingTheOpenAppStopsCharging() {
+        startSession();
+        assertEquals(2, pollUntil(0L, 2L * MINUTE, true));
+
+        tracker.setMonitoredPackages(Collections.singleton(OTHER_WATCHED), 2L * MINUTE);
+
+        assertEquals(0, pollUntil(2L * MINUTE, 10L * MINUTE, true));
+    }
+
+    @Test
+    public void watchingTheOpenAppStartsChargingFromThatMoment() {
+        tracker.onPoll(0L, true);
+        tracker.onForeground(UNWATCHED, 0L);
+        assertEquals(0, pollUntil(0L, 5L * MINUTE, true));
+
+        tracker.setMonitoredPackages(
+                new HashSet<>(Arrays.asList(WATCHED, UNWATCHED)), 5L * MINUTE);
+
+        DoomScrollSessionTracker.Tick tick = null;
+        for (long now = 5L * MINUTE + POLL; now <= 6L * MINUTE; now += POLL) {
+            tick = tracker.onPoll(now, true);
+        }
+        assertEquals(UNWATCHED, tick.sourcePackage);
+        assertEquals(1, tick.penaltyIntervals);
+    }
+
+    @Test
+    public void watchingAnAppThatAlreadyLeftChargesNothing() {
+        tracker.onPoll(0L, true);
+        tracker.onForeground(UNWATCHED, 0L);
+        tracker.onBackground(UNWATCHED, POLL);
+
+        tracker.setMonitoredPackages(Collections.singleton(UNWATCHED), 2L * POLL);
+
+        assertEquals(0, pollUntil(0L, 5L * MINUTE, true));
+    }
+
+    @Test
+    public void unchangedWatchedSetKeepsTheSession() {
+        startSession();
+        assertNull(tracker.onPoll(30_000L, true));
+
+        tracker.setMonitoredPackages(new HashSet<>(Arrays.asList(WATCHED, OTHER_WATCHED)), 30_000L);
+
+        assertEquals(1, pollUntil(30_000L, MINUTE, true));
     }
 
     @Test

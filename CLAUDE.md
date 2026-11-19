@@ -87,11 +87,13 @@ virtual pet whose **HP** reflects your digital habits:
 |---|---|---|
 | A doom-scroll session is detected | Pet **loses** HP | Doom Scroll monitor |
 | You pass a quiz from the chatbot | Pet **gains** HP (applied via an MCP tool) | Gemini chat + MCP bridge |
+| You stay out of the app for over 30 minutes | Pet **loses** 30% of its HP per 8 h away, applied when you return | `InactivityDecayTracker` |
 | You equip clothes or accessories | The pet's look changes | Maniengine renderer |
 
-The app has three bottom-navigation tabs, left to right: **Customise** (live pet preview + slot tabs
-and a grid of item circles), **Pets** (HP and the pet viewport; the default page on launch) and **Chat**
-(Gemini chatbot + quizzes). There is no action bar on any tab. The bottom bar shows icons only: the
+The app has four bottom-navigation tabs, left to right: **Customise** (live pet preview + slot tabs
+and a grid of item circles), **Pets** (HP and the pet viewport; the default page on launch), **Chat**
+(Gemini chatbot + quizzes) and **Stats** (time since the last doom-scroll, doom-scrolling per day and
+app, the pet's health over 24 h / 7 days, and LLM tokens per model). There is no action bar on any tab. The bottom bar shows icons only: the
 open tab widens, shows its label and enlarges its icon.
 
 ### Tech stack (fixed — don't change it without updating this file)
@@ -118,9 +120,10 @@ Root package: `com.example.tomodoom`. Source root: `app/src/main/java/com/exampl
 com.example.tomodoom
 ├── TomodoomApplication.java      Application subclass; owns the AppContainer; starts the monitor;
 │                                 counts started activities → ChatRepository background/foreground
-├── MainActivity.java             Main activity (not exported); swipeable ViewPager2 (Customise | Pets | Chat) ↔ BottomNavigationView;
+├── MainActivity.java             Main activity (not exported); swipeable ViewPager2 (Customise | Pets | Chat | Stats) ↔ BottomNavigationView;
 │                                 starts on Pets; Back off Pets → Pets; no action bar (NoActionBar theme);
-│                                 hidden reset: long-press the Wardrobe tab → confirm → wipe all data
+│                                 hidden reset: long-press the Wardrobe tab → confirm → wipe all data;
+│                                 hidden debug panel: long-press the Pets tab (all builds)
 │
 ├── model/                        Immutable, pure-Java value objects (no android.* imports)
 │   ├── PetState                  name, currentHp, maxHp, equipped items (slot → itemId), petSpecies
@@ -134,21 +137,29 @@ com.example.tomodoom
 │   ├── QuizPrompt                quizId, question, options, hpReward
 │   ├── QuizEvaluation            quizId, passed, hpReward, feedback
 │   ├── McpToolResult             success, message, data map
-│   └── DoomScrollEvent           sourcePackage, durationMillis, hpPenalty, timestamp
+│   ├── DoomScrollEvent           sourcePackage, durationMillis, hpPenalty, timestamp
+│   ├── WatchedApps               default watched-app package IDs + set/sort helpers for the picker
+│   └── InstalledApp              packageName, label (a launcher app in the watched-apps picker)
 │
 ├── contracts/                    Interfaces that downstream agents implement (see §4)
 │   ├── ManiengineAssetRenderer
 │   ├── ChatService         (+ nested ChatService.Listener)
 │   ├── McpPetActionHandler
 │   ├── DoomScrollMonitor
-│   └── DoomScrollListener
+│   ├── DoomScrollListener
+│   └── TokenUsageListener        tokens per successful LLM request (model, in, out, total)
 │
 ├── repository/                   Reactive state holders and domain glue
 │   ├── PetStateRepository        SINGLE SOURCE OF TRUTH for pet state (SharedPreferences + LiveData)
 │   ├── ChatRepository            app-scoped chat transcript; routes chat events → MCP handler;
 │   │                             new conversation after 10 min in the background
 │   ├── BackgroundTimer           pure Java: how long the app was in the background
-│   └── DoomScrollHpBridge        DoomScrollListener → PetStateRepository.decreaseHp(...)
+│   ├── DoomScrollHpBridge        DoomScrollListener → PetStateRepository.decreaseHp(...)
+│   ├── InactivityDecayPolicy     pure Java: HP lost to time away (30 min grace, keeps 70% per 8 h)
+│   ├── InactivityDecayTracker    time away (prefs tomodoom_decay) → decreaseHp on return + notice
+│   ├── WatchedAppsRepository     the user's watched apps (prefs `tomodoom_doomscroll` + LiveData); read by the monitor
+│   ├── StatsRepository           Stats page history (prefs `tomodoom_stats` + LiveData<StatsSnapshot>)
+│   └── StatsRecordingDoomScrollListener   records each DoomScrollEvent in StatsRepository, then forwards
 │
 ├── stubs/                        Stubs and default implementations of the contracts
 │   ├── PlaceholderManiengineRenderer   text-only placeholder in the pet viewport
@@ -165,6 +176,7 @@ com.example.tomodoom
 │   ├── QuizMarkerParser          pure Java: strips [[CORRECT]]/[[WRONG]] grading markers from replies
 │   ├── ChatHistoryWindow         pure Java: last-N-turns conversation memory
 │   ├── ModelFallback             pure Java: model list parsing + retry/fallback policy for overloaded LLMs
+│   ├── TokenUsageParser          pure Java: the OpenAI-compatible `usage` object → token counts
 │   └── JsonHttpClient            package-private HTTPS + JSON helper used by GeminiChatService;
 │                                 non-2xx → HttpStatusException (an IOException with the status code)
 │
@@ -177,19 +189,32 @@ com.example.tomodoom
 │   ├── UsageStatsDoomScrollMonitor   polls Usage Access every 15 s; reads portrait from the display
 │   ├── DoomScrollSessionTracker  pure Java: per-minute penalties, 10-minute warnings, session rules
 │   ├── DoomScrollNotifier        wraps DoomScrollHpBridge; posts the warning notification
-│   └── DoomScrollMonitorService  foreground service that keeps polling alive
+│   ├── DoomScrollMonitorService  foreground service that keeps polling alive
+│   └── LauncherAppsQuery         lists launcher apps (label + package) for the watched-apps picker
+│
+├── stats/                        pure Java: the Stats page's ledgers (JSON-serialisable, JUnit-tested)
+│   ├── TokenUsageLedger          requests + prompt/completion/total tokens per model, all time
+│   ├── HpHistory                 HP step samples (5-min coalescing, 8 days) + daily HP gained/lost by cause
+│   ├── DoomScrollLog             counted time per local day and app (30 days), sessions, clean streaks
+│   ├── LocalDays                 local-day numbers without java.time
+│   ├── StatsSnapshot             immutable copy of the three ledgers (what StatsRepository publishes)
+│   ├── StatsReport               the numbers the page shows, computed for a time + time zone
+│   └── DurationSplit             a duration → its two largest units ("2 h 15 min")
 │
 ├── di/
 │   ├── AppContainer              THE ONLY PLACE implementations are chosen ("SWAP POINT" comments)
 │   └── ViewModelFactory          constructor injection for ViewModels
 │
 ├── viewmodel/
-│   ├── PetsViewModel             exposes PetState + debug actions
+│   ├── PetsViewModel             exposes PetState + the inactivity-decay notice
+│   ├── DebugViewModel            debug panel actions, each through the feature's real path (§8)
 │   ├── CustomiseViewModel        exposes PetState, selected slot, catalog items, equip action
 │   ├── OnboardingViewModel       onboarding flag, suggested name, species list + selectedSpecies, submitName(),
 │   │                             permission-step state (usage skipped, notifications handled)
 │   ├── OnboardingPermissionFlow  pure Java: next permission step (Usage Access → notifications → done)
-│   └── ChatViewModel             exposes transcript + active quiz, sends messages
+│   ├── ChatViewModel             exposes transcript + active quiz, sends messages
+│   ├── StatsViewModel            StatsReport per snapshot / refresh(); selected health-chart range
+│   └── WatchedAppsViewModel      installed apps (loaded once, off the main thread) + watched set, toggles
 │
 └── ui/
     ├── onboarding/OnboardingActivity   LAUNCHER: picks + names the pet on first launch only, then asks
@@ -199,16 +224,23 @@ com.example.tomodoom
     │                             shared by onboarding and Pets
     ├── onboarding/PetChoiceAdapter, PetPortraits   two-column pet portrait cards; species ID → portrait/name
     ├── MainPagerAdapter          FragmentStateAdapter: page index ↔ bottom-nav item id
-    │                             (Customise=0, Pets=1 = default, Chat=2)
+    │                             (Customise=0, Pets=1 = default, Chat=2, Stats=3)
     ├── PetStage                  MainActivity's ONE pet renderer, kept in `pet_layer` behind the pager and
     │                             framed onto the resumed page's viewport (shrinks Pets ↔ Customise on swipe)
     ├── PetTransitionMath         pure Java: frame for a pager position (lift included), model box
     ├── PetLayer                  `pet_layer`: holds the pet for good; takes only forwarded touches
     ├── PetViewport               `pet_viewport` on Pets/Customise: forwards its touches to the PetLayer
+    ├── AppReset                  the hidden full reset (confirm dialog + clearApplicationUserData)
+    ├── debug/DebugPanelFragment  hidden debug bottom sheet (long-press the Pets tab)
     ├── customise/CustomiseFragment   pet preview viewport (via PetStage) + full-width slot tabs + item grid
     ├── customise/AccessoryGridAdapter, AccessoryThumbnails   two-column item circles; item ID → thumbnail
     ├── pets/PetsFragment         full-page pet viewport (FrameLayout) under the Usage Access card and health bar
-    └── chat/ChatFragment, ChatAdapter   RecyclerView (3 view types) + input bar
+    ├── chat/ChatFragment, ChatAdapter   RecyclerView (3 view types) + input bar
+    ├── stats/StatsFragment       four cards; refreshes every 30 s while visible
+    ├── stats/HpLineChartView, BarChartView   Canvas charts in the palette (no chart library)
+    ├── stats/StatsFormatter      durations, token counts and app labels → display text
+    └── watchedapps/WatchedAppsActivity, WatchedAppsAdapter   picker: one switch per launcher app
+                                  (opened from the Pets Usage Access card; not exported)
 ```
 
 Resources: `res/values/colors.xml` + `res/values/themes.xml` (palette and theme, §6.3; no
@@ -217,17 +249,20 @@ Resources: `res/values/colors.xml` + `res/values/themes.xml` (palette and theme,
 floating over it; both cards are transparent),
 `fragment_customise.xml` (`pet_viewport` at 40% of the page height, at the top with no title, `slot_tabs`,
 `item_grid` RecyclerView), `fragment_chat.xml`, `item_chat_{user,bot,system}.xml`,
-`item_accessory_circle.xml`, `res/drawable/bg_accessory_circle.xml`, `ic_item_none_24dp.xml`,
+`item_accessory_circle.xml`, `activity_watched_apps.xml` + `item_watched_app.xml` (watched-apps
+picker), `res/drawable/bg_accessory_circle.xml`, `ic_item_none_24dp.xml`,
 `res/drawable-nodpi/thumb_<itemId>.png` and `thumb_pet_<speciesId>.png` (GENERATED item thumbnails and
 pet portraits, §5.1), `item_pet_choice.xml` + `res/drawable/bg_pet_choice.xml` (onboarding pet cards),
-`res/drawable/ic_hanger_24dp.xml` (Customise tab icon),
+`res/drawable/ic_hanger_24dp.xml` (Customise tab icon), `ic_stats_24dp.xml` (Stats tab icon),
+`fragment_stats.xml` + `item_stats_row.xml` + `values/styles_stats.xml` (Stats page cards),
 launcher icon: `mipmap-anydpi-v26/ic_launcher{,_round}.xml` (adaptive: `@color/launcher_background`
 + GENERATED `drawable/ic_launcher_foreground.xml` / `ic_launcher_monochrome.xml`) and GENERATED legacy
 `mipmap-*/ic_launcher{,_round}.webp` for API 24–25, GENERATED `drawable/ic_notification.xml` (notification
 small icon, used by both doom-scroll notifications),
 `activity_main.xml` (`pet_layer` under `main_pager` ViewPager2, `nav_view`), `activity_onboarding.xml` (`name_step`: title,
 `pet_choices` grid, `pet_name_layout`/`pet_name_input`, `start_button`; then `permissions_step`:
-`usage_row`/`notifications_row` (the current one drawn selected), `permission_button`, `permission_skip_button`), `res/menu/bottom_nav_menu.xml`.
+`usage_row`/`notifications_row` (the current one drawn selected), `permission_button`, `permission_skip_button`), `res/menu/bottom_nav_menu.xml`,
+`fragment_debug_panel.xml` + `values/strings_debug.xml` + `values/styles_debug.xml` (debug panel).
 `res/values/dimens.xml` (`pet_viewport_stroke`, `pet_viewport_corner_radius`).
 `res/font/` + `res/font-v26/` (`playpen_sans`, `unkempt` families and their static TTFs; §6.3), with
 the font licences in `assets/licenses/`.
@@ -278,7 +313,14 @@ ui  ──►  viewmodel  ──►  repository  ──►  contracts  ◄──
       │
       └─► ManiengineAssetRenderer.render(viewport, state)
 
- DoomScrollMonitor ─► DoomScrollNotifier ─► DoomScrollHpBridge ─► PetStateRepository.decreaseHp(...)
+ DoomScrollMonitor ─► DoomScrollNotifier ─► StatsRecordingDoomScrollListener ─► DoomScrollHpBridge
+                                                       │                             │
+                                                       ▼                             ▼
+                                          StatsRepository.recordDoomScroll   PetStateRepository.decreaseHp(...)
+
+ Stats inputs: PetStateRepository ─(HpChangeListener)─► StatsRepository.recordHpChange
+               GeminiChatService  ─(TokenUsageListener)─► StatsRepository.recordTokens
+               StatsRepository ─► LiveData<StatsSnapshot> ─► StatsViewModel ─► StatsFragment
 ```
 
 ---
@@ -307,10 +349,16 @@ ui  ──►  viewmodel  ──►  repository  ──►  contracts  ◄──
   `equipped.<slotId>`, `onboarding_complete`, `pet_species` (a `PetSpecies` ID; missing or unknown →
   `rabbit`). **Only `PetStateRepository` may read or write this file.** A write that
   bypasses it won't reach LiveData observers and will be overwritten.
-- **Hidden reset** (`MainActivity.resetApp`, long-press the Wardrobe tab, then confirm): calls
+- **Hidden reset** (`ui.AppReset`, from a long-press on the Wardrobe tab or the debug panel's
+  Reset button, then confirm): calls
   `ActivityManager.clearApplicationUserData()`, which wipes *all* app data (this prefs file,
   WebView storage) and kills the process, so the next launch is a fresh install with onboarding.
   It's the one sanctioned bypass of the repository, since nothing survives to observe it.
+- **HP change listener:** `setHpChangeListener(HpChangeListener)` (one listener, wired in
+  `AppContainer` to `StatsRepository::recordHpChange`) is told `(previous, next, reason)` after every
+  HP change from `increaseHp`/`decreaseHp` and after `resetPetState` (reason `"reset"`). It runs on the
+  mutating thread **while the repository lock is held**, so it must be quick and must never call
+  back into `PetStateRepository` (deadlock).
 - `PetState` is **immutable**. Make modified copies with `withHp(...)` / `withName(...)` /
   `withEquippedItem(...)` / `withPetSpecies(...)`.
   Never hold on to a state and assume it is current. Re-read it or observe it.
@@ -344,9 +392,33 @@ ui  ──►  viewmodel  ──►  repository  ──►  contracts  ◄──
 
   Rotation and switching between activities don't count. The doom-scroll foreground service
   isn't an activity, so it doesn't keep the chat alive.
+- **Inactivity HP decay:** the same 1 → 0 / 0 → 1 activity count also calls
+  `InactivityDecayTracker.onAppBackgrounded` / `onAppForegrounded`, with the **wall clock**
+  (`System.currentTimeMillis()`), since the time away must survive a reboot. The tracker owns prefs
+  file **`tomodoom_decay`**, key `away_since_ms` (removed on return). On return it calls
+  `PetStateRepository.decreaseHp(loss, "inactivity_decay")` (stats count it as "other" HP lost)
+  and posts `loss` to `getPendingNotice()`; `PetsFragment` shows it once as a Snackbar while it is
+  the resumed page. `InactivityDecayPolicy.hpLoss`: no loss for 30 min, then
+  `hp × 0.7^(t / 8 h)` remains (100 HP → ~70 after 8.5 h, ~12 after 2 days, 0 after a week). It is
+  proportional and memoryless on purpose: frequent check-ins never cost more than staying away.
+  No decay before onboarding, on first launch, if the clock went backwards, or if the process died
+  while visible (no stamp). Rotation and switching our own activities don't count as away.
 - `GeminiChatService` saves the persona in use in its own prefs file **`tomodoom_chat`**, key
   `persona` (`low_hp` | `high_hp`), so a new conversation or a cold start keeps the personality.
   This is separate from `tomodoom_pet_state`, which only `PetStateRepository` touches.
+- `WatchedAppsRepository` owns prefs file **`tomodoom_doomscroll`**, key `watched_packages` (a
+  string set of package IDs; missing → `WatchedApps.DEFAULT_PACKAGES`). It follows the §3.2 rules
+  (synchronized mutators, `postValue` under the lock, `apply()`), and only it touches that file.
+  The monitor reads `getCurrent()` on its polling thread at every poll.
+- `StatsRepository` owns prefs file **`tomodoom_stats`**: `tracking_since` (ms, set on first run;
+  nothing earlier is known), `token_usage` (JSON array), `hp_history` and `doom_scroll_log` (JSON
+  objects; the ledgers' own `toJson`). Same §3.2 rules: synchronized recorders callable from any
+  thread, `postValue` under the lock, `apply()`. Each record rewrites that ledger's JSON (HP history
+  is at most ~2,500 samples). It records HP through the listener above, tokens through
+  `TokenUsageListener` (only `GeminiChatService` reports; the mock bot uses none) and doom-scrolling
+  through `StatsRecordingDoomScrollListener`. The hidden reset wipes it with everything else.
+  `DoomScrollLog` splits sessions on gaps over 2 minutes (the monitor reports one event per counted
+  minute), so its "session" is wall-clock span, while the per-day minutes are counted time.
 - ViewModels hold only UI state (e.g. the selected customisation tab). Domain state lives in
   repositories.
 
@@ -360,6 +432,7 @@ ui  ──►  viewmodel  ──►  repository  ──►  contracts  ◄──
 | `ChatService` | `MockChatService` | **Chat/MCP Agent** | `AppContainer` constructor, `// SWAP POINT (Chat/MCP Agent)` |
 | `McpPetActionHandler` | `DefaultMcpPetActionHandler` (production-capable) | **Chat/MCP Agent** | `AppContainer` constructor, `// SWAP POINT (Chat/MCP Agent)` |
 | `DoomScrollMonitor` (+ `DoomScrollListener`) | `StubDoomScrollMonitor` | **Doom Scroll Agent** | `AppContainer` constructor, `// SWAP POINT (Doom Scroll Agent)` |
+| `TokenUsageListener` | `StatsRepository::recordTokens` (Core) | reported by the **Chat/MCP Agent**'s `GeminiChatService` | `AppContainer` constructor, passed to `GeminiChatService` |
 
 The full Javadoc on each interface is normative. What follows is a summary.
 
@@ -465,7 +538,8 @@ interface DoomScrollListener {                         // callbacks: ANY thread
   `PetStateRepository.decreaseHp(event.getHpPenalty(), "doom_scroll:" + pkg)`. **The monitor never
   touches the repository directly.** It reports events, and the monitor decides `hpPenalty`
   (the real monitor charges 1 HP per minute; `DoomScrollEvent.DEFAULT_HP_PENALTY` = 5 is for the
-  stub and the debug button).
+  stub). `AppContainer.getDoomScrollListener()` returns that whole chain (notifier → stats → bridge),
+  so the debug panel's synthetic minutes and warnings take the real path.
 - `TomodoomApplication.onCreate()` calls `startMonitoring()` if `isPermissionGranted()`. The Pets
   page calls `startFromForeground()` on resume, which starts the foreground service.
 
@@ -736,7 +810,19 @@ How `GeminiChatService` behaves:
 second step asks for it first and then for notifications (Android 13+), each skippable with **Not now**.
 As a fallback the Pets tab has a card with a button to open that setting, starts the monitor when the
 user returns with access granted, and asks for notifications once per launch unless onboarding already
-asked in that launch (`ui.NotificationPrompt`). It watches Instagram, TikTok, Reddit, YouTube, X/Twitter, Facebook and Snapchat.
+asked in that launch (`ui.NotificationPrompt`).
+
+**Watched apps are the user's choice.** Only time in a watched app can cost HP; any other app (a
+work or study app) never counts.
+- Once access is granted, the same Pets card says so, and its **Choose apps** button opens
+  `ui.watchedapps.WatchedAppsActivity`: a switch per launcher app (`LauncherAppsQuery`, which needs
+  the manifest's `<queries>` MAIN/LAUNCHER intent on Android 11+; Tomodoom itself isn't listed).
+  Watched apps come first, sorted once so rows don't jump while toggling.
+- Changes save at once (`WatchedAppsRepository`, §3.3) and apply at the next poll
+  (`DoomScrollSessionTracker.setMonitoredPackages`): unwatching the app on screen stops the count,
+  and watching the app on screen starts it.
+- The default selection (`model.WatchedApps.DEFAULT_PACKAGES`) is Instagram, TikTok (two package
+  IDs), Reddit, YouTube, X/Twitter, Facebook and Snapchat. The hidden reset restores it.
 
 Session rules (`DoomScrollSessionTracker`):
 - The pet loses **1 HP per counted minute**, from the first minute. Part-minutes carry over.
@@ -813,7 +899,7 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
   in transitively from Material, like drawerlayout, so don't pin it. Rules:
   - A new top-level tab means a menu item in `bottom_nav_menu.xml` **and** an entry in
     `MainPagerAdapter` (`MENU_ITEM_IDS` + `createFragment`), in the same order.
-  - Page order is Customise (0), Pets (1), Chat (2). Pets is the default: `MainActivity` calls
+  - Page order is Customise (0), Pets (1), Chat (2), Stats (3). Pets is the default: `MainActivity` calls
     `setCurrentItem(PAGE_PETS, false)` only when `savedInstanceState == null`, so a restore keeps
     the saved page. Don't assume page 0 is the start page.
   - `FragmentStateAdapter` creates pages lazily (a page is created the first time you swipe or tap
@@ -876,6 +962,13 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
   forwarding, and a relaunch after process death skips it (Pets' card is the fallback).
   Anything that should run on every launch belongs in `TomodoomApplication` or `MainActivity`,
   not in the onboarding screen.
+- **On-device checks are possible on this Windows machine:** the SDK has an AVD
+  (`Medium_Phone_API_37.0`). Start it with
+  `"$LOCALAPPDATA/Android/Sdk/emulator/emulator.exe" -avd Medium_Phone_API_37.0 -no-snapshot-save`,
+  wait for `adb shell getprop sys.boot_completed` to be `1`, then `adb install -r` the debug APK and
+  drive it with `adb shell input tap/text/swipe` plus `adb exec-out screencap -p` (1080×2400; the
+  bottom-nav icons sit at y≈2244). After `adb install -r`, the first tap on Send can land before the
+  chat connects; wait for the greeting.
 - **Launcher shows the old (robot) icon after an icon change:** the APK is fine, but the phone
   still has an older install or the launcher cached the icon (`versionCode` stays 1, and Android
   Studio's *Apply Changes* doesn't reinstall the package). Uninstall the app and reinstall it; if it
@@ -893,6 +986,9 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
 - **Foreground service start:** start `DoomScrollMonitorService` only through
   `DoomScrollMonitor.startFromForeground()` while a page is resumed. `Application.onCreate` can run
   in the background, where Android 12+ throws `ForegroundServiceStartNotAllowedException`.
+- **Inactivity decay uses the wall clock:** moving the device clock forward costs HP, and back
+  costs nothing. That makes it easy to test (set the clock forward while the app is in the
+  background), but don't switch it to `elapsedRealtime`, which resets on reboot.
 - **Switch on strings** works with the `AccessorySlot` / `McpPetActionHandler.TOOL_*` constants
   because they are compile-time constants. Keep new constants `static final` literals.
 - **Fonts:** the theme's Playpen Sans overrides the font of any `textAppearance`. Use a view
@@ -919,7 +1015,8 @@ Rules:
 - **No raw hex values** in layouts, drawables or Java. Reach for a theme attribute first
   (`?attr/colorPrimary`, `?android:attr/textColorSecondary`), then a palette token.
 - For a component-specific colour, add a **semantic alias** in `colors.xml` that points at a token
-  (as `bubble_bot_background`, `system_notice_background` and `viewport_stroke` do) rather than a new hex value. Adding a new token means a palette change:
+  (as `bubble_bot_background`, `system_notice_background`, `viewport_stroke` and the Stats
+  `stats_card_*` / `chart_*` aliases do) rather than a new hex value. Adding a new token means a palette change:
   update the table above in the same commit.
 - `eggshell` on `floral_white` has very low contrast. Borders that must be visible use a 2dp stroke
   (as the Customise pet viewport does). The Pets cards are flat, transparent and have no stroke, because
@@ -1034,7 +1131,13 @@ for your feature) as "manual verification needed", and add those new steps to §
 
 ## 8. Manual end-to-end check (debug build, with the stubs)
 
-Debug helpers available in the debug build:
+Debug helpers:
+- **Debug panel (all builds):** long-press the **Pets** tab. A bottom sheet shows the live pet state
+  (name, species, HP, mood, equipped) and offers: HP −10/−1/+1/+10, set HP to 0/30/50/80/max,
+  unequip all; simulate one doom-scroll minute (−1 HP) or the 10-minute warning notification, Usage
+  Access status and settings; chat backend (mock or Gemini + models), simulate a quiz pass (+10 HP
+  through `McpPetActionHandler.onQuizPassed`), replay it (the replay guard should reject it), start a
+  new conversation; version and the hidden reset. HP changes use reason `debug`.
 - **Mock chat commands:** `quiz` (new quiz), `help`, `/tool <name> key=value …` (calls an MCP tool
   as if the backend had), anything else is echoed back.
 - **`StubDoomScrollMonitor.simulateDoomScroll(pkg, durationMs, penalty)`:** tests the
@@ -1061,7 +1164,8 @@ Debug helpers available in the debug build:
 1. The home-screen icon is the phone with a pet peeking out of its pocket, on eggshell (with any
    mask shape; on Android 13+ with themed icons on, a tinted line drawing). Launch the app. The **Pets** tab has **no action bar** and no debug buttons. The health bar sits below
    the rabbit and shows `Tomo`, **HP 50 / 100** and status "Okay". Until Usage Access is granted, a Usage Access card with an **Enable** button
-   sits at the top of the page (it disappears once access is granted). The bottom bar shows three icons (Customise, Pets, Chat). Pets is open: its tile is wider, its icon is larger and only it shows a label.
+   sits at the top of the page. Once access is granted it reads "Only scrolling in the apps you
+   choose costs HP." with a **Choose apps** button (step 20). The bottom bar shows four icons (Customise, Pets, Chat, Stats). Pets is open: its tile is wider, its icon is larger and only it shows a label.
 2. Swipe right (or tap **Customise**). The Customise page shows no title: a pet preview at the top and
    full-width Hat / Accessory tabs above a two-column grid of circles showing each item's model
    (None first). Tap the **Cap** circle on the Hat tab: its ring darkens and the preview (the 3D
@@ -1099,6 +1203,11 @@ Debug helpers available in the debug build:
 8. Kill and relaunch the app. HP and equipped items persist (SharedPreferences). Onboarding doesn't show again. The chat transcript resets (in memory only). To start over, long-press the **Wardrobe** tab
    and confirm **Reset** (Cancel changes nothing): the app closes and the next launch shows onboarding
    again with HP 50 / 100 and nothing equipped. A plain tap on Wardrobe still just opens the page.
+8a. Long-press the **Pets** tab: the debug panel opens fully expanded (a plain tap still just opens
+   Pets; a second long-press doesn't stack a second panel). −10 lowers the health bar at once; set 0
+   tips the pet over, 80 makes it hop. Simulate quiz pass shows "+10 HP awarded via MCP!", Replay shows
+   "⚠ Quiz debug:… was already rewarded." Simulate warning posts "Time to look up". New conversation
+   clears the Chat transcript and greets again. Reset all data shows the same confirm dialog as Wardrobe.
 
 **Personas on Gemini (real LLM)**: build with `GEMINI_API_URL`/`GEMINI_API_KEY`/`GEMINI_MODELS` set (§5.2):
 
@@ -1124,6 +1233,33 @@ Debug helpers available in the debug build:
 17. Play a fullscreen landscape YouTube video. HP stops dropping, then resumes when you return to portrait.
 18. Leave watched apps for over a minute, then return. The next warning comes 10 minutes into the new session.
 19. Revoke Usage Access. Monitoring stops and its notification disappears.
+20. With access granted, tap **Choose apps** on Pets. "Watched apps" lists your launcher apps with
+    the default social apps switched on and listed first, and "N apps watched" under the text.
+    Switch YouTube off and scroll YouTube Shorts for 2 minutes: HP doesn't drop. Switch on a
+    non-social app (e.g. Chrome) and use it in portrait: HP drops by 1 each minute. Rotation keeps
+    the list; relaunching keeps the choice.
+
+**Stats tab:**
+
+23. Fresh install: four tab icons, Stats on the right; swiping left from Chat opens it. "Since your
+    last doom-scroll" counts up from install ("No doom-scrolling since tracking began …"), the bars
+    and per-app list are empty, the health chart shows a dot at the current HP on the right, and
+    "Tokens by model" says no tokens have been used yet.
+24. With Gemini configured, chat a few turns and pass a quiz. "Tokens by model" lists the model
+    that answered (e.g. `gemini-3.1-flash-lite`, N requests · in · out, total), the health line
+    steps up by 10 and "+10 HP from quizzes this week" appears. 24 h / 7 days switches the chart
+    range and survives rotation. *(Verified on an API 37 emulator, 2026-11-19.)*
+25. After real doom-scrolling (steps 14–15): today's minutes, sessions, longest session, today's
+    bar and the app row update, "−N HP to doom-scrolling" grows, and the clean-streak timer restarts
+    and ticks up while the page is open. Kill and relaunch: everything is still there.
+
+**Inactivity decay (needs a finished onboarding):**
+
+21. Note the HP on Pets, press Home and come back within 30 minutes: HP is unchanged, with no Snackbar.
+22. Press Home, set the device clock 8.5 hours forward, then reopen the app. HP is about 30% lower
+    (100 → 70, 50 → 35), and a Snackbar above the health bar says "Tomo missed you: −N HP while
+    you were away", once. If the app reopens on another tab, the Snackbar waits until you open Pets.
+    Rotating or switching tabs never applies decay.
 
 ---
 
@@ -1134,6 +1270,7 @@ Update this table in the same commit when your task changes a subsystem's status
 | Subsystem | Status | Implementation in `AppContainer` |
 |---|---|---|
 | Pet state + persistence | ✅ Done | `PetStateRepository` |
+| Inactivity HP decay | ✅ 30 min grace, then 30% of HP per 8 h away, applied on return, with a Snackbar on Pets (not yet tested on a device) | `InactivityDecayTracker` |
 | MCP tool bridge | ✅ Production-capable default | `DefaultMcpPetActionHandler` |
 | Pets UI (pet viewport, health bar below the pet) | ✅ Skeleton done | `PetsFragment` / `PetsViewModel` |
 | Customise UI (pet preview, slot tabs, item circle grid) | ✅ Skeleton done | `CustomiseFragment` / `CustomiseViewModel` |
@@ -1142,7 +1279,8 @@ Update this table in the same commit when your task changes a subsystem's status
 | Pet rendering | ✅ scene-3 rabbit (default) and scene-5 cat (three.js, offline) via the HTML/WebView pipeline; add-ons are primitive placeholders | `HtmlManiengineRenderer` + `assets/maniengine/` |
 | Item catalog | ⏳ Placeholder (6 hard-coded items: hats and accessories) | `AccessoryCatalog` → Maniengine Agent |
 | Chatbot (Gemini) | ✅ Kafka (low HP) / Charon (high HP) personas, 40/60 hysteresis, speaking as the pet's name, new conversation after 10 min in the background, on Google's free Gemini API (`gemini-3.1-flash-lite` with fallbacks, retries on 503/429/timeouts) via the in-app OpenAI-compatible client. It's verified from a PC; on a device, the first build hit a 503, and the fix is not yet re-tested there. Mock when unconfigured | `GeminiChatService` (`GEMINI_API_URL`) / `MockChatService` |
-| Doom-scroll detection | ✅ Usage Access polling in a foreground service; portrait only, 1 HP per minute, warnings every 10 minutes (not yet tested on a device) | `UsageStatsDoomScrollMonitor` |
+| Stats tab | ✅ Time since the last doom-scroll, clean streaks, doom-scrolling per day/app/session, HP over 24 h / 7 d, HP by cause, tokens per model; tracking starts at install. Token and HP parts verified on an emulator; the doom-scroll parts are unit-tested only | `StatsRepository` / `StatsFragment` |
+| Doom-scroll detection | ✅ Usage Access polling in a foreground service; only the apps the user picks (default: social apps), portrait only, 1 HP per minute, warnings every 10 minutes (not yet tested on a device) | `UsageStatsDoomScrollMonitor` |
 
 Known gaps and TODOs (not assigned to anyone yet):
 - The chat transcript isn't persisted (only the persona is), and quiz replay protection only lasts for the process
@@ -1151,10 +1289,13 @@ Known gaps and TODOs (not assigned to anyone yet):
 - The pet species is chosen once, at onboarding; there's no way to change it later short of the
   hidden reset. Add-ons are positioned for the rabbit, so they may sit oddly on the cat.
 - Nothing happens yet when HP reaches 0 beyond the "Fainted" status label.
-- The app has no built-in way to lower HP for manual testing; use real doom-scroll detection. To
-  start over, use the hidden reset (long-press the Wardrobe tab). Whether it keeps Usage Access and
+- To change HP for manual testing, use the debug panel (long-press the Pets tab). To start over,
+  use the hidden reset (long-press the Wardrobe tab, or the panel). Whether it keeps Usage Access and
   the notification permission hasn't been checked on a device.
 - The stationary pet layer (the Pets ↔ Customise shrink, touch forwarding) is verified on the page
   side (headless Edge) and by unit tests only; watch on a device for the frame trailing the finger
   (`evaluateJavascript` is asynchronous) and for touches on the pet (turn, pinch, flick to change tab).
-- No instrumented/UI tests yet. JVM tests only (`model`, `doomscroll`, `chat`, `maniengine`, `viewmodel`).
+- No instrumented/UI tests yet. JVM tests only (`model`, `doomscroll`, `chat`, `maniengine`, `viewmodel`, `repository`, `stats`, `ui`).
+- Stats: token counts are those the provider reports (failed attempts aren't counted); there's no
+  cost estimate. The clean streak only knows time since install, and a doom-scroll session is
+  measured as wall-clock span (landscape pauses inside it count).

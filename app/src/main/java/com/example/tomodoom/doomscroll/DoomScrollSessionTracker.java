@@ -12,7 +12,8 @@ import java.util.Set;
  * <p>Only time seen live between two polls counts, and only while a watched app is in the
  * foreground and {@code countable} is true (portrait, screen on). Replayed usage history and long
  * gaps between polls are never charged. Landscape pauses a session. Being away from watched apps
- * for the grace period ends it, so in-app screen changes and app-hopping don't reset the timer.</p>
+ * for the grace period ends it, so in-app screen changes and app-hopping don't reset the timer.
+ * The watched set can change at any time ({@link #setMonitoredPackages}).</p>
  *
  * <p>Not thread-safe: the monitor calls it while holding its lock.</p>
  */
@@ -37,14 +38,18 @@ final class DoomScrollSessionTracker {
     }
 
     @NonNull
-    private final Set<String> monitoredPackages;
+    private Set<String> monitoredPackages;
     private final long penaltyIntervalMillis;
     private final long warningIntervalMillis;
     private final long awayGraceMillis;
     private final long maxPollGapMillis;
 
+    /** The watched app on screen, or {@code null}. */
     @Nullable
     private String foregroundPackage;
+    /** The last app seen coming to the foreground, watched or not, until it leaves. */
+    @Nullable
+    private String lastSeenPackage;
     private long foregroundSinceMillis = NONE;
     private long awaySinceMillis = NONE;
     private long lastPollMillis = NONE;
@@ -69,7 +74,25 @@ final class DoomScrollSessionTracker {
         return heightPixels >= widthPixels;
     }
 
+    /**
+     * Replaces the watched set. A session in an app that is no longer watched stops counting at
+     * {@code nowMillis}; an app on screen that has just become watched starts counting then.
+     */
+    void setMonitoredPackages(@NonNull Set<String> packages, long nowMillis) {
+        if (packages.equals(monitoredPackages)) {
+            return;
+        }
+        monitoredPackages = new HashSet<>(packages);
+        if (foregroundPackage != null && !monitoredPackages.contains(foregroundPackage)) {
+            leaveWatchedApp(nowMillis);
+        } else if (foregroundPackage == null && lastSeenPackage != null
+                && monitoredPackages.contains(lastSeenPackage)) {
+            onForeground(lastSeenPackage, nowMillis);
+        }
+    }
+
     void onForeground(@NonNull String packageName, long timestampMillis) {
+        lastSeenPackage = packageName;
         if (!monitoredPackages.contains(packageName)) {
             if (foregroundPackage != null) {
                 leaveWatchedApp(timestampMillis);
@@ -87,6 +110,9 @@ final class DoomScrollSessionTracker {
     }
 
     void onBackground(@NonNull String packageName, long timestampMillis) {
+        if (packageName.equals(lastSeenPackage)) {
+            lastSeenPackage = null;
+        }
         if (packageName.equals(foregroundPackage)) {
             leaveWatchedApp(timestampMillis);
         }
@@ -135,6 +161,7 @@ final class DoomScrollSessionTracker {
     /** Forgets everything, including the poll baseline. */
     void reset() {
         foregroundPackage = null;
+        lastSeenPackage = null;
         foregroundSinceMillis = NONE;
         awaySinceMillis = NONE;
         lastPollMillis = NONE;

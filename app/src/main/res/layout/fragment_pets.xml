@@ -86,7 +86,8 @@
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
-    <!-- Usage Access prompt (Doom Scroll Agent); PetsFragment hides it once access is granted -->
+    <!-- Usage Access prompt (Doom Scroll Agent). Once access is granted, PetsFragment turns it into
+         the way into the watched-apps picker ("Choose apps"). -->
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/usage_access_card"
         android:layout_width="0dp"

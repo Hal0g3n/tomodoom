@@ -10,6 +10,14 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
+    <!-- The watched-apps picker lists launcher apps (package visibility on Android 11+). -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
     <application
         android:name=".TomodoomApplication"
         android:allowBackup="true"
@@ -36,6 +44,10 @@
             android:name=".MainActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
+        <!-- Choose the apps doom-scroll detection watches (opened from the Pets page). -->
+        <activity
+            android:name=".ui.watchedapps.WatchedAppsActivity"
+            android:exported="false" />
         <!-- Keeps doom-scroll polling alive while the user is in another app. -->
         <service
             android:name=".doomscroll.DoomScrollMonitorService"

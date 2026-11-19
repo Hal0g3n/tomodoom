@@ -1,8 +1,6 @@
 package com.example.tomodoom;
 
-import android.app.ActivityManager;
 import android.os.Bundle;
-import android.util.Log;
 import android.view.HapticFeedbackConstants;
 import android.view.Menu;
 import android.view.View;
@@ -18,9 +16,10 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.viewpager2.widget.ViewPager2;
 
 import com.example.tomodoom.databinding.ActivityMainBinding;
+import com.example.tomodoom.ui.AppReset;
 import com.example.tomodoom.ui.MainPagerAdapter;
 import com.example.tomodoom.ui.PetStage;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.example.tomodoom.ui.debug.DebugPanelFragment;
 
 /**
  * Single activity hosting the three top-level pages (Customise, Pets, Chat) in a swipeable
@@ -39,7 +38,6 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
  */
 public class MainActivity extends AppCompatActivity implements PetStage.Host {
 
-    private static final String TAG = "MainActivity";
     private static final float NAV_ICON_SELECTED_SCALE = 1.3f;
     private static final long NAV_ICON_ANIMATION_MS = 180L;
 
@@ -101,7 +99,16 @@ public class MainActivity extends AppCompatActivity implements PetStage.Host {
         if (wardrobeTab != null) {
             wardrobeTab.setOnLongClickListener(v -> {
                 v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
-                confirmReset();
+                AppReset.confirm(this);
+                return true; // consumed: no tooltip
+            });
+        }
+        // Hidden on purpose: long-pressing the Pets tab opens the debug panel (all builds).
+        View petsTab = binding.navView.findViewById(R.id.navigation_pets);
+        if (petsTab != null) {
+            petsTab.setOnLongClickListener(v -> {
+                v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                DebugPanelFragment.show(getSupportFragmentManager());
                 return true; // consumed: no tooltip
             });
         }
@@ -130,30 +137,6 @@ public class MainActivity extends AppCompatActivity implements PetStage.Host {
     @Override
     public PetStage getPetStage() {
         return petStage;
-    }
-
-    /** Asks before wiping everything; see {@link #resetApp()}. */
-    private void confirmReset() {
-        new MaterialAlertDialogBuilder(this)
-                .setTitle(R.string.reset_title)
-                .setMessage(R.string.reset_message)
-                .setPositiveButton(R.string.reset_confirm, (dialog, which) -> resetApp())
-                .setNegativeButton(android.R.string.cancel, null)
-                .show();
-    }
-
-    /**
-     * Wipes all app data (pet state, onboarding flag, WebView storage) and kills the process, so
-     * the next launch is a fresh install. Bypassing {@code PetStateRepository} is fine here
-     * because no observer outlives the process.
-     */
-    private void resetApp() {
-        Log.i(TAG, "hidden reset: clearing app data");
-        ActivityManager am = getSystemService(ActivityManager.class);
-        if (am == null || !am.clearApplicationUserData()) {
-            Log.w(TAG, "clearApplicationUserData failed; closing without a reset");
-            finishAffinity();
-        }
     }
 
     private void syncWithPage(int position, boolean animate) {

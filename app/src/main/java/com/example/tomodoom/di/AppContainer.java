@@ -13,14 +13,23 @@ import com.example.tomodoom.contracts.ManiengineAssetRenderer;
 import com.example.tomodoom.contracts.McpPetActionHandler;
 import com.example.tomodoom.contracts.ChatService;
 import com.example.tomodoom.doomscroll.DoomScrollNotifier;
+import com.example.tomodoom.doomscroll.LauncherAppsQuery;
+import com.example.tomodoom.model.InstalledApp;
 import com.example.tomodoom.doomscroll.UsageStatsDoomScrollMonitor;
 import com.example.tomodoom.maniengine.HtmlManiengineRenderer;
 import com.example.tomodoom.repository.ChatRepository;
 import com.example.tomodoom.repository.DoomScrollHpBridge;
+import com.example.tomodoom.repository.InactivityDecayTracker;
 import com.example.tomodoom.repository.PetStateRepository;
+import com.example.tomodoom.repository.StatsRecordingDoomScrollListener;
+import com.example.tomodoom.repository.StatsRepository;
+import com.example.tomodoom.repository.WatchedAppsRepository;
 import com.example.tomodoom.stubs.DefaultMcpPetActionHandler;
 import com.example.tomodoom.stubs.MockChatService;
 import com.example.tomodoom.chat.GeminiChatService;
+
+import java.util.List;
+import java.util.function.Supplier;
 
 /**
  * Hand-written service locator: the <b>only</b> place where concrete implementations are chosen.
@@ -41,6 +50,10 @@ public final class AppContainer {
     @NonNull
     private final PetStateRepository petStateRepository;
     @NonNull
+    private final StatsRepository statsRepository;
+    @NonNull
+    private final InactivityDecayTracker inactivityDecayTracker;
+    @NonNull
     private final McpPetActionHandler mcpPetActionHandler;
     @NonNull
     private final ChatService chatService;
@@ -50,12 +63,25 @@ public final class AppContainer {
     private final DoomScrollHpBridge doomScrollHpBridge;
     @NonNull
     private final DoomScrollMonitor doomScrollMonitor;
+    @NonNull
+    private final DoomScrollListener doomScrollListener;
+    @NonNull
+    private final WatchedAppsRepository watchedAppsRepository;
+    @NonNull
+    private final Supplier<List<InstalledApp>> installedAppsSource;
 
     public AppContainer(@NonNull Context context) {
         Context appContext = context.getApplicationContext();
 
         // Single source of truth for pet state. Never replace or duplicate it.
         petStateRepository = new PetStateRepository(appContext);
+
+        // Stats page history: HP changes, LLM tokens and doom-scrolling are recorded here.
+        statsRepository = new StatsRepository(appContext, petStateRepository.getCurrentState());
+        petStateRepository.setHpChangeListener(statsRepository::recordHpChange);
+
+        // Time away from the app → HP decay, applied when the user comes back.
+        inactivityDecayTracker = new InactivityDecayTracker(appContext, petStateRepository);
 
         // SWAP POINT (Chat/MCP Agent): MCP pet tool bridge (the default is production-capable).
         mcpPetActionHandler = new DefaultMcpPetActionHandler(petStateRepository);
@@ -66,19 +92,26 @@ public final class AppContainer {
             chatService = new GeminiChatService(appContext, KAFKA_AGENT_ASSET,
                     CHARON_AGENT_ASSET, petStateRepository::getCurrentState,
                     BuildConfig.GEMINI_API_URL, BuildConfig.GEMINI_API_KEY,
-                    BuildConfig.GEMINI_MODELS);
+                    BuildConfig.GEMINI_MODELS, statsRepository::recordTokens);
         } else {
             chatService = new MockChatService();
         }
 
         chatRepository = new ChatRepository(chatService, mcpPetActionHandler);
 
+        // The apps the user chose to watch; only time in them can cost HP.
+        watchedAppsRepository = new WatchedAppsRepository(appContext);
+        installedAppsSource = new LauncherAppsQuery(appContext);
+
         // SWAP POINT (Doom Scroll Agent): Usage Access-based foreground-app session detector.
-        doomScrollMonitor = new UsageStatsDoomScrollMonitor(appContext);
+        doomScrollMonitor = new UsageStatsDoomScrollMonitor(appContext,
+                watchedAppsRepository::getCurrent);
 
         // Doom-scroll detections → HP loss. Keep this wiring when swapping the monitor.
         doomScrollHpBridge = new DoomScrollHpBridge(petStateRepository);
-        doomScrollMonitor.setListener(new DoomScrollNotifier(appContext, doomScrollHpBridge));
+        doomScrollListener = new DoomScrollNotifier(appContext,
+                new StatsRecordingDoomScrollListener(statsRepository, doomScrollHpBridge));
+        doomScrollMonitor.setListener(doomScrollListener);
     }
 
     /** @return the process-wide container held by {@link TomodoomApplication}. */
@@ -106,6 +139,16 @@ public final class AppContainer {
     }
 
     @NonNull
+    public InactivityDecayTracker getInactivityDecayTracker() {
+        return inactivityDecayTracker;
+    }
+
+    @NonNull
+    public StatsRepository getStatsRepository() {
+        return statsRepository;
+    }
+
+    @NonNull
     public McpPetActionHandler getMcpPetActionHandler() {
         return mcpPetActionHandler;
     }
@@ -125,12 +168,23 @@ public final class AppContainer {
         return doomScrollMonitor;
     }
 
+    @NonNull
+    public WatchedAppsRepository getWatchedAppsRepository() {
+        return watchedAppsRepository;
+    }
+
+    /** The launcher apps the watched-apps picker offers. Blocking: call it off the main thread. */
+    @NonNull
+    public Supplier<List<InstalledApp>> getInstalledAppsSource() {
+        return installedAppsSource;
+    }
+
     /**
-     * The listener that applies doom-scroll penalties. Exposed so debug tooling can inject
-     * synthetic {@code DoomScrollEvent}s through the same path real detections take.
+     * The monitor's listener (notifier → stats → HP bridge). Exposed so the debug panel can inject
+     * synthetic events and warnings through the same path real detections take.
      */
     @NonNull
     public DoomScrollListener getDoomScrollListener() {
-        return doomScrollHpBridge;
+        return doomScrollListener;
     }
 }
