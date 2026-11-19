@@ -257,4 +257,26 @@ public class DoomScrollSessionTrackerTest {
         assertTrue(DoomScrollSessionTracker.isPortrait(1000, 1000));
         assertFalse(DoomScrollSessionTracker.isPortrait(2400, 1080));
     }
+
+    @Test
+    public void exposesSessionStateForTheDebugStatus() {
+        assertNull(tracker.getForegroundPackage());
+        assertNull(tracker.getLastSeenPackage());
+
+        tracker.onForeground(UNWATCHED, 0L);
+        assertNull(tracker.getForegroundPackage());
+        assertEquals(UNWATCHED, tracker.getLastSeenPackage());
+
+        startSession();
+        pollUntil(0L, 90_000L, true);
+        assertEquals(WATCHED, tracker.getForegroundPackage());
+        assertEquals(WATCHED, tracker.getLastSeenPackage());
+        assertEquals(90_000L, tracker.getCountedMillis());
+        assertEquals(1L, tracker.getChargedIntervals());
+
+        tracker.reset();
+        assertNull(tracker.getForegroundPackage());
+        assertEquals(0L, tracker.getCountedMillis());
+        assertEquals(0L, tracker.getChargedIntervals());
+    }
 }

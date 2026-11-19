@@ -12,6 +12,7 @@ import com.example.tomodoom.contracts.DoomScrollMonitor;
 import com.example.tomodoom.contracts.McpPetActionHandler;
 import com.example.tomodoom.model.AccessorySlot;
 import com.example.tomodoom.model.DoomScrollEvent;
+import com.example.tomodoom.model.DoomScrollMonitorStatus;
 import com.example.tomodoom.model.DoomScrollRate;
 import com.example.tomodoom.model.McpToolResult;
 import com.example.tomodoom.model.PetState;
@@ -138,6 +139,12 @@ public class DebugViewModel extends ViewModel {
 
     public boolean isMonitoring() {
         return doomScrollMonitor.isMonitoring();
+    }
+
+    /** What the monitor saw at its last poll, or {@code null} if it doesn't say or hasn't polled. */
+    @Nullable
+    public DoomScrollMonitorStatus getMonitorStatus() {
+        return doomScrollMonitor.getStatus();
     }
 
     /** HP lost per counted doom-scroll minute (real monitor and simulated minutes). */

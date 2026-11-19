@@ -145,7 +145,8 @@ com.example.tomodoom
 │   ├── InstalledApp              packageName, label (a launcher app in the watched-apps picker)
 │   ├── ChatTextScale             chat text sizes offered in Settings (0.8–1.5×, default 1.0) + snapping
 │   ├── MusicVolume               background-music volume % (0–100, step 10, default 50) + gain curve
-│   └── DoomScrollRate            HP lost per doom-scroll minute (0–100, default 1) + input parsing
+│   ├── DoomScrollRate            HP lost per doom-scroll minute (0–100, default 1) + input parsing
+│   └── DoomScrollMonitorStatus   what the monitor saw at its last poll (debug panel's Monitor block)
 │
 ├── contracts/                    Interfaces that downstream agents implement (see §4)
 │   ├── ManiengineAssetRenderer
@@ -585,6 +586,7 @@ void startMonitoring();   void stopMonitoring();   boolean isMonitoring();
 @MainThread default void startFromForeground() { startMonitoring(); }
 boolean isPermissionGranted();
 void setListener(@Nullable DoomScrollListener listener);
+@Nullable default DoomScrollMonitorStatus getStatus() { return null; }   // debug panel only
 
 interface DoomScrollListener {                         // callbacks: ANY thread
     void onDoomScrollDetected(@NonNull DoomScrollEvent event);
@@ -600,6 +602,9 @@ interface DoomScrollListener {                         // callbacks: ANY thread
   (the real monitor charges `SettingsRepository`'s doom-scroll rate per minute, default 1 HP, set
   in the debug panel; `DoomScrollEvent.DEFAULT_HP_PENALTY` = 5 is for the stub). `AppContainer.getDoomScrollListener()` returns that whole chain (notifier → stats → bridge),
   so the debug panel's synthetic minutes and warnings take the real path.
+- `getStatus()` (optional, default `null`) is a cheap snapshot for the debug panel: last poll and
+  gap, watched app on screen, last app opened, display size, whether time counts, the session's
+  counted time and charged minutes, HP charged since start, and the last poll error.
 - `TomodoomApplication.onCreate()` calls `startMonitoring()` if `isPermissionGranted()`. The Pets
   page calls `startFromForeground()` on resume, which starts the foreground service.
 
@@ -915,7 +920,10 @@ Session rules (`DoomScrollSessionTracker`):
 - Only time seen live between polls counts. Replayed usage history and poll gaps over 45 s are
   never charged.
 
-Polling is every 15 seconds on a single daemon worker. `DoomScrollMonitorService` (type
+Polling is every 15 seconds on a single daemon worker. A poll that throws an unexpected
+`RuntimeException` is logged and recorded in `getStatus()`, and polling carries on (only a
+`SecurityException`, i.e. revoked access, stops it). Each poll logs one DEBUG line under
+`UsageStatsDoomScrollMonitor` (gap, app changes, packages, display size, counted time). `DoomScrollMonitorService` (type
 `specialUse`, low-priority ongoing notification) keeps the process alive so Android doesn't freeze
 the worker. It doesn't restart after a reboot until the app is opened. Portrait video that isn't
 fullscreen still counts as scrolling, and scrolling in landscape isn't penalised.
@@ -1078,6 +1086,10 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
 - **Pet parts aren't only meshes:** `pet-scene.js` groups meshes, lines and points (`isPart`); the
   cat's whiskers are `LineSegments` and stayed behind when the pet turned while it only took meshes.
   An export using another object type needs adding there.
+- **`ScheduledExecutorService` swallows task exceptions:** an exception escaping a
+  `scheduleWithFixedDelay` task cancels every later run with no log line, while the owner still
+  thinks it's running. `UsageStatsDoomScrollMonitor.pollSafely` catches `RuntimeException` for that
+  reason; keep any periodic task wrapped the same way.
 - **Foreground service start:** start `DoomScrollMonitorService` only through
   `DoomScrollMonitor.startFromForeground()` while a page is resumed. `Application.onCreate` can run
   in the background, where Android 12+ throws `ForegroundServiceStartNotAllowedException`.
@@ -1258,7 +1270,10 @@ Debug helpers:
   (name, species, HP, mood, equipped) and offers: HP −10/−1/+1/+10, set HP to 0/30/50/80/max,
   unequip all; *HP lost per minute* (a typed whole number 0–100, default 1, **Apply**; it drives the
   real monitor too and survives relaunch); simulate one doom-scroll minute (at that rate) or the
-  10-minute warning notification, Usage Access status and settings; chat backend (mock or Gemini + models), simulate a quiz pass (+10 HP
+  10-minute warning notification, Usage Access status and settings, and a **Monitor** block
+  (refreshed every second: last poll and gap, watched app on screen, last app opened, display size
+  and whether time counts, this session's counted time and charged minutes, HP charged since start,
+  last poll error); chat backend (mock or Gemini + models), simulate a quiz pass (+10 HP
   through `McpPetActionHandler.onQuizPassed`), replay it (the replay guard should reject it), start a
   new conversation; fill Stats with a demo week (`DemoStats`: random sessions, quizzes and tokens over
   the last 7 days, the HP line ending at the pet's current HP) or clear the Stats history; version and
@@ -1374,6 +1389,12 @@ Debug helpers:
 
 **Doom-scroll detection (real device, watched app installed):**
 
+If HP doesn't drop, open the debug panel's Monitor block right after scrolling: a "Last poll" age or
+gap well over 15 s means polling stalled (process frozen or killed); "Watched app on screen: none"
+while you were in the app means its foreground event wasn't seen; "counting: no" with a portrait
+size means the screen check failed; a "Last error" line names a poll exception.
+`adb logcat -s UsageStatsDoomScrollMonitor` shows the same per poll.
+
 14. Grant Usage Access and allow notifications. A low-priority "Tomodoom is watching over your pet" notification appears, with the white phone-and-pet logo (not a paw) in the status bar.
 15. Scroll Instagram or YouTube Shorts in portrait. HP drops by 1 each minute.
 16. Keep going to 10 and 20 minutes. A "Time to look up" notification appears each time.
@@ -1452,7 +1473,7 @@ Update this table in the same commit when your task changes a subsystem's status
 | Chatbot (Gemini) | ✅ Kafka (low HP) / Charon (high HP) personas, 40/60 hysteresis, speaking as the pet's name, new conversation after 10 min in the background, on Google's free Gemini API (`gemini-3.1-flash-lite` with fallbacks, retries on 503/429/timeouts) via the in-app OpenAI-compatible client. It's verified from a PC; on a device, the first build hit a 503, and the fix is not yet re-tested there. Mock when unconfigured | `GeminiChatService` (`GEMINI_API_URL`) / `MockChatService` |
 | Settings tab | ✅ Rename the pet, switch species, tracked apps (count + picker / Usage Access), chat text size (80–150%) with a live preview; verified on an emulator. Background-music volume slider (music loops in the foreground, restarts on return; not yet tested on a device) | `SettingsFragment` / `SettingsViewModel` / `SettingsRepository` |
 | Stats tab | ✅ Time since the last doom-scroll, clean streaks, doom-scrolling per day/app/session, HP over 24 h / 7 d, HP by cause, tokens per model; tracking starts at install. Token and HP parts verified on an emulator; the doom-scroll parts are unit-tested only | `StatsRepository` / `StatsFragment` |
-| Doom-scroll detection | ✅ Usage Access polling in a foreground service; only the apps the user picks (default: social apps), portrait only, 1 HP per minute, warnings every 10 minutes (not yet tested on a device) | `UsageStatsDoomScrollMonitor` |
+| Doom-scroll detection | ⚠ Usage Access polling in a foreground service; only the apps the user picks (default: social apps), portrait only, 1 HP per minute (debug-panel rate), warnings every 10 minutes. **On a real phone (2026-11-19) 10 minutes in a tracked app in portrait cost no HP and gave no warning**, with "monitoring: yes"; a poll exception silently stopping the schedule is now fixed and the debug panel shows the monitor's state; the cause is still to be confirmed on the device | `UsageStatsDoomScrollMonitor` |
 
 Known gaps and TODOs (not assigned to anyone yet):
 - The chat transcript isn't persisted (only the persona is), and quiz replay protection only lasts for the process

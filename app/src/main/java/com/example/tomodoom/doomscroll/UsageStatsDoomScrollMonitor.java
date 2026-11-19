@@ -22,6 +22,7 @@ import androidx.core.content.ContextCompat;
 import com.example.tomodoom.contracts.DoomScrollListener;
 import com.example.tomodoom.contracts.DoomScrollMonitor;
 import com.example.tomodoom.model.DoomScrollEvent;
+import com.example.tomodoom.model.DoomScrollMonitorStatus;
 
 import java.util.Set;
 import java.util.concurrent.Executors;
@@ -37,6 +38,10 @@ import java.util.function.Supplier;
  * watched app is on screen in portrait. The watched set
  * is read at every poll, so a change in the picker applies within one poll. Landscape (such
  * as fullscreen video) doesn't count. {@link DoomScrollSessionTracker} holds the session rules.
+ *
+ * <p>An unexpected exception in one poll is logged and kept for {@link #getStatus()}, and the next
+ * poll still runs: an exception escaping a {@code scheduleWithFixedDelay} task would silently
+ * cancel every later poll while {@link #isMonitoring()} kept saying true.</p>
  */
 public final class UsageStatsDoomScrollMonitor implements DoomScrollMonitor {
 
@@ -75,6 +80,18 @@ public final class UsageStatsDoomScrollMonitor implements DoomScrollMonitor {
     private ScheduledFuture<?> pollingTask;
     private long lastQueryMillis;
     private boolean monitoring;
+    // Debug status (getStatus), all guarded by lock.
+    private long lastPollMillis = DoomScrollMonitorStatus.NEVER;
+    private long pollCount;
+    private long lastGapMillis = DoomScrollMonitorStatus.NEVER;
+    private int lastEventCount;
+    private boolean lastCountable;
+    private int lastDisplayWidth;
+    private int lastDisplayHeight;
+    private long hpChargedSinceStart;
+    @Nullable
+    private String lastError;
+    private long lastErrorMillis = DoomScrollMonitorStatus.NEVER;
 
     /**
      * @param watchedPackages the package IDs to watch, read on the polling thread at every poll
@@ -113,6 +130,11 @@ public final class UsageStatsDoomScrollMonitor implements DoomScrollMonitor {
             });
             lastQueryMillis = Math.max(0L, System.currentTimeMillis() - EVENT_LOOKBACK_MILLIS);
             monitoring = true;
+            lastPollMillis = DoomScrollMonitorStatus.NEVER;
+            pollCount = 0L;
+            lastGapMillis = DoomScrollMonitorStatus.NEVER;
+            lastEventCount = 0;
+            hpChargedSinceStart = 0L;
             pollingTask = executor.scheduleWithFixedDelay(
                     this::pollSafely, 0L, POLL_INTERVAL_MILLIS, TimeUnit.MILLISECONDS);
         }
@@ -183,12 +205,37 @@ public final class UsageStatsDoomScrollMonitor implements DoomScrollMonitor {
         this.listener = listener;
     }
 
+    @AnyThread
+    @Nullable
+    @Override
+    public DoomScrollMonitorStatus getStatus() {
+        synchronized (lock) {
+            if (!monitoring && pollCount == 0L && lastError == null) {
+                return null;
+            }
+            return new DoomScrollMonitorStatus(lastPollMillis, pollCount, lastGapMillis,
+                    lastEventCount, sessionTracker.getForegroundPackage(),
+                    sessionTracker.getLastSeenPackage(), lastCountable, lastDisplayWidth,
+                    lastDisplayHeight, sessionTracker.getCountedMillis(),
+                    sessionTracker.getChargedIntervals(), hpChargedSinceStart,
+                    lastError, lastErrorMillis);
+        }
+    }
+
     private void pollSafely() {
         try {
             pollUsageEvents();
         } catch (SecurityException exception) {
             Log.w(TAG, "Usage Access was revoked; stopping doom-scroll monitoring", exception);
             stopMonitoring();
+        } catch (RuntimeException exception) {
+            // Never let it escape: that would cancel every later poll without a trace.
+            Log.w(TAG, "Doom-scroll poll failed; trying again at the next poll", exception);
+            synchronized (lock) {
+                lastError = exception.getClass().getSimpleName()
+                        + (exception.getMessage() == null ? "" : ": " + exception.getMessage());
+                lastErrorMillis = System.currentTimeMillis();
+            }
         }
     }
 
@@ -220,45 +267,74 @@ public final class UsageStatsDoomScrollMonitor implements DoomScrollMonitor {
             lastQueryMillis = now;
             sessionTracker.setMonitoredPackages(watched, begin);
         }
+        int eventCount = 0;
         UsageEvents.Event event = new UsageEvents.Event();
         while (events != null && events.hasNextEvent()) {
             events.getNextEvent(event);
-            handleUsageEvent(event);
+            if (handleUsageEvent(event)) {
+                eventCount++;
+            }
         }
-        reportDueTime(now);
+        reportDueTime(now, eventCount);
     }
 
-    private void handleUsageEvent(@NonNull UsageEvents.Event event) {
+    /** @return true if the event was a foreground/background change the tracker saw. */
+    private boolean handleUsageEvent(@NonNull UsageEvents.Event event) {
         int type = event.getEventType();
         String packageName = event.getPackageName();
         if (packageName == null) {
-            return;
+            return false;
         }
         synchronized (lock) {
             if (!monitoring) {
-                return;
+                return false;
             }
             if (type == EVENT_FOREGROUND) {
                 sessionTracker.onForeground(packageName, event.getTimeStamp());
+                return true;
             } else if (type == EVENT_BACKGROUND) {
                 sessionTracker.onBackground(packageName, event.getTimeStamp());
+                return true;
             }
+            return false;
         }
     }
 
-    private void reportDueTime(long nowMillis) {
-        boolean countable = isScreenOnInPortrait();
+    private void reportDueTime(long nowMillis, int eventCount) {
+        Point size = readDisplaySize();
+        boolean countable = size != null && powerManager != null && powerManager.isInteractive()
+                && DoomScrollSessionTracker.isPortrait(size.x, size.y);
         DoomScrollSessionTracker.Tick tick;
+        int hpPenalty = 0;
         synchronized (lock) {
             if (!monitoring) {
                 return;
             }
             tick = sessionTracker.onPoll(nowMillis, countable);
+            if (tick != null && tick.penaltyIntervals > 0) {
+                hpPenalty = tick.penaltyIntervals * Math.max(0, hpPerMinute.getAsInt());
+                hpChargedSinceStart += hpPenalty;
+            }
+            lastGapMillis = lastPollMillis == DoomScrollMonitorStatus.NEVER
+                    ? DoomScrollMonitorStatus.NEVER : nowMillis - lastPollMillis;
+            lastPollMillis = nowMillis;
+            pollCount++;
+            lastEventCount = eventCount;
+            lastCountable = countable;
+            lastDisplayWidth = size == null ? 0 : size.x;
+            lastDisplayHeight = size == null ? 0 : size.y;
+            Log.d(TAG, "poll #" + pollCount + " gap=" + lastGapMillis + "ms events=" + eventCount
+                    + " fg=" + sessionTracker.getForegroundPackage()
+                    + " lastSeen=" + sessionTracker.getLastSeenPackage()
+                    + " display=" + lastDisplayWidth + "x" + lastDisplayHeight
+                    + " countable=" + countable
+                    + " counted=" + sessionTracker.getCountedMillis() + "ms"
+                    + " hp=" + hpPenalty);
         }
         if (tick != null && tick.penaltyIntervals > 0) {
             notifyListener(new DoomScrollEvent(tick.sourcePackage,
                     tick.penaltyIntervals * PENALTY_INTERVAL_MILLIS,
-                    tick.penaltyIntervals * Math.max(0, hpPerMinute.getAsInt()),
+                    hpPenalty,
                     nowMillis));
         }
         if (tick != null && tick.warningSessionMillis > 0L) {
@@ -269,19 +345,23 @@ public final class UsageStatsDoomScrollMonitor implements DoomScrollMonitor {
         }
     }
 
-    /** The display's current size reflects the rotation the foreground app is using. */
+    /**
+     * The display's current size, which reflects the rotation the foreground app is using, or
+     * {@code null} if it can't be read.
+     */
+    @Nullable
     @SuppressWarnings("deprecation")
-    private boolean isScreenOnInPortrait() {
-        if (powerManager == null || !powerManager.isInteractive() || displayManager == null) {
-            return false;
+    private Point readDisplaySize() {
+        if (displayManager == null) {
+            return null;
         }
         Display display = displayManager.getDisplay(Display.DEFAULT_DISPLAY);
         if (display == null) {
-            return false;
+            return null;
         }
         Point size = new Point();
         display.getRealSize(size);
-        return DoomScrollSessionTracker.isPortrait(size.x, size.y);
+        return size;
     }
 
     private void notifyListener(@NonNull DoomScrollEvent event) {

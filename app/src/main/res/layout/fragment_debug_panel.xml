@@ -142,6 +142,15 @@
             android:textAppearance="?attr/textAppearanceBody2"
             tools:text="Usage Access: no · monitoring: no" />
 
+        <TextView
+            android:id="@+id/doom_monitor"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textAppearance="?attr/textAppearanceCaption"
+            android:textColor="?android:attr/textColorPrimary"
+            tools:text="Last poll 4 s ago (#12, gap 15 s, 0 events)" />
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

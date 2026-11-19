@@ -4,6 +4,8 @@ import android.app.Dialog;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.Settings;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -22,6 +24,7 @@ import com.example.tomodoom.BuildConfig;
 import com.example.tomodoom.R;
 import com.example.tomodoom.databinding.FragmentDebugPanelBinding;
 import com.example.tomodoom.di.ViewModelFactory;
+import com.example.tomodoom.model.DoomScrollMonitorStatus;
 import com.example.tomodoom.model.DoomScrollRate;
 import com.example.tomodoom.model.PetMood;
 import com.example.tomodoom.model.PetState;
@@ -40,9 +43,22 @@ import java.util.Map;
 public class DebugPanelFragment extends BottomSheetDialogFragment {
 
     private static final String TAG = "debug_panel";
+    /** How often the Monitor block refreshes while the panel is open. */
+    private static final long MONITOR_REFRESH_MS = 1000L;
 
     private FragmentDebugPanelBinding binding;
     private DebugViewModel viewModel;
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Runnable monitorRefresh = new Runnable() {
+        @Override
+        public void run() {
+            if (binding == null) {
+                return;
+            }
+            renderMonitorStatus(viewModel.getMonitorStatus());
+            handler.postDelayed(this, MONITOR_REFRESH_MS);
+        }
+    };
 
     /** Shows the panel unless it is already open. */
     public static void show(@NonNull FragmentManager fragmentManager) {
@@ -145,6 +161,14 @@ public class DebugPanelFragment extends BottomSheetDialogFragment {
         // Usage Access can change in Settings while the panel is open.
         binding.doomStatus.setText(getString(R.string.debug_doom_status,
                 yesNo(viewModel.isUsageAccessGranted()), yesNo(viewModel.isMonitoring())));
+        handler.removeCallbacks(monitorRefresh);
+        monitorRefresh.run();
+    }
+
+    @Override
+    public void onPause() {
+        handler.removeCallbacks(monitorRefresh);
+        super.onPause();
     }
 
     @Override
@@ -170,6 +194,62 @@ public class DebugPanelFragment extends BottomSheetDialogFragment {
         binding.petEquipped.setText(getString(R.string.debug_pet_equipped,
                 equipped.length() > 0 ? equipped.toString()
                         : getString(R.string.debug_nothing_equipped)));
+    }
+
+    private void renderMonitorStatus(@Nullable DoomScrollMonitorStatus status) {
+        if (status == null || status.getLastPollMillis() == DoomScrollMonitorStatus.NEVER) {
+            String text = getString(R.string.debug_monitor_none);
+            if (status != null && status.getLastError() != null) {
+                text += "\n" + errorLine(status);
+            }
+            binding.doomMonitor.setText(text);
+            return;
+        }
+        long now = System.currentTimeMillis();
+        StringBuilder text = new StringBuilder();
+        text.append(getString(R.string.debug_monitor_poll,
+                duration(now - status.getLastPollMillis()), status.getPollCount(),
+                status.getLastGapMillis() == DoomScrollMonitorStatus.NEVER
+                        ? getString(R.string.debug_monitor_unknown)
+                        : duration(status.getLastGapMillis()),
+                status.getLastEventCount()));
+        text.append('\n').append(getString(R.string.debug_monitor_apps,
+                orNone(status.getForegroundPackage()), orNone(status.getLastSeenPackage())));
+        text.append('\n').append(getString(R.string.debug_monitor_screen,
+                status.getDisplayWidth(), status.getDisplayHeight(), yesNo(status.isCountable())));
+        text.append('\n').append(getString(R.string.debug_monitor_session,
+                duration(status.getSessionCountedMillis()), status.getSessionChargedMinutes(),
+                status.getHpChargedSinceStart()));
+        if (status.getLastError() != null) {
+            text.append('\n').append(errorLine(status));
+        }
+        binding.doomMonitor.setText(text);
+    }
+
+    @NonNull
+    private String errorLine(@NonNull DoomScrollMonitorStatus status) {
+        return getString(R.string.debug_monitor_error,
+                duration(System.currentTimeMillis() - status.getLastErrorMillis()),
+                status.getLastError());
+    }
+
+    @NonNull
+    private String orNone(@Nullable String value) {
+        return value == null ? getString(R.string.debug_monitor_nothing) : value;
+    }
+
+    @NonNull
+    private String duration(long millis) {
+        long seconds = Math.max(0L, millis) / 1000L;
+        if (seconds < 60L) {
+            return getString(R.string.debug_duration_seconds, (int) seconds);
+        }
+        if (seconds < 3600L) {
+            return getString(R.string.debug_duration_minutes, (int) (seconds / 60L),
+                    (int) (seconds % 60L));
+        }
+        return getString(R.string.debug_duration_hours, (int) (seconds / 3600L),
+                (int) ((seconds % 3600L) / 60L));
     }
 
     private void renderRate(@Nullable Integer hpPerMinute) {

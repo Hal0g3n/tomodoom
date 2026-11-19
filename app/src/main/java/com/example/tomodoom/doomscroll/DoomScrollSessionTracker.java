@@ -158,6 +158,28 @@ final class DoomScrollSessionTracker {
                 : null;
     }
 
+    /** The watched app on screen, or {@code null}. */
+    @Nullable
+    String getForegroundPackage() {
+        return foregroundPackage;
+    }
+
+    /** The last app seen coming to the foreground (watched or not) until it leaves, or {@code null}. */
+    @Nullable
+    String getLastSeenPackage() {
+        return lastSeenPackage;
+    }
+
+    /** Counted time in the current session. */
+    long getCountedMillis() {
+        return countedMillis;
+    }
+
+    /** Whole penalty intervals charged in the current session. */
+    long getChargedIntervals() {
+        return chargedIntervals;
+    }
+
     /** Forgets everything, including the poll baseline. */
     void reset() {
         foregroundPackage = null;

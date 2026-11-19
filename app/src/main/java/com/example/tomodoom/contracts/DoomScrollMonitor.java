@@ -4,6 +4,8 @@ import androidx.annotation.AnyThread;
 import androidx.annotation.MainThread;
 import androidx.annotation.Nullable;
 
+import com.example.tomodoom.model.DoomScrollMonitorStatus;
+
 /**
  * Contract for the <b>Doom Scroll Agent</b>: detects doom-scrolling sessions (e.g. via
  * {@code UsageStatsManager} polling or an {@code AccessibilityService}) and reports them to a
@@ -70,4 +72,14 @@ public interface DoomScrollMonitor {
      */
     @AnyThread
     void setListener(@Nullable DoomScrollListener listener);
+
+    /**
+     * @return what the monitor saw at its last check, for the debug panel, or {@code null} if the
+     * implementation doesn't report it (the default) or hasn't checked yet. Must be cheap.
+     */
+    @AnyThread
+    @Nullable
+    default DoomScrollMonitorStatus getStatus() {
+        return null;
+    }
 }
