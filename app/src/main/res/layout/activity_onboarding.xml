@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- First-launch onboarding: name the pet. Colours come from the theme (CLAUDE.md §6.3). -->
+<!-- First-launch onboarding: choose a pet and name it. Colours come from the theme (CLAUDE.md §6.3). -->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
@@ -19,14 +19,6 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center"
-            android:text="@string/onboarding_emoji"
-            android:textSize="56sp" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:gravity="center"
             android:text="@string/onboarding_title"
             android:textAppearance="?attr/textAppearanceHeadline5"
             android:textColor="?android:attr/textColorPrimary" />
@@ -40,12 +32,24 @@
             android:textAppearance="?attr/textAppearanceBody1"
             android:textColor="?android:attr/textColorSecondary" />
 
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/pet_choices"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:nestedScrollingEnabled="false"
+            android:overScrollMode="never"
+            app:layoutManager="androidx.recyclerview.widget.GridLayoutManager"
+            app:spanCount="2"
+            tools:itemCount="2"
+            tools:listitem="@layout/item_pet_choice" />
+
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/pet_name_layout"
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="32dp"
+            android:layout_marginTop="16dp"
             android:hint="@string/onboarding_name_hint"
             app:boxCornerRadiusBottomEnd="16dp"
             app:boxCornerRadiusBottomStart="16dp"

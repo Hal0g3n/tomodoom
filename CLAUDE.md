@@ -181,12 +181,13 @@ com.example.tomodoom
 ├── viewmodel/
 │   ├── PetsViewModel             exposes PetState + debug actions
 │   ├── CustomiseViewModel        exposes PetState, selected slot, catalog items, equip action
-│   ├── OnboardingViewModel       onboarding flag, suggested name, submitName()
+│   ├── OnboardingViewModel       onboarding flag, suggested name, species list + selectedSpecies, submitName()
 │   └── ChatViewModel             exposes transcript + active quiz, sends messages
 │
 └── ui/
-    ├── onboarding/OnboardingActivity   LAUNCHER: names the pet on first launch only,
+    ├── onboarding/OnboardingActivity   LAUNCHER: picks + names the pet on first launch only,
     │                             otherwise forwards straight to MainActivity and finishes
+    ├── onboarding/PetChoiceAdapter, PetPortraits   two-column pet portrait cards; species ID → portrait/name
     ├── MainPagerAdapter          FragmentStateAdapter: page index ↔ bottom-nav item id
     │                             (Customise=0, Pets=1 = default, Chat=2)
     ├── PetStage                  MainActivity's ONE pet renderer, lent to the resumed page's viewport
@@ -203,10 +204,11 @@ floating over it; both cards are transparent),
 `fragment_customise.xml` (`pet_viewport` at 40% of the page height, at the top with no title, `slot_tabs`,
 `item_grid` RecyclerView), `fragment_chat.xml`, `item_chat_{user,bot,system}.xml`,
 `item_accessory_circle.xml`, `res/drawable/bg_accessory_circle.xml`, `ic_item_none_24dp.xml`,
-`res/drawable-nodpi/thumb_<itemId>.png` (GENERATED item thumbnails, §5.1),
+`res/drawable-nodpi/thumb_<itemId>.png` and `thumb_pet_<speciesId>.png` (GENERATED item thumbnails and
+pet portraits, §5.1), `item_pet_choice.xml` + `res/drawable/bg_pet_choice.xml` (onboarding pet cards),
 `res/drawable/ic_hanger_24dp.xml` (Customise tab icon),
 `activity_main.xml` (`main_pager` ViewPager2 + `nav_view`), `activity_onboarding.xml` (title,
-`pet_name_layout`/`pet_name_input`, `start_button`), `res/menu/bottom_nav_menu.xml`.
+`pet_choices` grid, `pet_name_layout`/`pet_name_input`, `start_button`), `res/menu/bottom_nav_menu.xml`.
 `res/values/dimens.xml` (`pet_viewport_stroke`).
 `res/font/` + `res/font-v26/` (`playpen_sans`, `unkempt` families and their static TTFs; §6.3), with
 the font licences in `assets/licenses/`.
@@ -473,13 +475,15 @@ profile, plus a `model.PetSpecies` constant and an onboarding portrait (below). 
 (also hand-written) picks the pet from its `?pet=<id>` query parameter, frames the camera on it, animates
 by `mood` and toggles the add-ons. `HtmlManiengineRenderer` loads `ManiengineAssets.entryUrl(state.getPetSpecies())`
 and reloads the page if a later state has another species (the user picks it during onboarding). The item
-thumbnails are always drawn on the default pet. Other asset types (`.glb`, textures, `.wasm`) can
+thumbnails are always drawn on the default pet (add-ons aren't fitted per pet yet). Other asset types (`.glb`, textures, `.wasm`) can
 still sit beside it with relative URLs.
 
 The Customise circles are PNGs of those add-ons. After changing an add-on, run
 **`python3 tools/maniengine/make_thumbnails.py`** (headless Edge) to regenerate
 `res/drawable-nodpi/thumb_<itemId>.png`. A new catalog item also needs a case in
-`ui/customise/AccessoryThumbnails`; `AccessoryThumbnailsTest` fails until it has one.
+`ui/customise/AccessoryThumbnails`; `AccessoryThumbnailsTest` fails until it has one. The same run
+renders each `PETS` pet whole to `thumb_pet_<id>.png`, the onboarding portraits; a new pet needs a
+case in `ui/onboarding/PetPortraits` (portrait + name string), or `PetPortraitsTest` fails.
 
 How the page is hosted (`HtmlManiengineRenderer`):
 - Served from the virtual origin **`https://appassets.androidplatform.net/assets/maniengine/`**
@@ -1065,10 +1069,12 @@ Debug helpers available in the debug build:
 
 
 0. Fresh install: the onboarding screen shows "Meet your new
-   pet" with the name field prefilled with `Tomo`. Clearing it disables **Start**; the counter caps
+   pet", portrait cards for every pet (Rabbit, Cat) with Rabbit ringed, and the name field prefilled
+   with `Tomo`. Tapping Cat moves the ring (rotation keeps it); after **Start** the Pets and Customise
+   viewports show the cat, and it stays the cat after a relaunch. Clearing it disables **Start**; the counter caps
    at 20. Type `Mochi` and tap **Start** (or the keyboard's Done): the Pets tab opens and its
    health bar shows `Mochi`. Rotation keeps the typed text. Relaunching skips onboarding. (The steps
-   below assume you kept `Tomo`.)
+   below assume you kept `Tomo` and the Rabbit.)
 1. Launch the app. The **Pets** tab has **no action bar** and no debug buttons. The health bar sits below
    the rabbit and shows `Tomo`, **HP 50 / 100** and status "Okay". Until Usage Access is granted, a Usage Access card with an **Enable** button
    sits at the top of the page (it disappears once access is granted). The bottom bar shows three icons (Customise, Pets, Chat). Pets is open: its tile is wider, its icon is larger and only it shows a label.
@@ -1145,7 +1151,7 @@ Update this table in the same commit when your task changes a subsystem's status
 | MCP tool bridge | ✅ Production-capable default | `DefaultMcpPetActionHandler` |
 | Pets UI (pet viewport, health bar below the pet) | ✅ Skeleton done | `PetsFragment` / `PetsViewModel` |
 | Customise UI (pet preview, slot tabs, item circle grid) | ✅ Skeleton done | `CustomiseFragment` / `CustomiseViewModel` |
-| Onboarding (name the pet) | ✅ Done | `OnboardingActivity` / `OnboardingViewModel` |
+| Onboarding (choose and name the pet) | ✅ Done | `OnboardingActivity` / `OnboardingViewModel` |
 | Chat UI | ✅ Skeleton done | `ChatFragment` / `ChatViewModel` / `ChatRepository` |
 | Pet rendering | ✅ scene-3 rabbit (default) and scene-5 cat (three.js, offline) via the HTML/WebView pipeline; add-ons are primitive placeholders | `HtmlManiengineRenderer` + `assets/maniengine/` |
 | Item catalog | ⏳ Placeholder (6 hard-coded items: hats and accessories) | `AccessoryCatalog` → Maniengine Agent |
@@ -1163,9 +1169,8 @@ Known gaps and TODOs (not assigned to anyone yet):
 - The chat transcript isn't persisted, and quiz replay protection only lasts for the process
   lifetime. Real backends must use globally unique quiz IDs.
 - Non-UI user-facing text (MCP results, chat notices, mock bot) is inline English, not in `strings.xml`.
-- Pet selection: the cat model exists (`index.html?pet=cat`), but there's no UI to pick a pet and
-  no persisted choice. It needs a `PetState` field + prefs key and a way to pass it to the page
-  (`ManiengineProtocol` state JSON).
+- The pet species is chosen once, at onboarding; there's no way to change it later short of the
+  hidden reset. Add-ons are positioned for the rabbit, so they may sit oddly on the cat.
 - Nothing happens yet when HP reaches 0 beyond the "Fainted" status label.
 - The app has no built-in way to lower HP for manual testing; use real doom-scroll detection. To
   start over, use the hidden reset (long-press the Wardrobe tab). Whether it keeps Usage Access and

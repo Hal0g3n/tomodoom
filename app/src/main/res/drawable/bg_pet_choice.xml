@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pet portrait card on the onboarding screen: the chosen pet gets a heavier, darker ring. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_selected="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="24dp" />
+            <solid android:color="@color/accessory_circle_background" />
+            <stroke
+                android:width="3dp"
+                android:color="@color/accessory_circle_stroke_selected" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="24dp" />
+            <solid android:color="@color/accessory_circle_background" />
+            <stroke
+                android:width="2dp"
+                android:color="@color/accessory_circle_stroke" />
+        </shape>
+    </item>
+</selector>

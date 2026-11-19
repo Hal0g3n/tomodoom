@@ -34,9 +34,10 @@
     </plurals>
 
     <!-- Onboarding -->
-    <string name="onboarding_emoji" translatable="false">🐾</string>
     <string name="onboarding_title">Meet your new pet</string>
-    <string name="onboarding_subtitle">Give them a name. Scroll less to keep them healthy.</string>
+    <string name="onboarding_subtitle">Choose your pet and give them a name. Scroll less to keep them healthy.</string>
+    <string name="pet_species_rabbit">Rabbit</string>
+    <string name="pet_species_cat">Cat</string>
     <string name="onboarding_name_hint">Pet name</string>
     <string name="onboarding_start">Start</string>
     <string name="onboarding_name_error">Enter a name (maximum length: %1$d)</string>

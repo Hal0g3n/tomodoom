@@ -18,7 +18,7 @@ import com.example.tomodoom.model.PetNames;
 import com.example.tomodoom.viewmodel.OnboardingViewModel;
 
 /**
- * Launcher activity. On the first launch it asks the user to name their pet, then opens
+ * Launcher activity. On the first launch it asks the user to choose and name their pet, then opens
  * {@link MainActivity}. Once onboarding is complete it forwards straight to
  * {@link MainActivity} without showing anything.
  */
@@ -39,6 +39,11 @@ public class OnboardingActivity extends AppCompatActivity {
 
         binding = ActivityOnboardingBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
+
+        PetChoiceAdapter choices = new PetChoiceAdapter(viewModel.getSpecies(),
+                viewModel::selectSpecies);
+        binding.petChoices.setAdapter(choices);
+        viewModel.getSelectedSpecies().observe(this, choices::setSelected);
 
         binding.petNameLayout.setCounterMaxLength(PetNames.MAX_LENGTH);
         if (savedInstanceState == null) {

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Render the pet add-ons to res/drawable-nodpi/thumb_<itemId>.png with headless Edge.
+"""Render the pet add-ons (thumb_<itemId>.png) and pet portraits (thumb_pet_<petId>.png) with headless Edge.
 
 Serves the repo on localhost, opens thumbnails.html (which draws each add-on from pet-scene.js) and
-reads the PNGs back from the page's DOM. Re-run it whenever an add-on in pet-scene.js changes.
+reads the PNGs back from the page's DOM. Re-run it whenever an add-on, a pet or its PETS profile changes.
 
 Usage: python3 tools/maniengine/make_thumbnails.py      (set EDGE to use another Chromium binary)
 """
