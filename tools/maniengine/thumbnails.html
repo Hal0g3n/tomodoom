@@ -31,7 +31,7 @@ renderer.setClearColor(0x000000, 0);
 // Hide the pet and the rug, but keep the groups: add-ons are parented to them.
 const parts = new Set();
 for (const id in ADDONS) ADDONS[id].traverse(o => parts.add(o));
-scene.traverse(o => { if (o.isMesh && !parts.has(o)) o.visible = false; });
+scene.traverse(o => { if ((o.isMesh || o.isLine || o.isPoints) && !parts.has(o)) o.visible = false; });
 
 const out = {};
 for (const id in ADDONS) {

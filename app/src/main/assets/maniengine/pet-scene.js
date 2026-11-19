@@ -39,11 +39,13 @@ export function buildPetScene(THREE, scene, renderer, { buildModel, OVERRIDES },
 
   // Drop the hidden room, sky and ground; group what's left into rug + pet (pivot at its feet) +
   // head (pivot at the neck).
-  scene.children.filter(o => o.isMesh && (!o.visible || o.name === 'sky' || o.name === 'ground'))
+  // Parts are meshes, lines (the cat's whiskers are LineSegments) or points.
+  const isPart = o => o.isMesh || o.isLine || o.isPoints;
+  scene.children.filter(o => isPart(o) && (!o.visible || o.name === 'sky' || o.name === 'ground'))
     .forEach(o => scene.remove(o));
   const isRug = o => profile.rug.test(o.name);
   const isHead = o => profile.headParts.test(o.name);
-  const meshes = scene.children.filter(o => o.isMesh && !isRug(o));
+  const meshes = scene.children.filter(o => isPart(o) && !isRug(o));
   const box = (list) => list.reduce((b, o) => b.expandByObject(o), new THREE.Box3());
   const named = (n) => scene.getObjectByName(n);
 

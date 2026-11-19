@@ -924,6 +924,9 @@ fullscreen still counts as scrolling, and scrolling in landscape isn't penalised
   first so the indices match the export). Nested paths (`"46/16"`) are skipped with a
   `console.warn`. Headless-Edge screenshots on this Windows machine report a viewport about 500px
   wide whatever `--window-size` says, so check framing at ≥500px.
+- **Pet parts aren't only meshes:** `pet-scene.js` groups meshes, lines and points (`isPart`); the
+  cat's whiskers are `LineSegments` and stayed behind when the pet turned while it only took meshes.
+  An export using another object type needs adding there.
 - **Foreground service start:** start `DoomScrollMonitorService` only through
   `DoomScrollMonitor.startFromForeground()` while a page is resumed. `Application.onCreate` can run
   in the background, where Android 12+ throws `ForegroundServiceStartNotAllowedException`.
