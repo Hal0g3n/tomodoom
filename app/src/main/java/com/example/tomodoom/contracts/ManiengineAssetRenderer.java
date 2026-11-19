@@ -96,30 +96,41 @@ public interface ManiengineAssetRenderer {
     }
 
     /**
-     * @return true if this renderer implements {@link #setFrame}, so {@code ui.PetStage} may
-     * animate the pet between two viewports by moving it into a full-size transition layer.
-     * Optional: the default is false, and the pet then just moves when the new page settles.
+     * @return true if this renderer is placed with {@link #setFrame} (and {@link #setTouchBox}).
+     * {@code ui.PetStage} then gives it <b>one fixed container for its whole life</b>: a layer the
+     * size of the pager, behind the pages, which never moves or resizes. The pet is drawn only in
+     * the frame, which follows the visible page's viewport (and slides and shrinks between the
+     * Pets and Customise viewports as you swipe); touches on that viewport are forwarded to it.
+     * Optional: the default is false, and the renderer is then moved into each page's viewport
+     * as described in the class docs.
      */
     @MainThread
-    default boolean supportsFramedTransition() {
+    default boolean supportsFrames() {
         return false;
     }
 
     /**
      * Draws the pet only inside {@code frame}, with rounded corners, framed as it would be in a
      * viewport of that size; the rest of the container stays transparent. {@code null} goes back to
-     * filling the whole container. Called once per animation frame during a page transition, so
-     * it must be cheap.
-     *
-     * <p>{@code container} is the container the pet is in <em>or is about to be moved to</em> by the
-     * next {@link #render}: a frame may be sent first, so the pet appears in the right place as
-     * soon as it is moved. Optional: the default does nothing.</p>
+     * filling the whole container. Called on every pager scroll frame, so it must be cheap.
+     * Optional: the default does nothing.
      *
      * @param frame          the rect in {@code container}'s coordinates (px), or null.
      * @param cornerRadiusPx the rect's corner radius (px).
+     * @param lift           0-1: how far to raise the pet clear of a health bar floating over the
+     *                       bottom of the frame (1 on Pets, 0 on Customise, blended in between).
      */
     @MainThread
     default void setFrame(@NonNull ViewGroup container, @Nullable RectF frame,
-                          float cornerRadiusPx) {
+                          float cornerRadiusPx, float lift) {
+    }
+
+    /**
+     * Where one-finger drags turn the pet instead of swiping between pages, in {@code container}'s
+     * coordinates (px); null while none should (e.g. mid-swipe). Only for renderers that
+     * {@linkplain #supportsFrames support frames}. Optional: the default does nothing.
+     */
+    @MainThread
+    default void setTouchBox(@NonNull ViewGroup container, @Nullable RectF box) {
     }
 }

@@ -18,7 +18,6 @@
     <color name="chat_math_text">@color/jet</color>
 
     <!-- Pets -->
-    <color name="viewport_background">@color/floral_white</color>
     <color name="viewport_stroke">@color/eggshell</color>
 
     <!-- Customise -->

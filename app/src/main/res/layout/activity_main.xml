@@ -5,6 +5,18 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
+    <!-- The pet (PetStage), behind the pages: they are transparent over their pet viewports, so it
+         shows through, and the Pets cards draw over it. Declared first so it is drawn below the
+         pager; the same size. It takes no touches itself (the viewports forward theirs). -->
+    <com.example.tomodoom.ui.PetLayer
+        android:id="@+id/pet_layer"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toBottomOf="@id/main_pager"
+        app:layout_constraintEnd_toEndOf="@id/main_pager"
+        app:layout_constraintStart_toStartOf="@id/main_pager"
+        app:layout_constraintTop_toTopOf="@id/main_pager" />
+
     <!-- Swipeable top-level pages (MainPagerAdapter), in bottom-nav order. The id lets ViewPager2
          save and restore the current page. -->
     <androidx.viewpager2.widget.ViewPager2
@@ -15,17 +27,6 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
-
-    <!-- Holds the pet while PetStage animates it between the Pets and Customise viewports. Over the
-         pager, the same size; it only draws, so every touch reaches the pager below. -->
-    <com.example.tomodoom.ui.PassThroughFrameLayout
-        android:id="@+id/pet_transition_layer"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        app:layout_constraintBottom_toBottomOf="@id/main_pager"
-        app:layout_constraintEnd_toEndOf="@id/main_pager"
-        app:layout_constraintStart_toStartOf="@id/main_pager"
-        app:layout_constraintTop_toTopOf="@id/main_pager" />
 
     <!-- Icons only; the open tab widens, shows its label and enlarges its icon (MainActivity). -->
     <com.google.android.material.bottomnavigation.BottomNavigationView

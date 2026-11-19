@@ -8,8 +8,9 @@
     android:padding="16dp"
     tools:context=".ui.customise.CustomiseFragment">
 
-    <!-- Pet preview: owned entirely by ManiengineAssetRenderer. Add no children here. -->
-    <FrameLayout
+    <!-- Pet preview: a border only; the pet is drawn behind the pager (PetStage), inside it. Keep
+         it unfilled and add no children here. -->
+    <com.example.tomodoom.ui.PetViewport
         android:id="@+id/pet_viewport"
         android:layout_width="0dp"
         android:layout_height="0dp"

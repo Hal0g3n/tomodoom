@@ -8,8 +8,9 @@
     - reads window.tomodoomPetState at startup and listens for "tomodoom:petstate";
     - mood drives the idle animation, equipped items toggle the add-ons below;
     - reads window.tomodoomFrame and listens for "tomodoom:frame": while the host animates the pet
-      between pages it gives a rect (CSS px) to draw the pet into; the rest of the canvas stays
-      transparent. A frame only applies while the page's size equals its hostW x hostH.
+      and its pages it gives a rect (CSS px) to draw the pet into; the rest of the canvas stays
+      transparent. A frame only applies while the page's size equals its hostW x hostH, and its
+      lift (0-1) says how much to raise the pet clear of a health bar below it.
   tomodoom-touch "centre": one-finger drags starting in the model box (window.tomodoomTouchBox, set by
   the host) turn the pet. Fast flicks and drags starting outside the box swipe between tabs. Two
   fingers pinch-zoom (the host keeps multi-touch gestures away from the tab pager).
@@ -60,7 +61,7 @@ applyState(window.tomodoomPetState);
 
 // --- Camera: frame the pet (+ the near rug) for whatever aspect the viewport (or frame) has ---
 const TALL_ASPECT = .8, TALL_BLEND = .15, TALL_LIFT = .08, MIN_ZOOM = .75, MAX_ZOOM = 3;
-// Host frame for page transitions: { x, y, w, h, r, hostW, hostH } in CSS px, or null.
+// Host frame: { x, y, w, h, r, lift, hostW, hostH } (CSS px; lift 0-1), or null.
 let hostFrame = window.tomodoomFrame || null;
 const activeFrame = (w, h) => {
   const f = hostFrame;
@@ -78,9 +79,10 @@ function fit() {
   const dist = Math.max(fitH, fitW, 2.5);
   camera.position.set(0, centre.y + dist * .18, centre.z + dist);
   camera.lookAt(0, centre.y - size.y * .08, centre.z);
-  // Tall (full-page) viewports: sit the pet higher, clear of the health bar floating below it.
-  // Blended over a band of aspects, so a frame shrinking from tall to wide never jumps.
-  const lift = TALL_LIFT * (1 - THREE.MathUtils.smoothstep(camera.aspect, TALL_ASPECT - TALL_BLEND, TALL_ASPECT));
+  // Sit the pet higher, clear of the health bar floating below it: as much as the host's frame
+  // says (it blends this with the frame, so the pet never dips), else in tall (full-page) viewports.
+  const lift = TALL_LIFT * (f && typeof f.lift === 'number' ? THREE.MathUtils.clamp(f.lift, 0, 1)
+    : 1 - THREE.MathUtils.smoothstep(camera.aspect, TALL_ASPECT - TALL_BLEND, TALL_ASPECT));
   if (lift > 0) camera.setViewOffset(fw, fh, 0, fh * lift, fw, fh);
   else camera.clearViewOffset();
   camera.updateProjectionMatrix();
@@ -99,7 +101,7 @@ fit();
 
 // --- Touch: one finger in the model box turns the pet; two fingers pinch to zoom ---
 // camera.zoom scales the picture uniformly, so the model is never distorted.
-// Speeds are in viewport widths per second, so a swipe feels the same on any screen size.
+// Speeds are in viewport (frame) widths per second, so a swipe feels the same at any size.
 const SPEED_WINDOW_MS = 100, SLOW_SPEED = .5, FAST_SPEED = 3, SLOW_GAIN = .75, FAST_GAIN = 1.75;
 const MIN_FLING = .6, MAX_FLING = 14, FLING_DECAY = 2.5, TAB_HANDOVER_MS = 300;
 const pointers = new Map();
@@ -107,6 +109,8 @@ let pinch = null, spin = null, spinVelocity = 0;
 const spread = () => { const [a, b] = [...pointers.values()]; return Math.max(Math.hypot(a.x - b.x, a.y - b.y), 1); };
 const startPinch = () => { pinch = pointers.size === 2 ? { spread: spread(), zoom: camera.zoom } : null; };
 const canvas = renderer.domElement;
+// Width the pet is shown at: its frame's, else the whole canvas. Drags are measured against it.
+const viewWidth = () => Math.max((activeFrame(canvas.clientWidth, canvas.clientHeight) || { w: canvas.clientWidth }).w, 1);
 const inModelBox = e => {
   const box = window.tomodoomTouchBox, x = e.clientX / canvas.clientWidth, y = e.clientY / canvas.clientHeight;
   return !!box && x >= box.left && x < box.right && y >= box.top && y < box.bottom;
@@ -116,7 +120,7 @@ function swipeSpeed(now) {
   spin.samples = spin.samples.filter(s => now - s.time <= SPEED_WINDOW_MS);
   if (spin.samples.length < 2) return 0;
   const first = spin.samples[0], latest = spin.samples[spin.samples.length - 1];
-  return (latest.x - first.x) / Math.max(latest.time - first.time, 1) * 1000 / Math.max(canvas.clientWidth, 1);
+  return (latest.x - first.x) / Math.max(latest.time - first.time, 1) * 1000 / viewWidth();
 }
 const swipeGain = speed => THREE.MathUtils.lerp(SLOW_GAIN, FAST_GAIN, THREE.MathUtils.smoothstep(Math.abs(speed), SLOW_SPEED, FAST_SPEED));
 canvas.addEventListener('pointerdown', e => {
@@ -131,7 +135,7 @@ canvas.addEventListener('pointermove', e => {
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (spin && spin.id === e.pointerId) {
     spin.samples.push({ x: e.clientX, time: e.timeStamp });
-    const widths = (e.clientX - spin.x) / Math.max(canvas.clientWidth, 1);
+    const widths = (e.clientX - spin.x) / viewWidth();
     pet.rotation.y += widths * Math.PI * 2 * swipeGain(swipeSpeed(e.timeStamp));
     spin.x = e.clientX;
   }

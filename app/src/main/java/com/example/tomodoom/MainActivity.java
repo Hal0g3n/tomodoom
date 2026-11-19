@@ -32,8 +32,9 @@ import com.example.tomodoom.ui.debug.DebugPanelFragment;
  * {@code NoActionBar}): each page supplies its own header.</p>
  *
  * <p>The activity owns the one {@link PetStage}: a single pet renderer that moves between the
- * Customise and Pets viewports, so only one pet is rendered at a time. Pager scrolls are forwarded
- * to it, so the pet shrinks from one viewport into the other as you swipe.</p>
+ * Customise and Pets viewports, so only one pet is rendered at a time. The pet lives in
+ * {@code pet_layer} behind the pager; pager scrolls are forwarded to the stage, so the pet slides
+ * and shrinks from one viewport into the other as you swipe.</p>
  */
 public class MainActivity extends AppCompatActivity implements PetStage.Host {
 
@@ -58,13 +59,13 @@ public class MainActivity extends AppCompatActivity implements PetStage.Host {
 
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
+        petStage.setPetLayer(binding.petLayer); // before any page attaches
 
         ViewPager2 pager = binding.mainPager;
         pager.setAdapter(new MainPagerAdapter(this));
-        // Keep both neighbours laid out, so the pet's page transition knows where it is heading
-        // from the first frame of a swipe.
+        // Keep both neighbours laid out, so the pet knows where it is heading from the first
+        // frame of a swipe.
         pager.setOffscreenPageLimit(1);
-        petStage.setTransitionLayer(binding.petTransitionLayer);
         pager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
             @Override
             public void onPageSelected(int position) {
@@ -79,7 +80,7 @@ public class MainActivity extends AppCompatActivity implements PetStage.Host {
 
             @Override
             public void onPageScrollStateChanged(int state) {
-                petStage.onPagerScrollStateChanged(state, pager.getCurrentItem());
+                petStage.onPagerScrollStateChanged(state);
             }
         });
         binding.navView.setOnItemSelectedListener(item -> {
