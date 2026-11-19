@@ -34,8 +34,6 @@ import com.example.tomodoom.ui.watchedapps.WatchedAppsActivity;
 import com.example.tomodoom.viewmodel.SettingsViewModel;
 import com.google.android.material.snackbar.Snackbar;
 
-import java.util.Set;
-
 /**
  * Settings page: rename the pet, switch to another pet, choose the tracked apps, set the chat
  * text size and the background-music volume. Holds no logic; every change goes through {@link SettingsViewModel}. The activity's
@@ -68,7 +66,7 @@ public class SettingsFragment extends Fragment {
         setUpMusic();
 
         viewModel.getPetState().observe(getViewLifecycleOwner(), this::renderPet);
-        viewModel.getWatchedPackages().observe(getViewLifecycleOwner(), this::renderWatched);
+        viewModel.getWatchedCount().observe(getViewLifecycleOwner(), this::renderWatched);
         viewModel.getChatTextScale().observe(getViewLifecycleOwner(), this::renderChatSize);
         viewModel.getMusicVolume().observe(getViewLifecycleOwner(), this::renderMusic);
         // The pet fades out here but keeps running, so it returns without a flash.
@@ -82,6 +80,7 @@ public class SettingsFragment extends Fragment {
     public void onResume() {
         super.onResume();
         updateUsageAccess(); // may have changed in the system settings
+        viewModel.refreshInstalledApps(); // apps may have been installed or removed meanwhile
         stage().attach(binding.getRoot(), viewModel.getPetState().getValue());
     }
 
@@ -205,8 +204,11 @@ public class SettingsFragment extends Fragment {
                 startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)));
     }
 
-    private void renderWatched(@Nullable Set<String> watched) {
-        int count = watched != null ? watched.size() : 0;
+    /** {@code count}: watched apps that are installed, as the watched-apps picker counts them. */
+    private void renderWatched(@Nullable Integer count) {
+        if (count == null) {
+            return;
+        }
         binding.appsSummary.setText(getResources()
                 .getQuantityString(R.plurals.watched_apps_summary, count, count));
     }

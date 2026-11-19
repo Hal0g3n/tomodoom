@@ -226,7 +226,8 @@ com.example.tomodoom
 │   ├── OnboardingPermissionFlow  pure Java: next permission step (Usage Access → notifications → done)
 │   ├── ChatViewModel             exposes transcript + active quiz + PetState (for the pet backdrop), sends messages
 │   ├── StatsViewModel            StatsReport per snapshot / refresh(); selected health-chart range; PetState (hidden backdrop)
-│   ├── SettingsViewModel         rename (PetNames), species switch, watched-app count, chat text scale, music volume
+│   ├── SettingsViewModel         rename (PetNames), species switch, watched-app count (installed launcher apps
+│   │                             only, as in the picker; reloaded off the main thread on resume), chat text scale, music volume
 │   └── WatchedAppsViewModel      installed apps (loaded once, off the main thread) + watched set, toggles
 │
 └── ui/
@@ -1373,8 +1374,11 @@ Debug helpers:
     "Renamed to Mochi" Snackbar appears above the bottom bar, the Pets health bar says `Mochi`, and the
     next chatbot reply uses it. Under **Your pet**, tap Cat: the ring moves, "Mochi is now a Cat"
     appears, and Pets and Customise show the cat with the same HP and items. Relaunch: both stick.
-27. **Tracked apps** shows "N apps watched"; without Usage Access it says so and offers **Enable**.
-    **Choose apps** opens the Watched apps picker; changing it updates the count on return.
+27. **Tracked apps** shows "N apps watched", the same N as the picker's header: only watched apps
+    that are installed count (a fresh install with only YouTube says 1, not the 8 default IDs);
+    without Usage Access it says so and offers **Enable**.
+    **Choose apps** opens the Watched apps picker; changing it updates the count on return, and so
+    does installing or removing a watched app.
 28. **Chat text size**: drag the slider (80%–150%, six stops). The percentage and the preview bubble
     change at once; on Chat, user and bot bubbles, code blocks and LaTeX use the new size, and system
     notices don't. Rotation and relaunch keep it. *(26–28 verified on an API 37 emulator, 2026-11-19,

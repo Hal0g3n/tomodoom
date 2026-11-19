@@ -76,4 +76,14 @@ public class WatchedAppsTest {
         assertEquals(1, WatchedApps.countWatched(apps, watched));
         assertFalse(watched.isEmpty());
     }
+
+    @Test
+    public void defaultsCountOnlyTheInstalledOnes() {
+        List<InstalledApp> installed = Arrays.asList(
+                new InstalledApp("com.instagram.android", "Instagram"),
+                new InstalledApp("com.google.android.youtube", "YouTube"),
+                new InstalledApp("com.android.chrome", "Chrome"));
+
+        assertEquals(2, WatchedApps.countWatched(installed, WatchedApps.DEFAULT_PACKAGES));
+    }
 }

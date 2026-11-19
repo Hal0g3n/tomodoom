@@ -65,7 +65,8 @@ public final class ViewModelFactory implements ViewModelProvider.Factory {
         if (modelClass.isAssignableFrom(SettingsViewModel.class)) {
             return (T) new SettingsViewModel(container.getPetStateRepository(),
                     container.getWatchedAppsRepository(), container.getSettingsRepository(),
-                    container.getDoomScrollMonitor()::isPermissionGranted);
+                    container.getDoomScrollMonitor()::isPermissionGranted,
+                    container.getInstalledAppsSource());
         }
         if (modelClass.isAssignableFrom(DebugViewModel.class)) {
             return (T) new DebugViewModel(container.getPetStateRepository(),
