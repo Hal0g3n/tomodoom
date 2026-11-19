@@ -17,13 +17,15 @@ import com.example.tomodoom.R;
 import com.example.tomodoom.databinding.FragmentChatBinding;
 import com.example.tomodoom.di.ViewModelFactory;
 import com.example.tomodoom.model.ChatMessage;
+import com.example.tomodoom.ui.PetStage;
 import com.example.tomodoom.viewmodel.ChatViewModel;
 
 import java.util.List;
 
 /**
- * Chat page: the chat transcript (user, bot and system/MCP messages) plus an input bar.
- * While a quiz is active, the input hint asks for an answer.
+ * Chat page: the chat transcript (user, bot and system/MCP messages) plus an input bar, over the
+ * pet (lent by {@link PetStage} while this page is resumed), which shows through the translucent
+ * bubbles. While a quiz is active, the input hint asks for an answer.
  */
 public class ChatFragment extends Fragment {
 
@@ -45,12 +47,14 @@ public class ChatFragment extends Fragment {
         viewModel = new ViewModelProvider(this, ViewModelFactory.from(requireContext()))
                 .get(ChatViewModel.class);
 
-        adapter = new ChatAdapter();
+        adapter = new ChatAdapter(requireContext());
         LinearLayoutManager layoutManager = new LinearLayoutManager(requireContext());
         layoutManager.setStackFromEnd(true);
         binding.chatList.setLayoutManager(layoutManager);
         binding.chatList.setAdapter(adapter);
 
+        viewModel.getPetState().observe(getViewLifecycleOwner(),
+                state -> stage().render(binding.petViewport, state));
         viewModel.getMessages().observe(getViewLifecycleOwner(), this::showMessages);
         viewModel.getActiveQuiz().observe(getViewLifecycleOwner(), quiz ->
                 binding.messageInput.setHint(quiz != null
@@ -72,9 +76,27 @@ public class ChatFragment extends Fragment {
     }
 
     @Override
+    public void onResume() {
+        super.onResume();
+        stage().attach(binding.petViewport, viewModel.getPetState().getValue());
+    }
+
+    @Override
+    public void onPause() {
+        stage().detach(binding.petViewport);
+        super.onPause();
+    }
+
+    @Override
     public void onDestroyView() {
+        stage().detach(binding.petViewport);
         super.onDestroyView();
         binding = null;
+    }
+
+    @NonNull
+    private PetStage stage() {
+        return ((PetStage.Host) requireActivity()).getPetStage();
     }
 
     private void showMessages(@NonNull List<ChatMessage> messages) {

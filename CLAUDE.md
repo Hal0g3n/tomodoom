@@ -212,7 +212,7 @@ com.example.tomodoom
 │   ├── OnboardingViewModel       onboarding flag, suggested name, species list + selectedSpecies, submitName(),
 │   │                             permission-step state (usage skipped, notifications handled)
 │   ├── OnboardingPermissionFlow  pure Java: next permission step (Usage Access → notifications → done)
-│   ├── ChatViewModel             exposes transcript + active quiz, sends messages
+│   ├── ChatViewModel             exposes transcript + active quiz + PetState (pet behind the chat), sends messages
 │   ├── StatsViewModel            StatsReport per snapshot / refresh(); selected health-chart range
 │   └── WatchedAppsViewModel      installed apps (loaded once, off the main thread) + watched set, toggles
 │
@@ -234,7 +234,7 @@ com.example.tomodoom
     ├── customise/CustomiseFragment   pet preview viewport (via PetStage) + full-width slot tabs + item grid
     ├── customise/AccessoryGridAdapter, AccessoryThumbnails   two-column item circles; item ID → thumbnail
     ├── pets/PetsFragment         full-page pet viewport (FrameLayout) under the Usage Access card and health bar
-    ├── chat/ChatFragment, ChatAdapter   RecyclerView (3 view types) + input bar
+    ├── chat/ChatFragment, ChatAdapter   RecyclerView (3 view types) + input bar over the pet (via PetStage)
     ├── stats/StatsFragment       four cards; refreshes every 30 s while visible
     ├── stats/HpLineChartView, BarChartView   Canvas charts in the palette (no chart library)
     ├── stats/StatsFormatter      durations, token counts and app labels → display text
@@ -247,7 +247,8 @@ Resources: `res/values/colors.xml` + `res/values/themes.xml` (palette and theme,
 `usage_access_card` (Usage Access prompt, §5.3) at the top and `hp_card` (the health bar) at the bottom
 floating over it; both cards are transparent),
 `fragment_customise.xml` (`pet_viewport` at 40% of the page height, at the top with no title, `slot_tabs`,
-`item_grid` RecyclerView), `fragment_chat.xml`, `item_chat_{user,bot,system}.xml`,
+`item_grid` RecyclerView), `fragment_chat.xml` (a borderless full-page `pet_viewport` behind the
+transcript and the input bar, whose backgrounds are translucent, §6.3), `item_chat_{user,bot,system}.xml`,
 `item_accessory_circle.xml`, `activity_watched_apps.xml` + `item_watched_app.xml` (watched-apps
 picker), `res/drawable/bg_accessory_circle.xml`, `ic_item_none_24dp.xml`,
 `res/drawable-nodpi/thumb_<itemId>.png` and `thumb_pet_<speciesId>.png` (GENERATED item thumbnails and
@@ -445,11 +446,11 @@ The full Javadoc on each interface is normative. What follows is a summary.
 @MainThread default void setFrame(@NonNull ViewGroup container, @Nullable RectF frame, float cornerRadiusPx) {}
 ```
 - **One renderer per `MainActivity`**, so only one pet is rendered at a time. `ui.PetStage` owns it
-  and lends it to whichever page is resumed (Customise or Pets): the page calls
+  and lends it to whichever page is resumed (Customise, Pets or Chat): the page calls
   `attach(viewport, state)` in `onResume`, `detach(viewport)` in `onPause`/`onDestroyView`, and
   `render(viewport, state)` on each emission (ignored unless that page owns the pet).
-- `container` is the visible page's `FrameLayout` `R.id.pet_viewport` (`fragment_pets.xml` or
-  `fragment_customise.xml`). The renderer owns all of its children. Nothing else adds views to it.
+- `container` is the visible page's `FrameLayout` `R.id.pet_viewport` (`fragment_pets.xml`,
+  `fragment_customise.xml` or `fragment_chat.xml`). The renderer owns all of its children. Nothing else adds views to it.
 - **The container changes between calls.** `render` with a new container must *move* the existing
   views there (remove from the old parent, keep loaded state); it must not rebuild or reload. A
   hidden page's viewport may keep the paused view until another page takes it.
@@ -643,9 +644,11 @@ How the page is hosted (`HtmlManiengineRenderer`):
   so a frame narrowing from tall to wide never jumps, and resizes the drawing buffer only when the size changes.
 - The page talks only one way (app → page). If it ever needs to call back (e.g. "item tapped"),
   extend `ManiengineProtocol` and this section together.
-- **Layout note:** there is **one** WebView, moved (not reloaded) between two viewports: the large
-  one on Pets and a preview at 40% of the page height on Customise, above the slot tabs and item
-  circles. On Pets the cards float over the pet, so `fit()` sits the pet higher in tall viewports,
+- **Layout note:** there is **one** WebView, moved (not reloaded) between three viewports: the large
+  one on Pets, a preview at 40% of the page height on Customise, above the slot tabs and item
+  circles, and a borderless full-page one on Chat, behind the translucent transcript (the chat list
+  takes the touches there, so the pet can't be turned on Chat; Chat doesn't call `registerViewport`,
+  as it isn't part of the shrink transition). On Pets the cards float over the pet, so `fit()` sits the pet higher in tall viewports,
   clear of the health bar below it. The page is resized on each move, so it must refit to any size without distorting the
   model (`index.html` does, with a `ResizeObserver` calling `fit()`). The page that isn't shown has an empty viewport.
 - **Pets ↔ Customise transition** (`PetStage`, renderers with `supportsFramedTransition()`): when the
@@ -1005,6 +1008,11 @@ Rules:
   (as `bubble_bot_background`, `system_notice_background`, `viewport_background`,
   `viewport_stroke` and the Stats `stats_card_*` / `chart_*` aliases do) rather than a new hex value. Adding a new token means a palette change:
   update the table above in the same commit.
+- **Chat is translucent** so the pet shows through: `bubble_user_background` (charcoal),
+  `bubble_bot_background` / `system_notice_background` (eggshell) and `chat_input_background`
+  (floral_white) are the palette hex at 60% alpha (`#99…`). This is the one place aliases carry a
+  hex value: keep it the token's RGB with an alpha prefix. Put the alpha on backgrounds only, never
+  `android:alpha` on a view, which would fade the text too.
 - `eggshell` on `floral_white` has very low contrast. Borders that must be visible use a 2dp stroke
   (as the Customise pet viewport does). The Pets cards are flat, transparent and have no stroke, because
   they float over the pet.
@@ -1179,7 +1187,9 @@ Debug helpers:
      fingers zooms it evenly (0.75x to 3x) without changing page.
    - Mood: HP ≥ the thriving threshold makes the rabbit hop, struggling droops its head and
      desaturates, and 0 HP tips it over in grey. Only real doom-scroll detection lowers HP in the app.
-3. Open **Chat**. There is no action bar; the transcript starts right under the status bar. The mock bot greets you. Type `quiz`, and the bot asks a question (e.g. "What is 2 + 2?").
+3. Open **Chat**. There is no action bar; the transcript starts right under the status bar. The pet
+   (the same one, not reloaded) fills the page behind the transcript and shows through the bubbles
+   and the input bar, while the text stays solid. *(Verified on an API 37 emulator, 2026-11-19.)* The mock bot greets you. Type `quiz`, and the bot asks a question (e.g. "What is 2 + 2?").
 4. Answer correctly (`4`). The bot confirms, and a SYSTEM message shows **"+10 HP awarded via MCP! (60/100 HP)"**.
 5. Switch to **Pets**: **HP 60 / 100**.
 6. In Chat, type `/tool get_pet_state` (or `/tool award_hp amount=5`). A SYSTEM message shows the MCP result.
@@ -1276,6 +1286,8 @@ Known gaps and TODOs (not assigned to anyone yet):
 - To change HP for manual testing, use the debug panel (long-press the Pets tab). To start over,
   use the hidden reset (long-press the Wardrobe tab, or the panel). Whether it keeps Usage Access and
   the notification permission hasn't been checked on a device.
+- Pets ↔ Chat doesn't animate the pet: it slides out with Pets and appears in Chat's viewport once
+  the swipe settles (and the other way round).
 - The Pets ↔ Customise shrink transition is verified only on the page side (headless Edge) and by
   unit tests; it hasn't been watched on a device yet. Watch for a blank frame when the WebView grows
   from the Customise size into the full-size layer, and for the frame trailing the finger
