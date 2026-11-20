@@ -196,7 +196,8 @@ com.example.tomodoom
 │
 ├── doomscroll/                   Doom Scroll Agent (§5.3)
 │   ├── UsageStatsDoomScrollMonitor   polls Usage Access every 15 s; reads portrait from the display
-│   ├── DoomScrollSessionTracker  pure Java: per-minute penalties, 10-minute warnings, session rules
+│   ├── DoomScrollSessionTracker  pure Java: per-minute penalties, session HP + warnings, session rules
+│   ├── DoomScrollWarningPolicy   pure Java: warning thresholds by session HP lost (10, 20, 40, 80 …)
 │   ├── DoomScrollNotifier        wraps DoomScrollHpBridge; posts the warning notification
 │   ├── DoomScrollMonitorService  foreground service that keeps polling alive
 │   └── LauncherAppsQuery         lists launcher apps (label + package) for the watched-apps picker
@@ -590,7 +591,8 @@ void setListener(@Nullable DoomScrollListener listener);
 
 interface DoomScrollListener {                         // callbacks: ANY thread
     void onDoomScrollDetected(@NonNull DoomScrollEvent event);
-    default void onDoomScrollWarning(@NonNull String sourcePackage, long sessionMillis) {}
+    default void onDoomScrollWarning(@NonNull String sourcePackage, long sessionMillis,
+                                     int sessionHpLost) {}   // at 10, 20, 40 … HP lost
 }
 ```
 - `startMonitoring()`/`stopMonitoring()` are idempotent. `startMonitoring()` is a no-op that logs
@@ -912,7 +914,11 @@ work or study app) never counts.
 Session rules (`DoomScrollSessionTracker`):
 - The pet loses **1 HP per counted minute** by default (the debug panel's *HP lost per minute*
   field changes it, 0–100, persisted), from the first minute. Part-minutes carry over.
-- A notification appears at **every 10 counted minutes** of a session.
+- A "Time to look up" notification appears when the session has cost **10 HP**, then each time
+  its HP loss doubles: **10, 20, 40, 80 … HP** (`DoomScrollWarningPolicy`). It follows the HP
+  rate, so at the default 1 HP/min that's after 10, 20, 40 and 80 minutes; at 0 HP/min there are
+  none. A poll that crosses several thresholds sends one warning, for the highest. The text says
+  how much HP the session has cost.
 - Time counts only in a watched app, in **portrait** (display height ≥ width), with the screen on.
   Landscape pauses the session without losing progress.
 - 60 seconds away from watched apps ends the session. Shorter gaps, in-app screen changes and
@@ -1270,9 +1276,10 @@ Debug helpers:
   (name, species, HP, mood, equipped) and offers: HP −10/−1/+1/+10, set HP to 0/30/50/80/max,
   unequip all; *HP lost per minute* (a typed whole number 0–100, default 1, **Apply**; it drives the
   real monitor too and survives relaunch); simulate one doom-scroll minute (at that rate) or the
-  10-minute warning notification, Usage Access status and settings, and a **Monitor** block
+  first (10 HP) warning notification, Usage Access status and settings, and a **Monitor** block
   (refreshed every second: last poll and gap, watched app on screen, last app opened, display size
-  and whether time counts, this session's counted time and charged minutes, HP charged since start,
+  and whether time counts, this session's counted time, charged minutes, HP lost and next warning threshold, HP charged
+  since start,
   last poll error); chat backend (mock or Gemini + models), simulate a quiz pass (+10 HP
   through `McpPetActionHandler.onQuizPassed`), replay it (the replay guard should reject it), start a
   new conversation; fill Stats with a demo week (`DemoStats`: random sessions, quizzes and tokens over
@@ -1365,7 +1372,8 @@ Debug helpers:
    Done): a toast confirms it and the button reads "Simulate 1 minute (−5 HP)", which removes 5 HP;
    an empty field shows "Enter a whole number"; relaunching keeps 5 (with Usage Access, real
    scrolling then costs 5 HP a minute). Simulate quiz pass shows "Tomo will remember that (+10 HP)", Replay shows
-   "⚠ Quiz debug:… was already rewarded." Simulate warning posts "Time to look up". New conversation
+   "⚠ Quiz debug:… was already rewarded." Simulate 10 HP warning posts "Time to look up · Your pet has lost 10 HP to scrolling this
+   session…". New conversation
    clears the Chat transcript and greets again. Fill Stats with a demo week: the Stats tab shows a
    week of bars, apps, a health line ending at the current HP, quiz gains and three Gemini models; HP
    on Pets is unchanged. Clear Stats history empties it again. Reset all data shows the same confirm
@@ -1397,9 +1405,11 @@ size means the screen check failed; a "Last error" line names a poll exception.
 
 14. Grant Usage Access and allow notifications. A low-priority "Tomodoom is watching over your pet" notification appears, with the white phone-and-pet logo (not a paw) in the status bar.
 15. Scroll Instagram or YouTube Shorts in portrait. HP drops by 1 each minute.
-16. Keep going to 10 and 20 minutes. A "Time to look up" notification appears each time.
+16. Keep going. A "Time to look up" notification appears at 10, 20 and 40 HP lost in the session
+    (10, 20 and 40 minutes at the default rate; with the debug rate at 5, about 2, 4 and 8 minutes),
+    saying how much HP was lost.
 17. Play a fullscreen landscape YouTube video. HP stops dropping, then resumes when you return to portrait.
-18. Leave watched apps for over a minute, then return. The next warning comes 10 minutes into the new session.
+18. Leave watched apps for over a minute, then return. The new session's first warning comes at 10 HP lost again.
 19. Revoke Usage Access. Monitoring stops and its notification disappears.
 20. With access granted, tap **Choose apps** in Settings → Tracked apps. "Watched apps" lists your launcher apps with
     the default social apps switched on and listed first, and "N apps watched" under the text.
@@ -1473,7 +1483,7 @@ Update this table in the same commit when your task changes a subsystem's status
 | Chatbot (Gemini) | ✅ Kafka (low HP) / Charon (high HP) personas, 40/60 hysteresis, speaking as the pet's name, new conversation after 10 min in the background, on Google's free Gemini API (`gemini-3.1-flash-lite` with fallbacks, retries on 503/429/timeouts) via the in-app OpenAI-compatible client. It's verified from a PC; on a device, the first build hit a 503, and the fix is not yet re-tested there. Mock when unconfigured | `GeminiChatService` (`GEMINI_API_URL`) / `MockChatService` |
 | Settings tab | ✅ Rename the pet, switch species, tracked apps (count + picker / Usage Access), chat text size (80–150%) with a live preview; verified on an emulator. Background-music volume slider (music loops in the foreground, restarts on return; not yet tested on a device) | `SettingsFragment` / `SettingsViewModel` / `SettingsRepository` |
 | Stats tab | ✅ Time since the last doom-scroll, clean streaks, doom-scrolling per day/app/session, HP over 24 h / 7 d, HP by cause, tokens per model; tracking starts at install. Token and HP parts verified on an emulator; the doom-scroll parts are unit-tested only | `StatsRepository` / `StatsFragment` |
-| Doom-scroll detection | ⚠ Usage Access polling in a foreground service; only the apps the user picks (default: social apps), portrait only, 1 HP per minute (debug-panel rate), warnings every 10 minutes. **On a real phone (2026-11-19) 10 minutes in a tracked app in portrait cost no HP and gave no warning**, with "monitoring: yes"; a poll exception silently stopping the schedule is now fixed and the debug panel shows the monitor's state; the cause is still to be confirmed on the device | `UsageStatsDoomScrollMonitor` |
+| Doom-scroll detection | ⚠ Usage Access polling in a foreground service; only the apps the user picks (default: social apps), portrait only, 1 HP per minute (debug-panel rate), warnings at 10, 20, 40 … HP lost per session. **On a real phone (2026-11-19) 10 minutes in a tracked app in portrait cost no HP and gave no warning**, with "monitoring: yes"; a poll exception silently stopping the schedule is now fixed and the debug panel shows the monitor's state; the cause is still to be confirmed on the device | `UsageStatsDoomScrollMonitor` |
 
 Known gaps and TODOs (not assigned to anyone yet):
 - The chat transcript isn't persisted (only the persona is), and quiz replay protection only lasts for the process

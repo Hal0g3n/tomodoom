@@ -38,14 +38,14 @@
     <string name="debug_monitor_poll">Last poll %1$s ago (#%2$d, gap %3$s, app changes: %4$d)</string>
     <string name="debug_monitor_apps">Watched app on screen: %1$s\nLast app opened: %2$s</string>
     <string name="debug_monitor_screen">Screen %1$d × %2$d · counting: %3$s</string>
-    <string name="debug_monitor_session">This session: %1$s counted, %2$d min charged · %3$d HP since start</string>
+    <string name="debug_monitor_session">This session: %1$s counted, %2$d min charged, HP lost: %3$d (next warning at %4$d) · HP since start: %5$d</string>
     <string name="debug_monitor_error">Last error (%1$s ago): %2$s</string>
     <string name="debug_monitor_nothing">none</string>
     <string name="debug_monitor_unknown">–</string>
     <string name="debug_duration_seconds">%1$d s</string>
     <string name="debug_duration_minutes">%1$d min %2$d s</string>
     <string name="debug_duration_hours">%1$d h %2$d min</string>
-    <string name="debug_doom_warning">Simulate 10-minute warning</string>
+    <string name="debug_doom_warning">Simulate 10 HP warning</string>
     <string name="debug_usage_settings">Open Usage Access settings</string>
 
     <!-- Chat / MCP -->

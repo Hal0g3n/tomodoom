@@ -59,8 +59,8 @@
     <string name="doom_scroll_warning_channel">Scrolling warnings</string>
     <string name="doom_scroll_warning_title">Time to look up</string>
     <plurals name="doom_scroll_warning_text">
-        <item quantity="one">You\'ve been scrolling for %1$d minute. Your pet is losing HP.</item>
-        <item quantity="other">You\'ve been scrolling for %1$d minutes. Your pet is losing HP.</item>
+        <item quantity="one">Your pet has lost %1$d HP to scrolling this session. Time for a break?</item>
+        <item quantity="other">Your pet has lost %1$d HP to scrolling this session. Time for a break?</item>
     </plurals>
 
     <!-- Onboarding -->

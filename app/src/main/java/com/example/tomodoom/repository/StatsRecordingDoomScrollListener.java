@@ -34,7 +34,8 @@ public final class StatsRecordingDoomScrollListener implements DoomScrollListene
 
     @AnyThread
     @Override
-    public void onDoomScrollWarning(@NonNull String sourcePackage, long sessionMillis) {
-        delegate.onDoomScrollWarning(sourcePackage, sessionMillis);
+    public void onDoomScrollWarning(@NonNull String sourcePackage, long sessionMillis,
+                                    int sessionHpLost) {
+        delegate.onDoomScrollWarning(sourcePackage, sessionMillis, sessionHpLost);
     }
 }

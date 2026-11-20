@@ -16,10 +16,9 @@ import com.example.tomodoom.R;
 import com.example.tomodoom.contracts.DoomScrollListener;
 import com.example.tomodoom.model.DoomScrollEvent;
 
-import java.util.concurrent.TimeUnit;
-
 /**
- * Forwards penalties to the wrapped listener and shows a notification at each warning milestone.
+ * Forwards penalties to the wrapped listener and shows a notification at each warning milestone
+ * (10, 20, 40 … HP lost in a session).
  * Without the notification permission, Android drops the warning and penalties still apply.
  */
 public final class DoomScrollNotifier implements DoomScrollListener {
@@ -53,20 +52,21 @@ public final class DoomScrollNotifier implements DoomScrollListener {
 
     @AnyThread
     @Override
-    public void onDoomScrollWarning(@NonNull String sourcePackage, long sessionMillis) {
-        delegate.onDoomScrollWarning(sourcePackage, sessionMillis);
+    public void onDoomScrollWarning(@NonNull String sourcePackage, long sessionMillis,
+                                    int sessionHpLost) {
+        delegate.onDoomScrollWarning(sourcePackage, sessionMillis, sessionHpLost);
         NotificationManager manager =
                 (NotificationManager) appContext.getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager == null) {
             return;
         }
-        int minutes = (int) TimeUnit.MILLISECONDS.toMinutes(sessionMillis);
         manager.notify(WARNING_NOTIFICATION_ID,
                 new NotificationCompat.Builder(appContext, WARNING_CHANNEL_ID)
                         .setSmallIcon(R.drawable.ic_notification)
                         .setContentTitle(appContext.getString(R.string.doom_scroll_warning_title))
                         .setContentText(appContext.getResources().getQuantityString(
-                                R.plurals.doom_scroll_warning_text, minutes, minutes))
+                                R.plurals.doom_scroll_warning_text, sessionHpLost,
+                                sessionHpLost))
                         .setContentIntent(openAppIntent(appContext))
                         .setAutoCancel(true)
                         .build());

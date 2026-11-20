@@ -23,13 +23,16 @@ public interface DoomScrollListener {
     void onDoomScrollDetected(@NonNull DoomScrollEvent event);
 
     /**
-     * Called each time a session reaches another warning milestone (every 10 minutes of counted
-     * time). May be invoked on <b>any thread</b>; must not block. Optional.
+     * Called each time a session reaches another warning milestone: when it has cost 10 HP,
+     * then each time its HP loss doubles (20, 40, 80 …). May be invoked on <b>any thread</b>;
+     * must not block. Optional.
      *
      * @param sourcePackage the app in use when the milestone was reached.
      * @param sessionMillis the counted session length at this milestone.
+     * @param sessionHpLost the HP-lost threshold this milestone marks (10, 20, 40 …).
      */
     @AnyThread
-    default void onDoomScrollWarning(@NonNull String sourcePackage, long sessionMillis) {
+    default void onDoomScrollWarning(@NonNull String sourcePackage, long sessionMillis,
+                                     int sessionHpLost) {
     }
 }

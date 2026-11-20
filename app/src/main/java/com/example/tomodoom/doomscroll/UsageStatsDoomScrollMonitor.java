@@ -35,7 +35,7 @@ import java.util.function.Supplier;
 /**
  * Detects doom-scrolling in the apps the user watches using Android Usage Access. Polls every
  * 15 seconds and charges the configured HP (default 1, set in the debug panel) per minute a
- * watched app is on screen in portrait. The watched set
+ * watched app is on screen in portrait, and warns at 10, 20, 40 … HP lost in a session. The watched set
  * is read at every poll, so a change in the picker applies within one poll. Landscape (such
  * as fullscreen video) doesn't count. {@link DoomScrollSessionTracker} holds the session rules.
  *
@@ -49,7 +49,6 @@ public final class UsageStatsDoomScrollMonitor implements DoomScrollMonitor {
     private static final long POLL_INTERVAL_MILLIS = TimeUnit.SECONDS.toMillis(15);
     private static final long MAX_POLL_GAP_MILLIS = TimeUnit.SECONDS.toMillis(45);
     private static final long PENALTY_INTERVAL_MILLIS = TimeUnit.MINUTES.toMillis(1);
-    private static final long WARNING_INTERVAL_MILLIS = TimeUnit.MINUTES.toMillis(10);
     private static final long AWAY_GRACE_MILLIS = TimeUnit.SECONDS.toMillis(60);
     private static final long EVENT_LOOKBACK_MILLIS = TimeUnit.MINUTES.toMillis(30);
     @SuppressWarnings("deprecation")
@@ -109,7 +108,7 @@ public final class UsageStatsDoomScrollMonitor implements DoomScrollMonitor {
         displayManager = (DisplayManager) appContext.getSystemService(Context.DISPLAY_SERVICE);
         powerManager = (PowerManager) appContext.getSystemService(Context.POWER_SERVICE);
         sessionTracker = new DoomScrollSessionTracker(watchedPackages.get(), PENALTY_INTERVAL_MILLIS,
-                WARNING_INTERVAL_MILLIS, AWAY_GRACE_MILLIS, MAX_POLL_GAP_MILLIS);
+                AWAY_GRACE_MILLIS, MAX_POLL_GAP_MILLIS);
     }
 
     @AnyThread
@@ -217,7 +216,8 @@ public final class UsageStatsDoomScrollMonitor implements DoomScrollMonitor {
                     lastEventCount, sessionTracker.getForegroundPackage(),
                     sessionTracker.getLastSeenPackage(), lastCountable, lastDisplayWidth,
                     lastDisplayHeight, sessionTracker.getCountedMillis(),
-                    sessionTracker.getChargedIntervals(), hpChargedSinceStart,
+                    sessionTracker.getChargedIntervals(), sessionTracker.getSessionHpLost(),
+                    sessionTracker.getNextWarningHp(), hpChargedSinceStart,
                     lastError, lastErrorMillis);
         }
     }
@@ -310,9 +310,9 @@ public final class UsageStatsDoomScrollMonitor implements DoomScrollMonitor {
             if (!monitoring) {
                 return;
             }
-            tick = sessionTracker.onPoll(nowMillis, countable);
-            if (tick != null && tick.penaltyIntervals > 0) {
-                hpPenalty = tick.penaltyIntervals * Math.max(0, hpPerMinute.getAsInt());
+            tick = sessionTracker.onPoll(nowMillis, countable, hpPerMinute.getAsInt());
+            if (tick != null) {
+                hpPenalty = tick.hpPenalty;
                 hpChargedSinceStart += hpPenalty;
             }
             lastGapMillis = lastPollMillis == DoomScrollMonitorStatus.NEVER
@@ -329,6 +329,7 @@ public final class UsageStatsDoomScrollMonitor implements DoomScrollMonitor {
                     + " display=" + lastDisplayWidth + "x" + lastDisplayHeight
                     + " countable=" + countable
                     + " counted=" + sessionTracker.getCountedMillis() + "ms"
+                    + " sessionHp=" + sessionTracker.getSessionHpLost()
                     + " hp=" + hpPenalty);
         }
         if (tick != null && tick.penaltyIntervals > 0) {
@@ -337,10 +338,11 @@ public final class UsageStatsDoomScrollMonitor implements DoomScrollMonitor {
                     hpPenalty,
                     nowMillis));
         }
-        if (tick != null && tick.warningSessionMillis > 0L) {
+        if (tick != null && tick.warningHpLost > 0) {
             DoomScrollListener currentListener = listener;
             if (currentListener != null) {
-                currentListener.onDoomScrollWarning(tick.sourcePackage, tick.warningSessionMillis);
+                currentListener.onDoomScrollWarning(tick.sourcePackage,
+                        tick.sessionCountedMillis, tick.warningHpLost);
             }
         }
     }

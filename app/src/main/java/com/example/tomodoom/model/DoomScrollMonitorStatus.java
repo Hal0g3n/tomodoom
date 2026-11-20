@@ -24,6 +24,8 @@ public final class DoomScrollMonitorStatus {
     private final int displayHeight;
     private final long sessionCountedMillis;
     private final long sessionChargedMinutes;
+    private final int sessionHpLost;
+    private final int nextWarningHp;
     private final long hpChargedSinceStart;
     @Nullable
     private final String lastError;
@@ -35,6 +37,7 @@ public final class DoomScrollMonitorStatus {
                                    @Nullable String lastSeenPackage,
                                    boolean countable, int displayWidth, int displayHeight,
                                    long sessionCountedMillis, long sessionChargedMinutes,
+                                   int sessionHpLost, int nextWarningHp,
                                    long hpChargedSinceStart,
                                    @Nullable String lastError, long lastErrorMillis) {
         this.lastPollMillis = lastPollMillis;
@@ -48,6 +51,8 @@ public final class DoomScrollMonitorStatus {
         this.displayHeight = displayHeight;
         this.sessionCountedMillis = sessionCountedMillis;
         this.sessionChargedMinutes = sessionChargedMinutes;
+        this.sessionHpLost = sessionHpLost;
+        this.nextWarningHp = nextWarningHp;
         this.hpChargedSinceStart = hpChargedSinceStart;
         this.lastError = lastError;
         this.lastErrorMillis = lastErrorMillis;
@@ -110,6 +115,16 @@ public final class DoomScrollMonitorStatus {
         return sessionChargedMinutes;
     }
 
+    /** HP the current session has cost. */
+    public int getSessionHpLost() {
+        return sessionHpLost;
+    }
+
+    /** HP-lost threshold of the session's next warning. */
+    public int getNextWarningHp() {
+        return nextWarningHp;
+    }
+
     /** HP reported to the listener since monitoring started. */
     public long getHpChargedSinceStart() {
         return hpChargedSinceStart;
@@ -134,6 +149,7 @@ public final class DoomScrollMonitorStatus {
                 + ", lastSeen=" + lastSeenPackage + ", countable=" + countable
                 + ", display=" + displayWidth + "x" + displayHeight
                 + ", counted=" + sessionCountedMillis + ", charged=" + sessionChargedMinutes
+                + ", sessionHp=" + sessionHpLost + ", nextWarning=" + nextWarningHp
                 + ", hp=" + hpChargedSinceStart + ", error=" + lastError + "}";
     }
 }

@@ -15,6 +15,9 @@ import java.util.Set;
  * for the grace period ends it, so in-app screen changes and app-hopping don't reset the timer.
  * The watched set can change at any time ({@link #setMonitoredPackages}).</p>
  *
+ * <p>Warnings follow the HP a session has cost ({@link DoomScrollWarningPolicy}: 10, 20, 40 …),
+ * so they track the configured HP per interval, and a new session starts again at 10.</p>
+ *
  * <p>Not thread-safe: the monitor calls it while holding its lock.</p>
  */
 final class DoomScrollSessionTracker {
@@ -27,20 +30,26 @@ final class DoomScrollSessionTracker {
         final String sourcePackage;
         /** Whole penalty intervals newly completed; 0 if none. */
         final int penaltyIntervals;
-        /** Counted session length this warning marks; 0 if no warning is due. */
-        final long warningSessionMillis;
+        /** HP those intervals cost; 0 if none. */
+        final int hpPenalty;
+        /** The HP-lost threshold this warning marks; 0 if no warning is due. */
+        final int warningHpLost;
+        /** Counted session length at this poll. */
+        final long sessionCountedMillis;
 
-        Tick(@NonNull String sourcePackage, int penaltyIntervals, long warningSessionMillis) {
+        Tick(@NonNull String sourcePackage, int penaltyIntervals, int hpPenalty,
+             int warningHpLost, long sessionCountedMillis) {
             this.sourcePackage = sourcePackage;
             this.penaltyIntervals = penaltyIntervals;
-            this.warningSessionMillis = warningSessionMillis;
+            this.hpPenalty = hpPenalty;
+            this.warningHpLost = warningHpLost;
+            this.sessionCountedMillis = sessionCountedMillis;
         }
     }
 
     @NonNull
     private Set<String> monitoredPackages;
     private final long penaltyIntervalMillis;
-    private final long warningIntervalMillis;
     private final long awayGraceMillis;
     private final long maxPollGapMillis;
 
@@ -55,16 +64,15 @@ final class DoomScrollSessionTracker {
     private long lastPollMillis = NONE;
     private long countedMillis;
     private long chargedIntervals;
-    private long warnedIntervals;
+    private int sessionHpLost;
+    private int warnedHp;
 
     DoomScrollSessionTracker(@NonNull Set<String> monitoredPackages,
                              long penaltyIntervalMillis,
-                             long warningIntervalMillis,
                              long awayGraceMillis,
                              long maxPollGapMillis) {
         this.monitoredPackages = new HashSet<>(monitoredPackages);
         this.penaltyIntervalMillis = penaltyIntervalMillis;
-        this.warningIntervalMillis = warningIntervalMillis;
         this.awayGraceMillis = awayGraceMillis;
         this.maxPollGapMillis = maxPollGapMillis;
     }
@@ -118,14 +126,21 @@ final class DoomScrollSessionTracker {
         }
     }
 
+    /** {@link #onPoll(long, boolean, int)} at 1 HP per interval. */
+    @Nullable
+    Tick onPoll(long nowMillis, boolean countable) {
+        return onPoll(nowMillis, countable, 1);
+    }
+
     /**
      * Counts the time since the previous poll.
      *
-     * @param countable whether the screen currently qualifies (portrait and on).
+     * @param countable     whether the screen currently qualifies (portrait and on).
+     * @param hpPerInterval HP each newly completed interval costs (negative counts as 0).
      * @return what became due, or {@code null} if nothing did.
      */
     @Nullable
-    Tick onPoll(long nowMillis, boolean countable) {
+    Tick onPoll(long nowMillis, boolean countable, int hpPerInterval) {
         long previousPoll = lastPollMillis;
         lastPollMillis = nowMillis;
         if (awaySinceMillis != NONE && nowMillis - awaySinceMillis >= awayGraceMillis) {
@@ -147,14 +162,16 @@ final class DoomScrollSessionTracker {
         int newPenalties = (int) (completedPenalties - chargedIntervals);
         chargedIntervals = completedPenalties;
 
-        long completedWarnings = countedMillis / warningIntervalMillis;
-        long warningMillis = 0L;
-        if (completedWarnings > warnedIntervals) {
-            warnedIntervals = completedWarnings;
-            warningMillis = completedWarnings * warningIntervalMillis;
+        long hp = (long) newPenalties * Math.max(0, hpPerInterval);
+        int hpPenalty = (int) Math.min(Integer.MAX_VALUE, hp);
+        sessionHpLost = (int) Math.min(Integer.MAX_VALUE, (long) sessionHpLost + hpPenalty);
+
+        int warning = DoomScrollWarningPolicy.warningDue(sessionHpLost, warnedHp);
+        if (warning > 0) {
+            warnedHp = warning;
         }
-        return newPenalties > 0 || warningMillis > 0L
-                ? new Tick(packageName, newPenalties, warningMillis)
+        return newPenalties > 0 || warning > 0
+                ? new Tick(packageName, newPenalties, hpPenalty, warning, countedMillis)
                 : null;
     }
 
@@ -180,6 +197,16 @@ final class DoomScrollSessionTracker {
         return chargedIntervals;
     }
 
+    /** HP the current session has cost. */
+    int getSessionHpLost() {
+        return sessionHpLost;
+    }
+
+    /** The HP-lost threshold of the session's next warning. */
+    int getNextWarningHp() {
+        return DoomScrollWarningPolicy.nextThreshold(warnedHp);
+    }
+
     /** Forgets everything, including the poll baseline. */
     void reset() {
         foregroundPackage = null;
@@ -199,6 +226,7 @@ final class DoomScrollSessionTracker {
     private void resetCounters() {
         countedMillis = 0L;
         chargedIntervals = 0L;
-        warnedIntervals = 0L;
+        sessionHpLost = 0;
+        warnedHp = 0;
     }
 }

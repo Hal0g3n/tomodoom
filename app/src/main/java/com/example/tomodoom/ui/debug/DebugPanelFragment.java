@@ -219,6 +219,7 @@ public class DebugPanelFragment extends BottomSheetDialogFragment {
                 status.getDisplayWidth(), status.getDisplayHeight(), yesNo(status.isCountable())));
         text.append('\n').append(getString(R.string.debug_monitor_session,
                 duration(status.getSessionCountedMillis()), status.getSessionChargedMinutes(),
+                status.getSessionHpLost(), status.getNextWarningHp(),
                 status.getHpChargedSinceStart()));
         if (status.getLastError() != null) {
             text.append('\n').append(errorLine(status));

@@ -41,7 +41,9 @@ public class DebugViewModel extends ViewModel {
     public static final int QUIZ_REWARD_HP = 10;
     /** One counted minute, as the real monitor charges it. */
     private static final long ONE_MINUTE_MS = 60_000L;
-    /** Session length of a simulated warning (the real monitor warns every 10 minutes). */
+    /** HP lost at a simulated warning (the real monitor first warns at 10 HP lost). */
+    private static final int WARNING_HP = 10;
+    /** Session length of a simulated warning (10 HP at the default 1 HP per minute). */
     private static final long WARNING_SESSION_MS = 10 * ONE_MINUTE_MS;
 
     @NonNull
@@ -175,10 +177,10 @@ public class DebugViewModel extends ViewModel {
                 settingsRepository.getCurrentDoomScrollHpPerMinute()));
     }
 
-    /** The 10-minute warning, which posts the real "Time to look up" notification. */
+    /** The first (10 HP) warning, which posts the real "Time to look up" notification. */
     @MainThread
     public void simulateDoomScrollWarning() {
-        doomScrollListener.onDoomScrollWarning(DEBUG_PACKAGE, WARNING_SESSION_MS);
+        doomScrollListener.onDoomScrollWarning(DEBUG_PACKAGE, WARNING_SESSION_MS, WARNING_HP);
     }
 
     // --- Chat / MCP --------------------------------------------------------------------------

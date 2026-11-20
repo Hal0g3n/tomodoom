@@ -22,7 +22,7 @@ public class DoomScrollSessionTrackerTest {
 
     private final DoomScrollSessionTracker tracker = new DoomScrollSessionTracker(
             new HashSet<>(Arrays.asList(WATCHED, OTHER_WATCHED)),
-            MINUTE, TEN_MINUTES, MINUTE, 45_000L);
+            MINUTE, MINUTE, 45_000L);
 
     /** Polls every 15 s from {@code from} (exclusive) to {@code to}; returns penalty minutes. */
     private int pollUntil(long from, long to, boolean countable) {
@@ -52,7 +52,8 @@ public class DoomScrollSessionTrackerTest {
 
         assertEquals(WATCHED, tick.sourcePackage);
         assertEquals(1, tick.penaltyIntervals);
-        assertEquals(0L, tick.warningSessionMillis);
+        assertEquals(0, tick.warningHpLost);
+        assertEquals(1, tick.hpPenalty);
         assertEquals(4, pollUntil(MINUTE, 5L * MINUTE, true));
     }
 
@@ -67,19 +68,64 @@ public class DoomScrollSessionTrackerTest {
         assertEquals(1, tracker.onPoll(120_000L, true).penaltyIntervals);
     }
 
-    @Test
-    public void warnsOnceAtEveryTenMinutes() {
-        startSession();
-        int warnings = 0;
-        for (long now = POLL; now <= 35L * MINUTE; now += POLL) {
-            DoomScrollSessionTracker.Tick tick = tracker.onPoll(now, true);
-            if (tick != null && tick.warningSessionMillis > 0L) {
-                warnings++;
-                assertEquals(warnings * TEN_MINUTES, tick.warningSessionMillis);
-                assertEquals(warnings * TEN_MINUTES, now);
+    /** Polls every 15 s up to {@code to} at {@code hpPerMinute}; returns "minute:hp" per warning. */
+    private String warningsUntil(long from, long to, int hpPerMinute) {
+        StringBuilder warnings = new StringBuilder();
+        for (long now = from + POLL; now <= to; now += POLL) {
+            DoomScrollSessionTracker.Tick tick = tracker.onPoll(now, true, hpPerMinute);
+            if (tick != null && tick.warningHpLost > 0) {
+                if (warnings.length() > 0) {
+                    warnings.append(' ');
+                }
+                warnings.append(now / MINUTE).append(':').append(tick.warningHpLost);
             }
         }
-        assertEquals(3, warnings);
+        return warnings.toString();
+    }
+
+    @Test
+    public void warnsAtTenTwentyFortyHpLostAtOneHpPerMinute() {
+        startSession();
+        assertEquals("10:10 20:20 40:40", warningsUntil(0L, 79L * MINUTE, 1));
+        assertEquals(79, tracker.getSessionHpLost());
+        assertEquals(80, tracker.getNextWarningHp());
+    }
+
+    @Test
+    public void warningsFollowTheHpRate() {
+        startSession();
+        assertEquals("2:10 4:20 8:40", warningsUntil(0L, 15L * MINUTE, 5));
+    }
+
+    @Test
+    public void tickCarriesHpAndSessionLength() {
+        startSession();
+        pollUntil(0L, 9L * MINUTE + 3L * POLL, true);
+        DoomScrollSessionTracker.Tick tick = tracker.onPoll(TEN_MINUTES, true, 1);
+
+        assertEquals(1, tick.penaltyIntervals);
+        assertEquals(1, tick.hpPenalty);
+        assertEquals(10, tick.warningHpLost);
+        assertEquals(TEN_MINUTES, tick.sessionCountedMillis);
+    }
+
+    @Test
+    public void zeroHpPerMinuteNeverWarns() {
+        startSession();
+        assertEquals("", warningsUntil(0L, 60L * MINUTE, 0));
+        assertEquals(0, tracker.getSessionHpLost());
+    }
+
+    @Test
+    public void aNewSessionWarnsAgainAtTenHp() {
+        startSession();
+        assertEquals("2:10", warningsUntil(0L, 3L * MINUTE, 5));
+        tracker.onBackground(WATCHED, 3L * MINUTE);
+        pollUntil(3L * MINUTE, 5L * MINUTE, true);
+        assertEquals(10, tracker.getNextWarningHp());
+
+        tracker.onForeground(WATCHED, 5L * MINUTE);
+        assertEquals("7:10", warningsUntil(5L * MINUTE, 8L * MINUTE, 5));
     }
 
     @Test
@@ -104,7 +150,7 @@ public class DoomScrollSessionTrackerTest {
         int warnings = 0;
         for (long now = 10L * MINUTE + POLL; now <= 19L * MINUTE; now += POLL) {
             DoomScrollSessionTracker.Tick tick = tracker.onPoll(now, true);
-            if (tick != null && tick.warningSessionMillis > 0L) {
+            if (tick != null && tick.warningHpLost > 0) {
                 warnings++;
             }
         }
